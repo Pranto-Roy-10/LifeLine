@@ -42,14 +42,26 @@
           <a href="#impact" class="hover:text-emerald-300 transition">Impact</a>
         </div>
 
-        <!-- Auth buttons -->
+        <!-- Auth buttons (ONLY ONCE) -->
         <div class="flex items-center gap-3">
-          <button class="text-xs md:text-sm px-3 py-1.5 rounded-full border border-slate-700 hover:border-emerald-400 hover:text-emerald-300 transition">
-            Log in
-          </button>
-          <button class="text-xs md:text-sm px-3 md:px-4 py-1.5 rounded-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold transition">
-            Join as Helper
-          </button>
+          {% if current_user %}
+            <span class="hidden md:inline text-xs text-slate-300">
+              Hi, {{ current_user.name }}
+            </span>
+            <a href="{{ url_for('logout') }}"
+               class="text-xs md:text-sm px-3 py-1.5 rounded-full border border-slate-700 hover:border-rose-400 hover:text-rose-300 transition">
+              Log out
+            </a>
+          {% else %}
+            <a href="{{ url_for('login') }}"
+               class="text-xs md:text-sm px-3 py-1.5 rounded-full border border-slate-700 hover:border-emerald-400 hover:text-emerald-300 transition">
+               Log in
+            </a>
+            <a href="{{ url_for('signup') }}"
+               class="text-xs md:text-sm px-3 md:px-4 py-1.5 rounded-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold transition">
+               Join as Helper
+            </a>
+          {% endif %}
         </div>
       </nav>
     </header>
