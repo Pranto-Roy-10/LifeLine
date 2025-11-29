@@ -1,0 +1,8 @@
+
+body {
+  
+  -webkit-font-smoothing: antialiased;
+}
+.nav-logo {
+    filter: brightness(1.6) contrast(1.3);
+}
