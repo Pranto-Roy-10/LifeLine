@@ -1,0 +1,384 @@
+{% extends "base.html" %}
+
+{% block title %}LifeLine – Live Map{% endblock %}
+
+{% block content %}
+
+<section class="w-full px-6 md:px-12 py-8 md:py-10 space-y-4">
+  <!-- Header -->
+  <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+    <div>
+      <h2 class="text-xl md:text-2xl font-semibold mb-1">Live neighborhood map</h2>
+      <p class="text-sm text-slate-400 max-w-2xl">
+        See help requests and offers around you in real time. Click a card to focus on a
+        request, or use the filters to view only medicine runs, ride offers, or general help.
+      </p>
+    </div>
+
+    <div class="text-xs text-slate-400 space-y-1">
+      <p><span class="inline-block h-2 w-2 rounded-full bg-emerald-400 mr-1"></span> Help needed</p>
+      <p><span class="inline-block h-2 w-2 rounded-full bg-sky-400 mr-1"></span> Medicine run</p>
+      <p><span class="inline-block h-2 w-2 rounded-full bg-amber-300 mr-1"></span> Ride offer</p>
+    </div>
+  </div>
+
+  <!-- Main content: Map + Sidebar -->
+  <div class="grid lg:grid-cols-3 gap-4 lg:gap-6">
+    <!-- MAP COLUMN -->
+    <div class="lg:col-span-2 relative">
+      <!-- Top overlay controls -->
+      <div class="absolute z-20 top-3 left-3 flex flex-col gap-2">
+        <div class="rounded-2xl bg-slate-900/80 border border-slate-700/70 px-3 py-2 text-[11px] text-slate-200 shadow-lg">
+          <div class="flex items-center gap-2">
+            <span class="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span class="font-semibold">Live radius: <span id="radius-label">3 km</span></span>
+          </div>
+          <p id="map-status" class="text-[10px] text-slate-400 mt-1">
+            Detecting your location…
+          </p>
+        </div>
+      </div>
+
+      <!-- Bottom-left recenter button -->
+      <button
+        id="recenter-btn"
+        class="absolute z-20 bottom-3 left-3 px-3 py-1.5 rounded-full bg-slate-900/80 border border-slate-700 text-[11px] text-slate-200 hover:border-emerald-400 hover:text-emerald-300 transition shadow-lg"
+        type="button">
+        Recenter on me
+      </button>
+
+      <!-- MAP BOX -->
+      <div id="map" class="w-full rounded-3xl border border-slate-800 bg-slate-900" style="height: 500px;"></div>
+    </div>
+
+    <!-- SIDEBAR: LIST OF REQUESTS -->
+    <div class="flex flex-col rounded-3xl border border-slate-800 bg-slate-900/80 backdrop-blur p-4 shadow-xl max-h-[500px]">
+      <!-- Filters -->
+      <div class="flex flex-wrap gap-2 mb-3 text-[11px]">
+        <button
+          class="filter-btn px-3 py-1.5 rounded-full border border-emerald-400/60 bg-emerald-500/10 text-emerald-200 font-semibold"
+          data-filter="all"
+          type="button">
+          All
+        </button>
+        <button
+          class="filter-btn px-3 py-1.5 rounded-full border border-slate-700 text-slate-300 hover:border-emerald-400 hover:text-emerald-300 transition"
+          data-filter="help"
+          type="button">
+          Help Needed
+        </button>
+        <button
+          class="filter-btn px-3 py-1.5 rounded-full border border-slate-700 text-slate-300 hover:border-sky-400 hover:text-sky-300 transition"
+          data-filter="medicine"
+          type="button">
+          Medicine Run
+        </button>
+        <button
+          class="filter-btn px-3 py-1.5 rounded-full border border-slate-700 text-slate-300 hover:border-amber-400 hover:text-amber-300 transition"
+          data-filter="ride"
+          type="button">
+          Ride Offer
+        </button>
+      </div>
+
+      <!-- Summary -->
+      <div class="flex items-center justify-between mb-2 text-[11px] text-slate-400">
+        <span id="requests-summary">No requests loaded yet.</span>
+        <span class="text-slate-500">Auto-refresh every 10s</span>
+      </div>
+
+      <!-- Scrollable list -->
+      <div id="requests-list" class="mt-1 space-y-2 overflow-y-auto pr-1 custom-scrollbar text-xs">
+        <!-- JS will inject cards here -->
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+  let map;
+  let userMarker = null;
+  let requestMarkers = []; // { marker, infoWindow, data }
+  let userPosition = null;
+  let lastRequests = [];
+  let activeFilter = "all";
+  let currentRadiusKm = 3;
+
+  const ICON_URLS = {
+    help: "http://maps.google.com/mapfiles/ms/icons/green-dot.png",
+    medicine: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png",
+    ride: "http://maps.google.com/mapfiles/ms/icons/yellow-dot.png",
+  };
+
+  function initMap() {
+    const defaultCenter = { lat: 23.75, lng: 90.38 }; // Dhaka-ish
+
+    map = new google.maps.Map(document.getElementById("map"), {
+      center: defaultCenter,
+      zoom: 13,
+      mapTypeControl: false,
+      streetViewControl: false,
+      fullscreenControl: false,
+      styles: [
+        { elementType: "geometry", stylers: [{ color: "#020617" }] },
+        { elementType: "labels.text.fill", stylers: [{ color: "#e5e7eb" }] },
+        { elementType: "labels.text.stroke", stylers: [{ color: "#020617" }] },
+        { featureType: "poi", stylers: [{ visibility: "off" }] },
+        { featureType: "road", stylers: [{ color: "#0f172a" }] },
+        { featureType: "water", stylers: [{ color: "#020617" }] },
+      ],
+    });
+
+    const statusEl = document.getElementById("map-status");
+
+    // Recenter button
+    document.getElementById("recenter-btn").addEventListener("click", () => {
+      if (userPosition) {
+        map.setCenter(userPosition);
+        map.setZoom(14);
+      }
+    });
+
+    // Filter buttons
+    document.querySelectorAll(".filter-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        activeFilter = btn.getAttribute("data-filter");
+        document.querySelectorAll(".filter-btn").forEach((b) => {
+          b.classList.remove(
+            "border-emerald-400/60",
+            "bg-emerald-500/10",
+            "text-emerald-200",
+            "font-semibold"
+          );
+          b.classList.add("border-slate-700", "text-slate-300");
+        });
+        if (activeFilter === "all") {
+          btn.classList.remove("border-slate-700", "text-slate-300");
+          btn.classList.add(
+            "border-emerald-400/60",
+            "bg-emerald-500/10",
+            "text-emerald-200",
+            "font-semibold"
+          );
+        } else {
+          btn.classList.remove("border-slate-700", "text-slate-300");
+          btn.classList.add(
+            "border-emerald-400/60",
+            "bg-emerald-500/10",
+            "text-emerald-200",
+            "font-semibold"
+          );
+          // mark "All" back to neutral
+          const allBtn = document.querySelector('.filter-btn[data-filter="all"]');
+          if (allBtn && activeFilter !== "all") {
+            allBtn.classList.remove(
+              "border-emerald-400/60",
+              "bg-emerald-500/10",
+              "text-emerald-200",
+              "font-semibold"
+            );
+            allBtn.classList.add("border-slate-700", "text-slate-300");
+          }
+        }
+        renderRequests();
+      });
+    });
+
+    // Geolocation
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          userPosition = {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+          };
+          statusEl.innerText = "Location detected. Loading nearby help…";
+
+          map.setCenter(userPosition);
+
+          userMarker = new google.maps.Marker({
+            position: userPosition,
+            map: map,
+            title: "Your location",
+            icon: {
+              path: google.maps.SymbolPath.CIRCLE,
+              scale: 6,
+              fillColor: "#22c55e",
+              fillOpacity: 1,
+              strokeColor: "#bbf7d0",
+              strokeWeight: 2,
+            },
+          });
+
+          fetchAndRenderRequests();
+          setInterval(fetchAndRenderRequests, 10000); // auto refresh
+        },
+        (err) => {
+          console.error(err);
+          statusEl.innerText =
+            "Could not access your location. Showing demo area around Dhaka.";
+          fetchAndRenderRequests();
+        }
+      );
+    } else {
+      statusEl.innerText =
+        "Geolocation not supported. Showing demo area around Dhaka.";
+      fetchAndRenderRequests();
+    }
+  }
+
+  function clearRequestMarkers() {
+    for (const item of requestMarkers) {
+      item.marker.setMap(null);
+    }
+    requestMarkers = [];
+  }
+
+  async function fetchAndRenderRequests() {
+    const statusEl = document.getElementById("map-status");
+    const radiusLabel = document.getElementById("radius-label");
+    radiusLabel.textContent = `${currentRadiusKm} km`;
+    statusEl.innerText = "Loading nearby help…";
+
+    try {
+      const lat = userPosition ? userPosition.lat : 23.75;
+      const lng = userPosition ? userPosition.lng : 90.38;
+
+      const resp = await fetch(
+        `/api/requests/nearby?lat=${lat}&lng=${lng}&radius_km=${currentRadiusKm}`
+      );
+      const data = await resp.json();
+
+      clearRequestMarkers();
+      lastRequests = data.requests || [];
+
+      if (!lastRequests.length) {
+        statusEl.innerText =
+          "No nearby help requests in the last hour (demo data).";
+        renderRequests();
+        return;
+      }
+
+      const bounds = new google.maps.LatLngBounds();
+
+      for (const r of lastRequests) {
+        const pos = { lat: r.lat, lng: r.lng };
+        const iconUrl = ICON_URLS[r.type] || ICON_URLS.help;
+
+        const marker = new google.maps.Marker({
+          position: pos,
+          map: map,
+          title: r.title,
+          icon: iconUrl,
+        });
+
+        const infoHtml = `
+          <div style="max-width: 220px;">
+            <h3 style="font-size: 14px; margin-bottom: 4px;">${r.title}</h3>
+            <p style="font-size: 12px; color: #64748b; margin-bottom: 4px;">
+              ${r.description || ""}
+            </p>
+            <p style="font-size: 11px; color: #22c55e;">
+              ~ ${r.distance_km} km away · demo
+            </p>
+          </div>
+        `;
+
+        const infoWindow = new google.maps.InfoWindow({
+          content: infoHtml,
+        });
+
+        marker.addListener("click", () => {
+          infoWindow.open(map, marker);
+        });
+
+        requestMarkers.push({ marker, infoWindow, data: r });
+        bounds.extend(pos);
+      }
+
+      if (userPosition) bounds.extend(userPosition);
+      map.fitBounds(bounds, 80);
+
+      statusEl.innerText = `Showing ${lastRequests.length} nearby request(s) within ${currentRadiusKm} km (demo).`;
+      renderRequests();
+    } catch (e) {
+      console.error(e);
+      statusEl.innerText = "Failed to load nearby requests.";
+    }
+  }
+
+  function renderRequests() {
+    const listEl = document.getElementById("requests-list");
+    const summaryEl = document.getElementById("requests-summary");
+
+    listEl.innerHTML = "";
+
+    let filtered = lastRequests;
+    if (activeFilter !== "all") {
+      filtered = lastRequests.filter((r) => r.type === activeFilter);
+    }
+
+    if (!filtered.length) {
+      summaryEl.innerText = "No requests match the current filter.";
+      return;
+    }
+
+    summaryEl.innerText = `${filtered.length} request(s) nearby. Click a card to focus on the map.`;
+
+    for (const r of filtered) {
+      let tagLabel = "Help needed";
+      let tagColor =
+        "text-emerald-300 bg-emerald-500/10 border-emerald-400/40";
+      if (r.type === "medicine") {
+        tagLabel = "Medicine run";
+        tagColor = "text-sky-300 bg-sky-500/10 border-sky-400/40";
+      } else if (r.type === "ride") {
+        tagLabel = "Ride offer";
+        tagColor = "text-amber-300 bg-amber-500/10 border-amber-400/40";
+      }
+
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className =
+        "w-full text-left rounded-2xl border border-slate-800 bg-slate-900/90 px-3 py-2.5 hover:border-emerald-400 hover:bg-slate-900 transition flex flex-col gap-1";
+      card.dataset.requestId = r.id;
+
+      card.innerHTML = `
+        <div class="flex items-center justify-between gap-2">
+          <p class="font-semibold text-slate-100 text-[13px] line-clamp-1">${r.title}</p>
+          <span class="text-[10px] px-2 py-1 rounded-full border ${tagColor}">
+            ${tagLabel}
+          </span>
+        </div>
+        <p class="text-[11px] text-slate-400 line-clamp-2">
+          ${r.description || ""}
+        </p>
+        <p class="text-[11px] text-emerald-300 mt-1">
+          ~ ${r.distance_km} km away · demo
+        </p>
+      `;
+
+      card.addEventListener("click", () => {
+        focusOnRequest(r.id);
+      });
+
+      listEl.appendChild(card);
+    }
+  }
+
+  function focusOnRequest(requestId) {
+    const item = requestMarkers.find((m) => m.data.id === requestId);
+    if (!item) return;
+    map.panTo({ lat: item.data.lat, lng: item.data.lng });
+    map.setZoom(15);
+    item.infoWindow.open(map, item.marker);
+  }
+</script>
+
+<script
+  async
+  defer
+  src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}&callback=initMap">
+</script>
+
+{% endblock %}
