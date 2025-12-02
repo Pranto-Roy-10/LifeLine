@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}I Can Help{% endblock %}
+
+{% block content %}
+<div class="w-full max-w-7xl mx-auto px-6 py-10">
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-10">
+
+    <!-- 🟩 FORM -->
+    <div class="lg:col-span-2 bg-slate-800/60 backdrop-blur-md border border-slate-700 rounded-2xl p-8 shadow-xl">
+      <h2 class="text-3xl font-bold text-blue-400 mb-6">I Can Help</h2>
+
+      <form method="POST" enctype="multipart/form-data" class="space-y-5">
+
+        <!-- TITLE -->
+        <div>
+          <label class="text-sm text-slate-300">Title</label>
+          <input name="title"
+                 class="w-full mt-1 px-4 py-3 rounded-xl bg-slate-700 text-white border border-slate-600 focus:ring-2 focus:ring-blue-400 outline-none" />
+        </div>
+
+        <!-- CATEGORY -->
+        <div>
+          <label class="text-sm text-slate-300">Category</label>
+          <select name="category"
+                  class="w-full mt-1 px-4 py-3 rounded-xl bg-slate-700 border border-slate-600 text-white focus:ring-2 focus:ring-blue-400 outline-none">
+            <option value="medicine">Medicine</option>
+            <option value="food">Food</option>
+            <option value="tutoring">Tutoring</option>
+            <option value="repair">Repair</option>
+            <option value="ride">Ride</option>
+          </select>
+        </div>
+
+        <!-- DESCRIPTION -->
+        <div>
+          <label class="text-sm text-slate-300">Description</label>
+          <textarea name="description" rows="5"
+                    class="w-full mt-1 px-4 py-3 rounded-xl bg-slate-700 text-white border border-slate-600 focus:ring-2 focus:ring-blue-400 outline-none"></textarea>
+        </div>
+
+        <!-- IMAGE UPLOAD -->
+        <div>
+          <label class="text-sm text-slate-300">Upload an image (optional)</label>
+          <input type="file" name="image" accept="image/*"
+                 class="mt-2 text-slate-200" onchange="previewImage(event)">
+          <img id="preview" class="mt-3 w-40 rounded-lg hidden" />
+        </div>
+
+        <script>
+          function previewImage(event) {
+            const img = document.getElementById("preview");
+            img.src = URL.createObjectURL(event.target.files[0]);
+            img.classList.remove("hidden");
+          }
+        </script>
+
+        <!-- EXPIRY -->
+        <div>
+          <label class="text-sm text-slate-300">Expires in (minutes)</label>
+          <input type="number" name="expiry_minutes" value="60"
+                 class="mt-1 w-40 px-4 py-3 rounded-xl bg-slate-700 text-white border border-slate-600 focus:ring-2 focus:ring-blue-400 outline-none" />
+        </div>
+
+        <!-- SUBMIT -->
+        <button class="bg-blue-500 hover:bg-blue-400 text-slate-950 font-semibold px-6 py-3 rounded-xl transition">
+          Post Help Offer
+        </button>
+      </form>
+    </div>
+
+    <!-- 🟦 SIDEBAR -->
+    <div class="space-y-8">
+
+      <!-- STATS -->
+      <div class="bg-slate-800/60 border border-slate-700 p-6 rounded-2xl shadow-md">
+        <h3 class="text-lg font-semibold text-white mb-3">Stats Overview</h3>
+
+        <p class="text-sm text-slate-300 mb-2">
+          Active Needs: <span class="font-bold text-blue-300">{{ total_need }}</span>
+        </p>
+        <p class="text-sm text-slate-300 mb-4">
+          Active Offers: <span class="font-bold text-blue-300">{{ total_offer }}</span>
+        </p>
+
+        <ul class="space-y-1 text-slate-300 text-sm">
+          {% for cat, cnt in categories %}
+          <li class="flex justify-between border-b border-slate-700/50 pb-1">
+            <span>{{ cat|capitalize }}</span>
+            <span class="font-semibold">{{ cnt }}</span>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+
+      <!-- RECENT OFFERS -->
+      <div class="bg-slate-800/60 border border-slate-700 p-6 rounded-2xl shadow-md h-[420px] overflow-y-auto">
+        <h3 class="text-lg font-semibold text-white mb-4">Recent Help Offers</h3>
+
+        {% for p in posts %}
+        <div class="mb-4 pb-4 border-b border-slate-700/50">
+          <div class="font-semibold text-white">{{ p.title }}</div>
+          <div class="text-xs text-slate-300">{{ p.description or "No description" }}</div>
+          <div class="text-xs text-slate-500 mt-1">Category: {{ p.category }}</div>
+
+          {% if p.image_url %}
+          <img src="{{ p.image_url }}" class="mt-2 w-32 rounded-lg" />
+          {% endif %}
+
+          <div class="text-xs text-slate-500">{{ p.created_at.strftime('%d %b %H:%M') }}</div>
+        </div>
+        {% else %}
+        <p class="text-slate-500">No recent offers.</p>
+        {% endfor %}
+      </div>
+
+    </div>
+
+  </div>
+</div>
+{% endblock %}
