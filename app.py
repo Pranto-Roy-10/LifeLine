@@ -36,6 +36,8 @@ db = SQLAlchemy(app)
 # Your Google Maps API key
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "AIzaSyAVtLNl7YZaPZeSnuA_5Gxm8VdtFXxreYo")
 
+EMERGENCY_GUEST_EMAIL = "guest_emergency@lifeline.local"
+
 # ------------------ MODELS ------------------
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -55,17 +57,36 @@ class Request(db.Model):
     __tablename__ = "requests"
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+
+    # core
     title = db.Column(db.String(255), nullable=False)
     category = db.Column(db.String(50), nullable=False)  # medicine, food, tutoring, repair, ride
     description = db.Column(db.Text, nullable=True)
+
+    # location / meta
     lat = db.Column(db.Float, nullable=True)
     lng = db.Column(db.Float, nullable=True)
-    is_offer = db.Column(db.Boolean, default=False)  # false = Need Help, true = Offering Help
+    area = db.Column(db.String(150), nullable=True)         # e.g. Mohammadpur, Iqbal Road
+    landmark = db.Column(db.String(150), nullable=True)     # nearest mosque / school
+
+    # urgency & timing
+    urgency = db.Column(db.String(50), nullable=True)       # low / normal / high / emergency
+    time_window = db.Column(db.String(50), nullable=True)   # anytime_today / this_week / ...
+
+    # contact
+    contact_method = db.Column(db.String(50), nullable=True)  # lifeline_chat / phone / ...
+    contact_info = db.Column(db.String(100), nullable=True)   # phone / WhatsApp etc.
+
+    # offer-specific meta
+    is_offer = db.Column(db.Boolean, default=False)        # false = Need Help, true = Offering Help
+    radius_pref = db.Column(db.String(50), nullable=True)  # e.g. within 2km
+    frequency = db.Column(db.String(50), nullable=True)    # one_time / few_times_week / daily
+
     image_url = db.Column(db.String(300), nullable=True)
+
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     expires_at = db.Column(db.DateTime, nullable=False)
     status = db.Column(db.String(20), default="open")  # open / claimed / closed
-    
 
     user = db.relationship("User", backref="requests")
 
@@ -78,7 +99,16 @@ class Request(db.Model):
             "description": self.description,
             "lat": self.lat,
             "lng": self.lng,
+            "area": self.area,
+            "landmark": self.landmark,
+            "urgency": self.urgency,
+            "time_window": self.time_window,
+            "contact_method": self.contact_method,
+            "contact_info": self.contact_info,
             "is_offer": self.is_offer,
+            "radius_pref": self.radius_pref,
+            "frequency": self.frequency,
+            "image_url": self.image_url,
             "created_at": int(self.created_at.timestamp()),
             "expires_at": int(self.expires_at.timestamp()),
             "status": self.status,
@@ -87,9 +117,14 @@ class Request(db.Model):
             d["user_name"] = self.user.name if self.user else None
         now = datetime.utcnow()
         d["seconds_remaining"] = max(0, int((self.expires_at - now).total_seconds()))
-        if user_lat is not None and user_lng is not None and self.lat is not None and self.lng is not None:
+        if (
+            user_lat is not None and user_lng is not None
+            and self.lat is not None and self.lng is not None
+        ):
             try:
-                d["distance_km"] = round(haversine_distance_km(user_lat, user_lng, self.lat, self.lng), 2)
+                d["distance_km"] = round(
+                    haversine_distance_km(user_lat, user_lng, self.lat, self.lng), 2
+                )
             except Exception:
                 d["distance_km"] = None
         return d
@@ -124,6 +159,24 @@ def login_required(view_func):
         return view_func(*args, **kwargs)
 
     return wrapper
+
+
+def get_emergency_user():
+    """
+    Return (or create) a special guest user used for emergency posts
+    when the requester is not logged in.
+    """
+    guest = User.query.filter_by(email=EMERGENCY_GUEST_EMAIL).first()
+    if guest is None:
+        guest = User(
+            email=EMERGENCY_GUEST_EMAIL,
+            name="Emergency Guest",
+        )
+        # random password so nobody can actually log in with this
+        guest.password_hash = generate_password_hash(os.urandom(16).hex())
+        db.session.add(guest)
+        db.session.commit()
+    return guest
 
 
 # Make current user available in all templates as `current_user`
@@ -288,7 +341,8 @@ def api_requests_nearby():
 
     return jsonify({"requests": nearby})
 
-# Create a new request/offer
+
+# Create a new request/offer (API, logged in only)
 @app.route("/api/requests", methods=["POST"])
 @login_required
 def api_create_request():
@@ -422,62 +476,128 @@ def create_request():
     return redirect(url_for("list_requests"))
 
 @app.route("/need-help", methods=["GET", "POST"])
-@login_required
 def need_help():
-    # POST handler: create a *need* post (is_offer=False)
+    """
+    Need Help page:
+    - If user is logged in -> use their real account
+    - If not logged in     -> use Emergency Guest user (quick help)
+    """
+    user = current_user()
+
     if request.method == "POST":
         title = request.form.get("title", "").strip()
         category = request.form.get("category", "").strip()
-        description = request.form.get("description", "").strip()
+
+        area = request.form.get("area", "").strip()
+        landmark = request.form.get("landmark", "").strip()
+        urgency = request.form.get("urgency", "").strip()
+        time_window = request.form.get("time_window", "").strip()
+        contact_method = request.form.get("contact_method", "").strip()
+        contact_info = request.form.get("contact_info", "").strip()
+
+        description_main = request.form.get("description", "").strip()
+
         try:
             expiry_minutes = int(request.form.get("expiry_minutes", 60))
         except (TypeError, ValueError):
             expiry_minutes = 60
 
+        # basic validation
         if not title or not category:
-            flash("Title and category required.", "error")
+            flash("Title and category are required.", "error")
             return redirect(url_for("need_help"))
 
+        # 🔹 Decide which user will own this request
+        if user is None:
+            # no one logged in → use emergency guest
+            user = get_emergency_user()
+
         expires_at = datetime.utcnow() + timedelta(minutes=expiry_minutes)
+
         req = Request(
-            user_id=current_user().id,
+            user_id=user.id,
             title=title,
             category=category,
-            description=description,
+            description=description_main,
             is_offer=False,
-            expires_at=expires_at
+            area=area or None,
+            landmark=landmark or None,
+            urgency=urgency or None,
+            time_window=time_window or None,
+            contact_method=contact_method or None,
+            contact_info=contact_info or None,
+            expires_at=expires_at,
         )
         db.session.add(req)
         db.session.commit()
-        flash("Your need request has been posted.", "success")
+
+        if current_user():
+            flash("Your need request has been posted.", "success")
+        else:
+            flash("Your quick help request has been posted (as guest).", "success")
+
         return redirect(url_for("need_help"))
 
-    # GET handler: list recent need posts + stats
+    # ---------- GET: show form + sidebar stats ----------
     now = datetime.utcnow()
+
     posts = Request.query.filter(
         Request.expires_at > now,
         Request.is_offer == False,
         Request.status == "open"
     ).order_by(Request.created_at.desc()).limit(50).all()
 
-    total_need = Request.query.filter(Request.is_offer == False, Request.expires_at > now).count()
-    total_offer = Request.query.filter(Request.is_offer == True, Request.expires_at > now).count()
-    categories = db.session.query(Request.category, func.count(Request.id)).filter(Request.expires_at > now).group_by(Request.category).all()
+    total_need = Request.query.filter(
+        Request.is_offer == False,
+        Request.expires_at > now
+    ).count()
 
-    return render_template("need_help.html", posts=posts, total_need=total_need, total_offer=total_offer, categories=categories)
+    total_offer = Request.query.filter(
+        Request.is_offer == True,
+        Request.expires_at > now
+    ).count()
 
+    categories = db.session.query(
+        Request.category, func.count(Request.id)
+    ).filter(
+        Request.expires_at > now
+    ).group_by(
+        Request.category
+    ).all()
 
+    return render_template(
+        "need_help.html",
+        posts=posts,
+        total_need=total_need,
+        total_offer=total_offer,
+        categories=categories,
+    )
+
+# I Can Help – login still required
 @app.route("/can-help", methods=["GET", "POST"])
 @login_required
 def can_help():
     if request.method == "POST":
         title = request.form.get("title", "").strip()
         category = request.form.get("category", "").strip()
-        description = request.form.get("description", "").strip()
+
+        area = request.form.get("area", "").strip()
+        radius_pref = request.form.get("radius_pref", "").strip()
+        time_window = request.form.get("time_window", "").strip()
+        frequency = request.form.get("frequency", "").strip()
+        contact_method = request.form.get("contact_method", "").strip()
+        contact_info = request.form.get("contact_info", "").strip()
+
+        description_main = request.form.get("description", "").strip()
+
         try:
-            expiry_minutes = int(request.form.get("expiry_minutes", 60))
+            expiry_minutes = int(request.form.get("expiry_minutes", 180))
         except (TypeError, ValueError):
-            expiry_minutes = 60
+            expiry_minutes = 180
+
+        if not title or not category:
+            flash("Title and category are required.", "error")
+            return redirect(url_for("can_help"))
 
         image_url = None
         if "image" in request.files:
@@ -494,10 +614,16 @@ def can_help():
             user_id=current_user().id,
             title=title,
             category=category,
-            description=description,
+            description=description_main,
             is_offer=True,
+            area=area,
+            radius_pref=radius_pref,
+            time_window=time_window,
+            frequency=frequency,
+            contact_method=contact_method,
+            contact_info=contact_info,
             image_url=image_url,
-            expires_at=expires_at
+            expires_at=expires_at,
         )
         db.session.add(req)
         db.session.commit()
@@ -511,26 +637,60 @@ def can_help():
         Request.status == "open"
     ).order_by(Request.created_at.desc()).limit(50).all()
 
-    total_need = Request.query.filter(Request.is_offer == False, Request.expires_at > now).count()
-    total_offer = Request.query.filter(Request.is_offer == True, Request.expires_at > now).count()
-    categories = db.session.query(Request.category, func.count(Request.id)).filter(Request.expires_at > now).group_by(Request.category).all()
+    total_need = Request.query.filter(
+        Request.is_offer == False,
+        Request.expires_at > now
+    ).count()
+    total_offer = Request.query.filter(
+        Request.is_offer == True,
+        Request.expires_at > now
+    ).count()
+    categories = db.session.query(
+        Request.category, func.count(Request.id)
+    ).filter(
+        Request.expires_at > now
+    ).group_by(
+        Request.category
+    ).all()
 
-    return render_template("can_help.html", posts=posts, total_need=total_need, total_offer=total_offer, categories=categories)
-
-
+    return render_template(
+        "can_help.html",
+        posts=posts,
+        total_need=total_need,
+        total_offer=total_offer,
+        categories=categories,
+    )
 
 @app.route("/requests")
 @login_required
 def list_requests():
-    # Show only requests that haven't expired and are open
+    """
+    List requests as cards.
+    mode = 'need'  -> only Need Help posts (is_offer=False)
+    mode = 'offer' -> only Offer Help posts (is_offer=True)
+    mode = 'all'   -> all open posts
+    """
     now = datetime.utcnow()
-    requests_list = Request.query.filter(
+    mode = request.args.get("mode", "need")  # default: show need-help posts
+
+    q = Request.query.filter(
         Request.expires_at > now,
         Request.status == "open"
-    ).order_by(Request.created_at.desc()).all()
-    return render_template("list_requests.html", requests=requests_list)
+    )
 
+    if mode == "offer":
+        q = q.filter(Request.is_offer == True)
+    elif mode == "need":
+        q = q.filter(Request.is_offer == False)
+    # if mode == "all" -> no extra filter
 
+    requests_list = q.order_by(Request.created_at.desc()).all()
+
+    return render_template(
+        "list_requests.html",
+        requests=requests_list,
+        mode=mode
+    )
 @app.route("/requests/<int:request_id>/delete", methods=["POST"])
 @login_required
 def delete_request(request_id):
@@ -546,19 +706,8 @@ def delete_request(request_id):
     return redirect(url_for("list_requests"))
 
 
-
 # ------------------ MAIN ------------------
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()  # create tables if not exist
     app.run(debug=True)
-
-
-
-
-
-
-
-
-
-
