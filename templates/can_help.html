@@ -1,0 +1,233 @@
+{% extends "base.html" %}
+{% block title %}I Can Help{% endblock %}
+
+{% block content %}
+<div class="w-full max-w-7xl mx-auto px-6 py-10">
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-10">
+
+    <!-- 🟦 FORM -->
+    <div class="lg:col-span-2 bg-slate-800/60 backdrop-blur-md border border-slate-700 rounded-2xl p-8 shadow-xl">
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <h2 class="text-3xl font-bold text-sky-400">I Can Help</h2>
+          <p class="text-xs text-slate-400 mt-1">
+            Share what you can offer – rides, skills, time, or resources.
+          </p>
+        </div>
+        {% if current_user %}
+        <div class="text-[11px] text-slate-400 text-right">
+          <p>Posting as</p>
+          <p class="font-semibold text-slate-100">{{ current_user.name }}</p>
+        </div>
+        {% endif %}
+      </div>
+
+      <form method="POST" enctype="multipart/form-data" class="space-y-6">
+
+        <!-- TITLE + CATEGORY -->
+        <div class="grid md:grid-cols-2 gap-4">
+          <div>
+            <label class="text-xs text-slate-300">Title <span class="text-sky-400">*</span></label>
+            <input name="title"
+                   placeholder="I can drive to Dhanmondi"
+                   class="w-full mt-1 px-4 py-3 rounded-xl bg-slate-700 text-white border border-slate-600
+                          focus:ring-2 focus:ring-sky-400 outline-none text-sm" />
+          </div>
+
+          <div>
+            <label class="text-xs text-slate-300">Category <span class="text-sky-400">*</span></label>
+            <select name="category"
+                    class="w-full mt-1 px-4 py-3 rounded-xl bg-slate-700 border border-slate-600 text-white
+                           focus:ring-2 focus:ring-sky-400 outline-none text-sm">
+              <option value="medicine">Medicine</option>
+              <option value="food">Food</option>
+              <option value="tutoring">Tutoring</option>
+              <option value="repair">Repair</option>
+              <option value="ride">Ride</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- AREA + RADIUS -->
+        <div>
+          <p class="text-xs text-slate-300 mb-2">Where can you help?</p>
+          <div class="grid md:grid-cols-2 gap-4">
+            <div>
+              <label class="text-[11px] text-slate-400">Base area / neighborhood</label>
+              <input name="area"
+                     placeholder="Mohammadpur, near Town Hall"
+                     class="w-full mt-1 px-4 py-2.5 rounded-xl bg-slate-700 text-white border border-slate-600
+                            focus:ring-2 focus:ring-sky-400 outline-none text-sm" />
+            </div>
+            <div>
+              <label class="text-[11px] text-slate-400">How far can you go? (approx.)</label>
+              <select name="radius_pref"
+                      class="w-full mt-1 px-4 py-2.5 rounded-xl bg-slate-700 text-white border border-slate-600
+                             focus:ring-2 focus:ring-sky-400 outline-none text-sm">
+                <option value="1km">Within 1 km</option>
+                <option value="2km">Within 2 km</option>
+                <option value="5km">Within 5 km</option>
+                <option value="anywhere_nearby">Anywhere nearby</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- AVAILABILITY -->
+        <div class="grid md:grid-cols-2 gap-4">
+          <div>
+            <label class="text-xs text-slate-300">When are you usually free?</label>
+            <select name="time_window"
+                    class="w-full mt-1 px-4 py-2.5 rounded-xl bg-slate-700 text-white border border-slate-600
+                           focus:ring-2 focus:ring-sky-400 outline-none text-sm">
+              <option value="mornings">Mornings</option>
+              <option value="afternoons">Afternoons</option>
+              <option value="evenings">Evenings</option>
+              <option value="nights">Late nights (emergency)</option>
+              <option value="flexible">Flexible / depends</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="text-xs text-slate-300">How often can you help?</label>
+            <select name="frequency"
+                    class="w-full mt-1 px-4 py-2.5 rounded-xl bg-slate-700 text-white border border-slate-600
+                           focus:ring-2 focus:ring-sky-400 outline-none text-sm">
+              <option value="one_time">One-time</option>
+              <option value="few_times_week">Few times a week</option>
+              <option value="daily">Almost daily</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- CONTACT PREFERENCE -->
+        <div>
+          <p class="text-xs text-slate-300 mb-2">How can people reach you?</p>
+          <div class="grid md:grid-cols-2 gap-4">
+            <div>
+              <label class="text-[11px] text-slate-400">Preferred contact method</label>
+              <select name="contact_method"
+                      class="w-full mt-1 px-4 py-2.5 rounded-xl bg-slate-700 text-white border border-slate-600
+                             focus:ring-2 focus:ring-sky-400 outline-none text-sm">
+                <option value="lifeline_chat">LifeLine chat</option>
+                <option value="phone">Phone call</option>
+                <option value="whatsapp">WhatsApp</option>
+                <option value="sms">SMS</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="text-[11px] text-slate-400">Phone / WhatsApp (optional)</label>
+              <input name="contact_info"
+                     placeholder="01XXXXXXXXX"
+                     class="w-full mt-1 px-4 py-2.5 rounded-xl bg-slate-700 text-white border border-slate-600
+                            focus:ring-2 focus:ring-sky-400 outline-none text-sm" />
+            </div>
+          </div>
+        </div>
+
+        <!-- DESCRIPTION -->
+        <div>
+          <label class="text-xs text-slate-300">Describe how you can help</label>
+          <textarea name="description" rows="5"
+                    placeholder="Example: I have a bike and can do quick medicine or grocery runs in Mohammadpur area most evenings..."
+                    class="w-full mt-1 px-4 py-3 rounded-xl bg-slate-700 text-white border border-slate-600
+                           focus:ring-2 focus:ring-sky-400 outline-none text-sm"></textarea>
+        </div>
+
+        <!-- IMAGE UPLOAD -->
+        <div>
+          <label class="text-xs text-slate-300">Upload a photo (optional)</label>
+          <p class="text-[11px] text-slate-400 mb-1">
+            For example: medicine you can share, tools you have, or your ride.
+          </p>
+          <input type="file" name="image" accept="image/*"
+                 class="mt-1 text-slate-200 text-xs" onchange="previewImage(event)">
+          <img id="preview" class="mt-3 w-40 rounded-lg hidden border border-slate-600" />
+        </div>
+
+        <script>
+          function previewImage(event) {
+            const img = document.getElementById("preview");
+            img.src = URL.createObjectURL(event.target.files[0]);
+            img.classList.remove("hidden");
+          }
+        </script>
+
+        <!-- EXPIRY -->
+        <div class="flex flex-wrap items-center gap-3">
+          <div>
+            <label class="text-xs text-slate-300">Expires in (minutes)</label>
+            <input type="number" name="expiry_minutes" value="180" min="30" max="4320"
+                   class="mt-1 w-32 px-4 py-2.5 rounded-xl bg-slate-700 text-white border border-slate-600
+                          focus:ring-2 focus:ring-sky-400 outline-none text-sm" />
+          </div>
+          <p class="text-[11px] text-slate-400">
+            After this time, your offer won’t be visible as active.
+          </p>
+        </div>
+
+        <!-- SUBMIT -->
+        <div class="pt-2">
+          <button class="bg-sky-500 hover:bg-sky-400 text-slate-950 font-semibold px-6 py-3 rounded-xl text-sm transition">
+            Post Help Offer
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <!-- 🟩 SIDEBAR -->
+    <div class="space-y-8">
+
+      <!-- STATS -->
+      <div class="bg-slate-800/60 border border-slate-700 p-6 rounded-2xl shadow-md">
+        <h3 class="text-lg font-semibold text-white mb-3">Stats overview</h3>
+
+        <p class="text-sm text-slate-300 mb-2">
+          Active Needs: <span class="font-bold text-blue-300">{{ total_need }}</span>
+        </p>
+        <p class="text-sm text-slate-300 mb-4">
+          Active Offers: <span class="font-bold text-blue-300">{{ total_offer }}</span>
+        </p>
+
+        <ul class="space-y-1 text-slate-300 text-sm">
+          {% for cat, cnt in categories %}
+          <li class="flex justify-between border-b border-slate-700/50 pb-1">
+            <span>{{ cat|capitalize }}</span>
+            <span class="font-semibold">{{ cnt }}</span>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+
+      <!-- RECENT OFFERS -->
+      <div class="bg-slate-800/60 border border-slate-700 p-6 rounded-2xl shadow-md h-[420px] overflow-y-auto">
+        <h3 class="text-lg font-semibold text-white mb-4">Recent Help Offers</h3>
+
+        {% for p in posts %}
+        <div class="mb-4 pb-4 border-b border-slate-700/50">
+          <div class="font-semibold text-white text-sm">{{ p.title }}</div>
+          <div class="text-xs text-slate-300 whitespace-pre-line">
+            {{ p.description or "No description" }}
+          </div>
+          <div class="text-[11px] text-slate-500 mt-1">Category: {{ p.category }}</div>
+
+          {% if p.image_url %}
+          <img src="{{ p.image_url }}" class="mt-2 w-32 rounded-lg border border-slate-600" />
+          {% endif %}
+
+          <div class="text-[11px] text-slate-500">
+            {{ p.created_at.strftime('%d %b %H:%M') }}
+          </div>
+        </div>
+        {% else %}
+        <p class="text-slate-500 text-sm">No recent offers.</p>
+        {% endfor %}
+      </div>
+
+    </div>
+
+  </div>
+</div>
+{% endblock %}

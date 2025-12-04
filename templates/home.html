@@ -27,10 +27,10 @@
 
     <!-- PRIMARY ACTION BUTTONS -->
     <div class="flex flex-wrap gap-3 mb-4">
-      <a href="/requests" class="flex-1 md:flex-none px-5 py-2.5 rounded-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-sm font-semibold text-center transition">
+      <a href="{{ url_for('need_help') }}" class="flex-1 md:flex-none px-5 py-2.5 rounded-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-sm font-semibold text-center transition">
         I Need Help
       </a>
-      <a href="/requests?mode=offer" class="flex-1 md:flex-none px-5 py-2.5 rounded-full border border-emerald-400/70 text-emerald-300 hover:bg-emerald-500/10 text-sm font-semibold text-center transition">
+      <a href="{{ url_for('can_help') }}" class="flex-1 md:flex-none px-5 py-2.5 rounded-full border border-emerald-400/70 text-emerald-300 hover:bg-emerald-500/10 text-sm font-semibold text-center transition">
         I Can Help
       </a>
       <a href="/map" class="w-full md:w-auto px-5 py-2.5 rounded-full bg-slate-900 border border-slate-700 hover:border-sky-400 text-sm text-slate-100 text-center transition">

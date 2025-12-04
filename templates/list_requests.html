@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+{% block title %}
+  {% if mode == 'offer' %}
+    Help Offers
+  {% elif mode == 'all' %}
+    All Requests
+  {% else %}
+    Help Needed
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="w-full max-w-6xl mx-auto px-6 py-10">
+
+  <!-- HEADER + MODE TABS -->
+  <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+    <div>
+      <h2 class="text-2xl font-bold text-slate-100">
+        {% if mode == 'offer' %}
+          People offering help nearby
+        {% elif mode == 'all' %}
+          All open requests
+        {% else %}
+          People who need help
+        {% endif %}
+      </h2>
+      <p class="text-xs text-slate-400 mt-1">
+        Tap a card to see more details like location, urgency and contact preference.
+      </p>
+    </div>
+
+    <!-- TABS -->
+    <div class="inline-flex rounded-full bg-slate-900 border border-slate-700 p-1 text-xs">
+      <a href="{{ url_for('list_requests', mode='need') }}"
+         class="px-4 py-1.5 rounded-full transition
+         {% if mode == 'need' %}bg-emerald-500 text-slate-950 font-semibold{% else %}text-slate-300 hover:bg-slate-800{% endif %}">
+        Need help
+      </a>
+      <a href="{{ url_for('list_requests', mode='offer') }}"
+         class="px-4 py-1.5 rounded-full transition
+         {% if mode == 'offer' %}bg-sky-500 text-slate-950 font-semibold{% else %}text-slate-300 hover:bg-slate-800{% endif %}">
+        Offer help
+      </a>
+      <a href="{{ url_for('list_requests', mode='all') }}"
+         class="px-4 py-1.5 rounded-full transition
+         {% if mode == 'all' %}bg-slate-200 text-slate-900 font-semibold{% else %}text-slate-300 hover:bg-slate-800{% endif %}">
+        All
+      </a>
+    </div>
+  </div>
+
+  <!-- LIST -->
+  {% if requests %}
+  <div class="space-y-3">
+
+    {% for r in requests %}
+    <div class="rounded-2xl border border-slate-800 bg-slate-900/70 overflow-hidden">
+
+      <!-- CARD HEADER (CLICKABLE) -->
+      <button type="button"
+              class="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-slate-900/90 transition"
+              onclick="toggleDetails('{{ r.id }}')">
+        <div class="flex-1 min-w-0">
+          <div class="flex flex-wrap items-center gap-2">
+            <p class="font-semibold text-sm text-slate-100 truncate">
+              {{ r.title }}
+            </p>
+
+            <!-- CATEGORY BADGE -->
+            <span class="text-[11px] px-2 py-0.5 rounded-full
+                         border border-slate-600 text-slate-200 bg-slate-800/80">
+              {{ r.category|capitalize }}
+            </span>
+
+            <!-- NEED vs OFFER BADGE -->
+            {% if r.is_offer %}
+            <span class="text-[11px] px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-300 border border-sky-500/40">
+              Offer help
+            </span>
+            {% else %}
+            <span class="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/40">
+              Needs help
+            </span>
+            {% endif %}
+          </div>
+
+          <!-- SMALL SUBLINE -->
+          <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-400">
+            {% if r.area %}
+            <span>📍 {{ r.area }}</span>
+            {% endif %}
+            {% if r.urgency %}
+            <span>
+              ⏱️ Urgency:
+              <span class="
+                {% if r.urgency == 'emergency' %}text-rose-400{% elif r.urgency == 'high' %}text-amber-300
+                {% elif r.urgency == 'normal' %}text-sky-300{% else %}text-emerald-300{% endif %}">
+                {{ r.urgency|capitalize }}
+              </span>
+            </span>
+            {% endif %}
+            <span class="text-slate-500">
+              Created: {{ r.created_at.strftime('%d %b %H:%M') }}
+            </span>
+          </div>
+        </div>
+
+        <!-- CHEVRON -->
+        <div class="ml-3">
+          <span id="icon-{{ r.id }}" data-icon
+                class="inline-block transition-transform duration-150 text-slate-400">
+            ▼
+          </span>
+        </div>
+      </button>
+
+      <!-- DETAILS: HIDDEN BY DEFAULT -->
+      <div id="details-{{ r.id }}" data-details class="hidden border-t border-slate-800 bg-slate-950/80 px-4 py-3 text-xs text-slate-200">
+        <div class="grid md:grid-cols-3 gap-4">
+
+          <!-- LEFT: DESCRIPTION -->
+          <div class="md:col-span-2 space-y-2">
+            <p class="font-semibold text-slate-100 text-sm">Details</p>
+            <p class="text-[12px] text-slate-300 whitespace-pre-line">
+              {{ r.description or "No detailed description provided." }}
+            </p>
+
+            {% if r.landmark %}
+            <p class="text-[11px] text-slate-400">
+              <span class="font-semibold">Landmark:</span> {{ r.landmark }}
+            </p>
+            {% endif %}
+
+            {% if r.time_window %}
+            <p class="text-[11px] text-slate-400">
+              <span class="font-semibold">When:</span>
+              {% if r.time_window == 'anytime_today' %} Anytime today
+              {% elif r.time_window == 'next_few_hours' %} Within the next few hours
+              {% elif r.time_window == 'this_week' %} Sometime this week
+              {% else %} {{ r.time_window }}
+              {% endif %}
+            </p>
+            {% endif %}
+
+            {% if r.frequency or r.radius_pref %}
+            <p class="text-[11px] text-slate-400">
+              {% if r.frequency %}
+                <span class="font-semibold">Frequency:</span> {{ r.frequency.replace('_', ' ') }}
+              {% endif %}
+              {% if r.radius_pref %}
+                · <span class="font-semibold">Preferred radius:</span> {{ r.radius_pref }}
+              {% endif %}
+            </p>
+            {% endif %}
+          </div>
+
+          <!-- RIGHT: CONTACT + META -->
+          <div class="space-y-2 border-l border-slate-800 pl-3">
+            <p class="font-semibold text-slate-100 text-sm">Contact & meta</p>
+
+            {% if r.contact_method %}
+            <p class="text-[11px] text-slate-300">
+              <span class="font-semibold">Contact via:</span>
+              {{ r.contact_method|replace('_', ' ')|capitalize }}
+            </p>
+            {% endif %}
+
+            {% if r.contact_info %}
+            <p class="text-[11px] text-slate-300">
+              <span class="font-semibold">Contact info:</span> {{ r.contact_info }}
+            </p>
+            {% else %}
+            <p class="text-[11px] text-slate-500">
+              No phone/contact shared. Use in-app chat (future).
+            </p>
+            {% endif %}
+
+            <p class="text-[11px] text-slate-400">
+              <span class="font-semibold">Status:</span> {{ r.status|capitalize }}
+            </p>
+
+            <p class="text-[11px] text-slate-400">
+              <span class="font-semibold">Requested by:</span>
+              {{ r.user.name if r.user else "Unknown" }}
+            </p>
+
+            <p class="text-[11px] text-slate-500">
+              Expires at: {{ r.expires_at.strftime('%d %b %H:%M') }}
+            </p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+    {% endfor %}
+
+  </div>
+  {% else %}
+  <div class="mt-10 text-center text-sm text-slate-400">
+    No open requests found in this category yet.
+  </div>
+  {% endif %}
+</div>
+
+<!-- FLOATING ACTION BUTTON -->
+{% if mode == 'offer' %}
+  {% set fab_label = "Offer help" %}
+  {% set fab_href = url_for('can_help') %}
+{% else %}
+  {% set fab_label = "Request help" %}
+  {% set fab_href = url_for('need_help') %}
+{% endif %}
+
+<a href="{{ fab_href }}"
+   class="fixed bottom-6 right-6 md:bottom-8 md:right-10 z-20 inline-flex items-center gap-2
+          px-4 py-2.5 rounded-full shadow-lg shadow-emerald-500/25
+          bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-semibold transition">
+  <span>＋</span>
+  <span>{{ fab_label }}</span>
+</a>
+
+<!-- EXPAND/COLLAPSE SCRIPT (ES5-style, no arrow functions) -->
+<script>
+  function toggleDetails(id) {
+    var body = document.getElementById('details-' + id);
+    var icon = document.getElementById('icon-' + id);
+    if (!body || !icon) return;
+
+    var isHidden = body.classList.contains('hidden');
+
+    // Close all others
+    var detailEls = document.querySelectorAll('[data-details]');
+    for (var i = 0; i < detailEls.length; i++) {
+      detailEls[i].classList.add('hidden');
+    }
+
+    var iconEls = document.querySelectorAll('[data-icon]');
+    for (var j = 0; j < iconEls.length; j++) {
+      iconEls[j].classList.remove('rotate-180');
+    }
+
+    // Toggle this one
+    if (isHidden) {
+      body.classList.remove('hidden');
+      icon.classList.add('rotate-180');
+    } else {
+      body.classList.add('hidden');
+      icon.classList.remove('rotate-180');
+    }
+  }
+</script>
+{% endblock %}
