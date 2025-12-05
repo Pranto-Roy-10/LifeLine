@@ -24,6 +24,24 @@ from firebase_admin import credentials, auth as firebase_auth
 from flask_jwt_extended import (
     JWTManager, create_access_token, jwt_required, get_jwt_identity
 )
+from flask_socketio import SocketIO, emit, join_room, leave_room
+
+# Translation libraries: try official Google Cloud first, fallback to googletrans
+USE_GOOGLE_CLOUD_TRANSLATE = os.getenv("USE_GOOGLE_CLOUD_TRANSLATE", "0") == "1"
+try:
+    if USE_GOOGLE_CLOUD_TRANSLATE:
+        from google.cloud import translate_v2 as translate
+        gcloud_translate_client = translate.Client()
+    else:
+        raise Exception("skip gcloud")
+except Exception:
+    # fallback to googletrans (no credentials required)
+    try:
+        from googletrans import Translator
+
+        gt_translator = Translator()
+    except Exception:
+        gt_translator = None
 
 # email -> {"request_times": [...], "last_code_sent_at": datetime}
 otp_store = {}
@@ -61,6 +79,9 @@ def allowed_image(filename):
 
 db = SQLAlchemy(app)
 jwt = JWTManager(app)
+
+# Socket.IO for real-time chat
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 # --- Email / OTP mail config ---
 app.config["MAIL_SERVER"] = "smtp.gmail.com"
@@ -203,6 +224,57 @@ class Request(db.Model):
         return d
 
 
+# ------------------ MODELS: Chat ------------------
+class Conversation(db.Model):
+    __tablename__ = "conversations"
+    id = db.Column(db.Integer, primary_key=True)
+    # participant user ids (two users, one-on-one)
+    user_a = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    user_b = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def participants(self):
+        return {self.user_a, self.user_b}
+
+
+class ChatMessage(db.Model):
+    __tablename__ = "chat_messages"
+    id = db.Column(db.Integer, primary_key=True)
+    conversation_id = db.Column(db.Integer, db.ForeignKey("conversations.id"), nullable=False)
+    sender_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    text = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    delivered = db.Column(db.Boolean, default=False)
+    read = db.Column(db.Boolean, default=False)
+    language = db.Column(db.String(10), nullable=True)  # original language code if known
+
+    conversation = db.relationship("Conversation", backref="messages")
+
+
+def get_or_create_conversation(user1_id, user2_id):
+    a, b = sorted([int(user1_id), int(user2_id)])
+    conv = Conversation.query.filter_by(user_a=a, user_b=b).first()
+    if conv:
+        return conv
+    conv = Conversation(user_a=a, user_b=b)
+    db.session.add(conv)
+    db.session.commit()
+    return conv
+
+
+def serialize_message(msg: ChatMessage):
+    return {
+        "id": msg.id,
+        "conversation_id": msg.conversation_id,
+        "sender_id": msg.sender_id,
+        "text": msg.text,
+        "created_at": int(msg.created_at.timestamp()),
+        "delivered": bool(msg.delivered),
+        "read": bool(msg.read),
+        "language": msg.language,
+    }
+
+
 # ------------------ AUTH HELPERS ------------------
 def login_user(user: User):
     session["user_id"] = user.id
@@ -271,7 +343,13 @@ def generate_otp_code():
 # Make current user available in all templates as `current_user`
 @app.context_processor
 def inject_user():
-    return dict(current_user=current_user())
+    # Expose whether translation is available to templates
+    translation_enabled = False
+    if globals().get('gcloud_translate_client'):
+        translation_enabled = True
+    elif globals().get('gt_translator'):
+        translation_enabled = True
+    return dict(current_user=current_user(), translation_enabled=translation_enabled)
 
 # ------------------ GEO UTILS ------------------
 def haversine_distance_km(lat1, lon1, lat2, lon2):
@@ -1143,6 +1221,211 @@ def list_requests():
     )
 
 
+# ------------------ CHAT PAGES & API ------------------
+@app.route("/chat/<int:other_user_id>")
+@login_required
+def chat_with_user(other_user_id):
+    user = current_user()
+    other = User.query.get_or_404(other_user_id)
+    conv = get_or_create_conversation(user.id, other.id)
+    # prefetch last 100 messages
+    messages = (
+        ChatMessage.query.filter_by(conversation_id=conv.id).order_by(ChatMessage.created_at.asc()).limit(100).all()
+    )
+    return render_template("chat.html", conversation=conv, other_user=other, messages=messages)
+
+
+@app.route("/chat")
+def chat_index():
+    user = current_user()
+    if not user:
+        # allow quick guest access to chat via Emergency Guest account
+        user = get_emergency_user()
+        login_user(user)
+    # list conversations for the user
+    convs = Conversation.query.filter(
+        (Conversation.user_a == user.id) | (Conversation.user_b == user.id)
+    ).all()
+
+    conversations = []
+    for c in convs:
+        other_id = c.user_a if c.user_b == user.id else c.user_b
+        other = User.query.get(other_id)
+        last = (
+            ChatMessage.query.filter_by(conversation_id=c.id).order_by(ChatMessage.created_at.desc()).first()
+        )
+        conversations.append({
+            "conversation": c,
+            "other": other,
+            "last_message": last.text if last else None,
+            "last_time": int(last.created_at.timestamp()) if last else None,
+        })
+
+    # also show some nearby helpers to start a new chat (trusted helpers)
+    helpers = User.query.filter(User.is_trusted_helper == True, User.id != user.id).limit(10).all()
+    return render_template("chat_index.html", conversations=conversations, helpers=helpers)
+
+
+@app.route("/emotional")
+def emotional_ping():
+    user = current_user()
+    if not user:
+        # quick guest flow: use Emergency Guest
+        user = get_emergency_user()
+        login_user(user)
+    # find a trusted helper (listener)
+    listener = User.query.filter(User.is_trusted_helper == True, User.id != user.id).first()
+    if not listener:
+        # create or get a generic listener account
+        listener = User.query.filter_by(email="listener@lifeline.local").first()
+        if not listener:
+            listener = User(email="listener@lifeline.local", name="Listener")
+            listener.is_trusted_helper = True
+            # set random password
+            listener.password_hash = generate_password_hash(os.urandom(12).hex())
+            db.session.add(listener)
+            db.session.commit()
+
+    conv = get_or_create_conversation(user.id, listener.id)
+    return redirect(url_for('chat_with_user', other_user_id=listener.id))
+
+
+@app.route("/api/conversations/<int:conv_id>/messages")
+@login_required
+def api_get_messages(conv_id):
+    conv = Conversation.query.get_or_404(conv_id)
+    user = current_user()
+    if user.id not in conv.participants():
+        return jsonify({"error": "Unauthorized"}), 403
+    msgs = ChatMessage.query.filter_by(conversation_id=conv.id).order_by(ChatMessage.created_at.asc()).all()
+    return jsonify({"messages": [serialize_message(m) for m in msgs]})
+
+
+@app.route("/api/translate", methods=["POST"])
+@login_required
+def api_translate():
+    data = request.get_json() or {}
+    text = data.get("text")
+    target = data.get("target")
+    if not text or not target:
+        return jsonify({"error": "text and target required"}), 400
+
+    def translate_text(t, tgt):
+        try:
+            if 'gcloud_translate_client' in globals() and gcloud_translate_client:
+                resp = gcloud_translate_client.translate(t, target_language=tgt)
+                return resp.get("translatedText")
+            elif 'gt_translator' in globals() and gt_translator:
+                return gt_translator.translate(t, dest=tgt).text
+        except Exception:
+            pass
+        return t
+
+    translated = translate_text(text, target)
+    return jsonify({"translated": translated})
+
+
+# ------------------ SOCKET.IO EVENTS ------------------
+@socketio.on("join")
+def on_join(data):
+    # data = {conversation_id}
+    conv_id = data.get("conversation_id")
+    user = current_user()
+    if not user or not conv_id:
+        return
+    conv = Conversation.query.get(conv_id)
+    if not conv or user.id not in conv.participants():
+        return
+    room = f"chat_{conv_id}"
+    join_room(room)
+    emit("user_joined", {"user_id": user.id}, room=room)
+
+
+@socketio.on("leave")
+def on_leave(data):
+    conv_id = data.get("conversation_id")
+    user = current_user()
+    if not user or not conv_id:
+        return
+    room = f"chat_{conv_id}"
+    leave_room(room)
+    emit("user_left", {"user_id": user.id}, room=room)
+
+
+@socketio.on("typing")
+def on_typing(data):
+    conv_id = data.get("conversation_id")
+    user = current_user()
+    if not user or not conv_id:
+        return
+    room = f"chat_{conv_id}"
+    emit("typing", {"user_id": user.id}, room=room, include_self=False)
+
+
+@socketio.on("stop_typing")
+def on_stop_typing(data):
+    conv_id = data.get("conversation_id")
+    user = current_user()
+    if not user or not conv_id:
+        return
+    room = f"chat_{conv_id}"
+    emit("stop_typing", {"user_id": user.id}, room=room, include_self=False)
+
+
+@socketio.on("send_message")
+def on_send_message(data):
+    # data: {conversation_id, text, language (optional)}
+    conv_id = data.get("conversation_id")
+    text = data.get("text", "")
+    lang = data.get("language")
+    user = current_user()
+    if not user or not conv_id or not text:
+        return
+    conv = Conversation.query.get(conv_id)
+    if not conv or user.id not in conv.participants():
+        return
+
+    msg = ChatMessage(conversation_id=conv.id, sender_id=user.id, text=text, language=lang)
+    db.session.add(msg)
+    db.session.commit()
+
+    payload = serialize_message(msg)
+    room = f"chat_{conv_id}"
+    # send to room; clients should acknowledge
+    emit("new_message", payload, room=room)
+
+
+@socketio.on("message_delivered")
+def on_message_delivered(data):
+    # data: {message_id}
+    mid = data.get("message_id")
+    user = current_user()
+    if not user or not mid:
+        return
+    msg = ChatMessage.query.get(mid)
+    if not msg:
+        return
+    msg.delivered = True
+    db.session.commit()
+    room = f"chat_{msg.conversation_id}"
+    emit("delivered", {"message_id": mid}, room=room)
+
+
+@socketio.on("message_read")
+def on_message_read(data):
+    mid = data.get("message_id")
+    user = current_user()
+    if not user or not mid:
+        return
+    msg = ChatMessage.query.get(mid)
+    if not msg:
+        return
+    msg.read = True
+    db.session.commit()
+    room = f"chat_{msg.conversation_id}"
+    emit("read", {"message_id": mid}, room=room)
+
+
 @app.route("/requests/<int:request_id>/delete", methods=["POST"])
 @login_required
 def delete_request(request_id):
@@ -1161,4 +1444,4 @@ def delete_request(request_id):
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()  # create tables if not exist
-    app.run(debug=True)
+    socketio.run(app, debug=True)

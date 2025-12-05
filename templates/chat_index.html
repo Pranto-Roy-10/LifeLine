@@ -1,0 +1,34 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="w-full max-w-4xl mx-auto px-6 py-10">
+  <h2 class="text-2xl font-bold mb-4">Your Conversations</h2>
+
+  {% if conversations %}
+    <div class="space-y-3">
+      {% for item in conversations %}
+      <a href="{{ url_for('chat_with_user', other_user_id=item.other.id) }}" class="block rounded-lg border border-slate-800 bg-slate-900/70 px-4 py-3">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="font-semibold">{{ item.other.name }}</p>
+            <p class="text-[12px] text-slate-400">{{ item.last_message or 'No messages yet' }}</p>
+          </div>
+          <div class="text-xs text-slate-400">{% if item.last_time %}{{ item.last_time | int }}{% endif %}</div>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="text-sm text-slate-400 mb-4">You have no conversations yet. Start a chat with a helper below.</p>
+  {% endif %}
+
+  <h3 class="text-lg font-semibold mt-8 mb-2">Trusted helpers</h3>
+  <div class="grid md:grid-cols-3 gap-3">
+    {% for h in helpers %}
+    <a href="{{ url_for('chat_with_user', other_user_id=h.id) }}" class="block rounded-lg border border-slate-800 bg-slate-900/70 px-4 py-3 text-center">
+      <p class="font-semibold">{{ h.name }}</p>
+      <p class="text-xs text-slate-400">Trusted helper</p>
+    </a>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}
