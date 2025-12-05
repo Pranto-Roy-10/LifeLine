@@ -19,6 +19,11 @@
           <p>Posting as</p>
           <p class="font-semibold text-slate-100">{{ current_user.name }}</p>
         </div>
+        {% else %}
+        <div class="text-[11px] text-slate-400 text-right">
+          <p>Posting as</p>
+          <p class="font-semibold text-slate-100">Guest (quick help)</p>
+        </div>
         {% endif %}
       </div>
 
@@ -56,18 +61,37 @@
             <div>
               <label class="text-[11px] text-slate-400">Area / Neighborhood</label>
               <input name="area"
-                     placeholder="Mohammadpur, Iqbal Road"
+                     placeholder="Badda, near BRACU"
                      class="w-full mt-1 px-4 py-2.5 rounded-xl bg-slate-700 text-white border border-slate-600
                             focus:ring-2 focus:ring-emerald-400 outline-none text-sm" />
             </div>
             <div>
               <label class="text-[11px] text-slate-400">Nearest landmark</label>
               <input name="landmark"
-                     placeholder="Near such-and-such mosque / school"
+                     placeholder="Near mosque / school / BRACU campus"
                      class="w-full mt-1 px-4 py-2.5 rounded-xl bg-slate-700 text-white border border-slate-600
                             focus:ring-2 focus:ring-emerald-400 outline-none text-sm" />
             </div>
           </div>
+        </div>
+
+        <!-- 🔹 MAP PICKER + HIDDEN LAT/LNG -->
+        <input type="hidden" name="lat" id="help-lat">
+        <input type="hidden" name="lng" id="help-lng">
+
+        <div class="mt-2">
+          <div class="flex items-center justify-between mb-2">
+            <p class="text-xs text-slate-300">Pin your exact location on map (optional)</p>
+            <button type="button"
+                    onclick="useMyLocationForHelp()"
+                    class="text-[11px] px-3 py-1 rounded-full border border-emerald-400/60 text-emerald-300 hover:bg-emerald-500/10">
+              Use my current location
+            </button>
+          </div>
+          <div id="help-map" class="w-full h-56 rounded-2xl border border-slate-700 overflow-hidden"></div>
+          <p class="text-[10px] text-slate-500 mt-1">
+            Click anywhere on the map to drop a pin. Helpers will see this on the neighborhood map.
+          </p>
         </div>
 
         <!-- URGENCY + TIME WINDOW -->
@@ -75,11 +99,11 @@
           <div>
             <label class="text-xs text-slate-300">How urgent is this?</label>
             <div class="mt-2 flex flex-wrap gap-2 text-[11px]">
-              {% for level,label,color in [
-                ('low','Low','#22c55e'),
-                ('normal','Normal','#38bdf8'),
-                ('high','High','#fbbf24'),
-                ('emergency','Emergency','#fb7185')
+              {% for level,label in [
+                ('low','Low'),
+                ('normal','Normal'),
+                ('high','High'),
+                ('emergency','Emergency')
               ] %}
               <label class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-700 border border-slate-600 cursor-pointer hover:border-emerald-400">
                 <input type="radio" name="urgency" value="{{ level }}" class="h-3 w-3">
@@ -208,4 +232,64 @@
 
   </div>
 </div>
+
+<script>
+  let helpMap, helpMarker;
+
+  function initHelpMap() {
+    // BRACU / Badda-ish default center
+    const defaultPos = { lat: 23.7806, lng: 90.4250 };
+
+    helpMap = new google.maps.Map(document.getElementById("help-map"), {
+      center: defaultPos,
+      zoom: 15,
+      mapTypeControl: false,
+      streetViewControl: false,
+      fullscreenControl: false,
+    });
+
+    helpMap.addListener("click", (e) => {
+      setHelpMarker(e.latLng);
+    });
+  }
+
+  function setHelpMarker(latLng) {
+    if (helpMarker) {
+      helpMarker.setMap(null);
+    }
+    helpMarker = new google.maps.Marker({
+      position: latLng,
+      map: helpMap,
+    });
+
+    document.getElementById("help-lat").value = latLng.lat().toFixed(6);
+    document.getElementById("help-lng").value = latLng.lng().toFixed(6);
+  }
+
+  function useMyLocationForHelp() {
+    if (!navigator.geolocation) {
+      alert("Geolocation is not supported by your browser.");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const p = {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+        };
+        helpMap.setCenter(p);
+        helpMap.setZoom(17);
+        setHelpMarker(p);
+      },
+      () => {
+        alert("Could not get your location.");
+      }
+    );
+  }
+</script>
+
+<script async defer
+  src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}&callback=initHelpMap">
+</script>
+
 {% endblock %}

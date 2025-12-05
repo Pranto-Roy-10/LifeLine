@@ -44,12 +44,13 @@ if not firebase_admin._apps:
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-change-me")
 app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "dev-jwt-secret")
 
-# SQLite for now (file lifeline.db in project root). Later change to Postgres URI.
+# SQLite for now (file lifeline.db in project root).
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///lifeline.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["UPLOAD_FOLDER"] = os.path.join("static", "uploads")
 app.config["ALLOWED_IMAGE_EXTENSIONS"] = {"png", "jpg", "jpeg", "gif"}
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+
 
 def allowed_image(filename):
     if "." not in filename:
@@ -57,9 +58,11 @@ def allowed_image(filename):
     ext = filename.rsplit(".", 1)[1].lower()
     return ext in app.config["ALLOWED_IMAGE_EXTENSIONS"]
 
+
 db = SQLAlchemy(app)
 jwt = JWTManager(app)
 
+# --- Email / OTP mail config ---
 app.config["MAIL_SERVER"] = "smtp.gmail.com"
 app.config["MAIL_PORT"] = 587
 app.config["MAIL_USE_TLS"] = True
@@ -77,7 +80,7 @@ mail = Mail(app)
 # Your Google Maps API key
 GOOGLE_MAPS_API_KEY = os.getenv(
     "GOOGLE_MAPS_API_KEY",
-    "AIzaSyAVtLNl7YZaPZeSnuA_5Gxm8VdtFXxreYo"
+    "AIzaSyAVtLNl7YZaPZeSnuA_5Gxm8VdtFXxreYo"  
 )
 
 EMERGENCY_GUEST_EMAIL = "guest_emergency@lifeline.local"
@@ -130,7 +133,7 @@ class Request(db.Model):
 
     # core
     title = db.Column(db.String(255), nullable=False)
-    category = db.Column(db.String(50), nullable=False)  # medicine, food, tutoring, repair, ride
+    category = db.Column(db.String(50), nullable=False)  # medicine, food, tutoring, repair, ride, ...
     description = db.Column(db.Text, nullable=True)
 
     # location / meta
@@ -149,7 +152,7 @@ class Request(db.Model):
 
     # offer-specific meta
     is_offer = db.Column(db.Boolean, default=False)        # false = Need Help, true = Offering Help
-    radius_pref = db.Column(db.String(50), nullable=True)  # e.g. within 2km
+    radius_pref = db.Column(db.String(50), nullable=True)  # e.g. "2" (km)
     frequency = db.Column(db.String(50), nullable=True)    # one_time / few_times_week / daily
 
     image_url = db.Column(db.String(300), nullable=True)
@@ -199,21 +202,25 @@ class Request(db.Model):
                 d["distance_km"] = None
         return d
 
+
 # ------------------ AUTH HELPERS ------------------
 def login_user(user: User):
     session["user_id"] = user.id
     session["user_name"] = user.name
     session["is_trusted_helper"] = bool(user.is_trusted_helper)
 
+
 def logout_user():
     session.pop("user_id", None)
     session.pop("user_name", None)
     session.pop("is_trusted_helper", None)
 
+
 def current_user():
     if "user_id" in session:
         return User.query.get(session["user_id"])
     return None
+
 
 def login_required(view_func):
     from functools import wraps
@@ -226,6 +233,7 @@ def login_required(view_func):
         return view_func(*args, **kwargs)
 
     return wrapper
+
 
 def get_emergency_user():
     """
@@ -244,6 +252,7 @@ def get_emergency_user():
         db.session.commit()
     return guest
 
+
 def create_jwt_for_user(user: User):
     """Create a JWT access token for API use."""
     additional_claims = {
@@ -253,46 +262,18 @@ def create_jwt_for_user(user: User):
     token = create_access_token(identity=str(user.id), additional_claims=additional_claims)
     return token
 
+
 def generate_otp_code():
     """Generate a 6-digit numeric OTP."""
     return "".join(random.choices(string.digits, k=6))
+
 
 # Make current user available in all templates as `current_user`
 @app.context_processor
 def inject_user():
     return dict(current_user=current_user())
 
-# ------------------ DEMO DATA FOR MAP ------------------
-DEMO_REQUESTS = [
-    {
-        "id": 1,
-        "title": "Medicine Run – Urgent",
-        "type": "medicine",
-        "lat": 23.7555,
-        "lng": 90.3650,
-        "description": "BP tablets needed for elderly neighbor.",
-        "created_at": time.time() - 60,  # 1 minute ago
-    },
-    {
-        "id": 2,
-        "title": "Ride Offer – Office",
-        "type": "ride",
-        "lat": 23.7510,
-        "lng": 90.3800,
-        "description": "Going to Dhanmondi, 2 seats free.",
-        "created_at": time.time() - 300,  # 5 minutes ago
-    },
-    {
-        "id": 3,
-        "title": "Need Help – Laptop Repair",
-        "type": "help",
-        "lat": 23.7600,
-        "lng": 90.3700,
-        "description": "Laptop not turning on, need quick check.",
-        "created_at": time.time() - 900,  # 15 minutes ago
-    },
-]
-
+# ------------------ GEO UTILS ------------------
 def haversine_distance_km(lat1, lon1, lat2, lon2):
     R = 6371.0  # Earth radius in KM
     lat1_r, lon1_r = math.radians(lat1), math.radians(lon1)
@@ -313,9 +294,11 @@ def haversine_distance_km(lat1, lon1, lat2, lon2):
 def home():
     return render_template("home.html")
 
+
 @app.route("/debug/session")
 def debug_session():
     return jsonify(dict(session))
+
 
 @app.route("/map")
 @login_required
@@ -365,6 +348,7 @@ def signup():
 
     # GET
     return render_template("signup.html")
+
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -438,6 +422,7 @@ def login():
         session["next_after_google"] = next_param
     return render_template("login.html")
 
+
 @app.route("/logout")
 def logout():
     logout_user()
@@ -445,10 +430,10 @@ def logout():
     return redirect(url_for("home"))
 
 # ---------- OTP / EMAIL HELPERS & ROUTES ----------
-# Backend OTP settings
 OTP_TTL_SECONDS = 120          # OTP valid for 2 minutes
 OTP_COOLDOWN_SECONDS = 30      # at least 30s between OTP sends per email
 OTP_MAX_PER_HOUR = 5           # no more than 5 OTPs per email per hour
+
 
 def build_otp_email_html(user, code):
     """Return a simple HTML email body for the OTP email."""
@@ -475,6 +460,7 @@ def build_otp_email_html(user, code):
       </body>
     </html>
     """
+
 
 @app.route("/login/otp/request", methods=["POST"])
 def login_otp_request():
@@ -534,6 +520,7 @@ def login_otp_request():
     flash("OTP sent to your email.", "success")
     return redirect(url_for("login", mode="otp"))
 
+
 @app.route("/login/otp/verify", methods=["POST"])
 def login_otp_verify():
     email = request.form.get("email", "").strip().lower()
@@ -566,6 +553,7 @@ def login_otp_verify():
     flash("Logged in with OTP!", "success")
     return redirect(url_for("home"))
 
+# ---------- GOOGLE / FIREBASE AUTH ----------
 @app.route("/auth/google", methods=["POST"])
 def auth_google():
     # Expect a JSON body: { "idToken": "..." }
@@ -611,6 +599,7 @@ def auth_google():
     # Frontend JS will redirect based on this
     return jsonify({"redirect_url": url_for("home")})
 
+
 @app.route("/google-auth", methods=["POST"])
 def google_auth():
     """Verify Google ID token from Firebase, log user in, return redirect URL."""
@@ -622,7 +611,6 @@ def google_auth():
 
     try:
         decoded = firebase_auth.verify_id_token(id_token)
-        # decoded has fields like uid, email, name, picture, etc.
     except Exception as e:
         print("Firebase verify_id_token error:", e)
         return jsonify({"error": "Invalid or expired Google token"}), 401
@@ -710,6 +698,15 @@ def api_me():
 @app.route("/api/requests/nearby")
 @login_required
 def api_requests_nearby():
+    """
+    Returns nearby requests for the live map.
+    Response objects look like:
+    {
+      id, title, description, lat, lng, distance_km,
+      type: "help"|"medicine"|"ride",
+      urgency, is_offer, radius_pref, ...
+    }
+    """
     try:
         user_lat = float(request.args.get("lat"))
         user_lng = float(request.args.get("lng"))
@@ -718,20 +715,43 @@ def api_requests_nearby():
 
     radius_km = float(request.args.get("radius_km", 3.0))
 
-    now_ts = time.time()
+    now = datetime.utcnow()
     max_age_seconds = 60 * 60  # last 1 hour
+    cutoff = now - timedelta(seconds=max_age_seconds)
+
+    # Base query: only open, not expired, created in last hour, with coordinates
+    q = Request.query.filter(
+        Request.status == "open",
+        Request.expires_at > now,
+        Request.created_at >= cutoff,
+        Request.lat.isnot(None),
+        Request.lng.isnot(None),
+    )
 
     nearby = []
-    for r in DEMO_REQUESTS:
-        if now_ts - r["created_at"] > max_age_seconds:
+
+    for r in q.all():
+        dist = haversine_distance_km(user_lat, user_lng, r.lat, r.lng)
+        if dist > radius_km:
             continue
-        dist = haversine_distance_km(user_lat, user_lng, r["lat"], r["lng"])
-        if dist <= radius_km:
-            item = dict(r)
-            item["distance_km"] = round(dist, 2)
-            nearby.append(item)
+
+        item = r.to_dict(include_user=True, user_lat=user_lat, user_lng=user_lng)
+
+        cat = (r.category or "").lower()
+        if cat == "medicine":
+            t = "medicine"
+        elif cat == "ride":
+            t = "ride"
+        else:
+            t = "help"
+
+        item["type"] = t
+        item["distance_km"] = round(dist, 2)
+
+        nearby.append(item)
 
     return jsonify({"requests": nearby})
+
 
 # Create a new request/offer (API, logged in only)
 @app.route("/api/requests", methods=["POST"])
@@ -770,6 +790,7 @@ def api_create_request():
     db.session.add(req)
     db.session.commit()
     return jsonify({"request": req.to_dict(include_user=True)}), 201
+
 
 # List active requests (optionally nearby)
 @app.route("/api/requests", methods=["GET"])
@@ -816,6 +837,7 @@ def api_list_requests():
 
     return jsonify({"requests": results})
 
+
 # Delete a request (owner only)
 @app.route("/api/requests/<int:request_id>", methods=["DELETE"])
 @login_required
@@ -834,6 +856,7 @@ def api_delete_request(request_id):
 def new_request():
     # Show form to create a new request / offer
     return render_template("create_request.html")
+
 
 @app.route("/requests/new", methods=["POST"])
 @login_required
@@ -868,6 +891,7 @@ def create_request():
     flash("Your request has been posted.", "success")
     return redirect(url_for("list_requests"))
 
+
 @app.route("/need-help", methods=["GET", "POST"])
 def need_help():
     """
@@ -890,19 +914,27 @@ def need_help():
 
         description_main = request.form.get("description", "").strip()
 
+        # lat / lng from map picker (optional)
+        lat_raw = request.form.get("lat")
+        lng_raw = request.form.get("lng")
+        try:
+            lat = float(lat_raw) if lat_raw else None
+            lng = float(lng_raw) if lng_raw else None
+        except ValueError:
+            lat = None
+            lng = None
+
         try:
             expiry_minutes = int(request.form.get("expiry_minutes", 60))
         except (TypeError, ValueError):
             expiry_minutes = 60
 
-        # basic validation
         if not title or not category:
             flash("Title and category are required.", "error")
             return redirect(url_for("need_help"))
 
         # Decide which user will own this request
         if user is None:
-            # no one logged in → use emergency guest
             user = get_emergency_user()
 
         expires_at = datetime.utcnow() + timedelta(minutes=expiry_minutes)
@@ -919,6 +951,8 @@ def need_help():
             time_window=time_window or None,
             contact_method=contact_method or None,
             contact_info=contact_info or None,
+            lat=lat,
+            lng=lng,
             expires_at=expires_at,
         )
         db.session.add(req)
@@ -968,9 +1002,10 @@ def need_help():
         total_need=total_need,
         total_offer=total_offer,
         categories=categories,
+        google_maps_key=GOOGLE_MAPS_API_KEY,
     )
 
-# I Can Help – login still required
+# I Can Help – login required
 @app.route("/can-help", methods=["GET", "POST"])
 @login_required
 def can_help():
@@ -986,6 +1021,16 @@ def can_help():
         contact_info = request.form.get("contact_info", "").strip()
 
         description_main = request.form.get("description", "").strip()
+
+        # lat / lng from helper map picker (optional)
+        lat_raw = request.form.get("lat")
+        lng_raw = request.form.get("lng")
+        try:
+            lat = float(lat_raw) if lat_raw else None
+            lng = float(lng_raw) if lng_raw else None
+        except ValueError:
+            lat = None
+            lng = None
 
         try:
             expiry_minutes = int(request.form.get("expiry_minutes", 180))
@@ -1013,13 +1058,15 @@ def can_help():
             category=category,
             description=description_main,
             is_offer=True,
-            area=area,
-            radius_pref=radius_pref,
-            time_window=time_window,
-            frequency=frequency,
-            contact_method=contact_method,
-            contact_info=contact_info,
+            area=area or None,
+            radius_pref=radius_pref or None,
+            time_window=time_window or None,
+            frequency=frequency or None,
+            contact_method=contact_method or None,
+            contact_info=contact_info or None,
             image_url=image_url,
+            lat=lat,
+            lng=lng,
             expires_at=expires_at,
         )
         db.session.add(req)
@@ -1060,7 +1107,9 @@ def can_help():
         total_need=total_need,
         total_offer=total_offer,
         categories=categories,
+        google_maps_key=GOOGLE_MAPS_API_KEY,
     )
+
 
 @app.route("/requests")
 @login_required
@@ -1092,6 +1141,7 @@ def list_requests():
         requests=requests_list,
         mode=mode,
     )
+
 
 @app.route("/requests/<int:request_id>/delete", methods=["POST"])
 @login_required

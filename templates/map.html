@@ -15,10 +15,12 @@
       </p>
     </div>
 
-    <div class="text-xs text-slate-400 space-y-1">
-      <p><span class="inline-block h-2 w-2 rounded-full bg-emerald-400 mr-1"></span> Help needed</p>
-      <p><span class="inline-block h-2 w-2 rounded-full bg-sky-400 mr-1"></span> Medicine run</p>
-      <p><span class="inline-block h-2 w-2 rounded-full bg-amber-300 mr-1"></span> Ride offer</p>
+    <div class="text-[10px] text-slate-400 space-y-1">
+      <p class="font-semibold text-slate-200">Pin colors</p>
+      <p><span class="inline-block h-2 w-2 rounded-full bg-[#22c55e] mr-1"></span> Need – normal/low</p>
+      <p><span class="inline-block h-2 w-2 rounded-full bg-[#f97316] mr-1"></span> Need – high</p>
+      <p><span class="inline-block h-2 w-2 rounded-full bg-[#ef4444] mr-1"></span> Need – emergency</p>
+      <p><span class="inline-block h-2 w-2 rounded-full bg-[#3b82f6] mr-1"></span> Helper offers (radius shown if set)</p>
     </div>
   </div>
 
@@ -99,15 +101,26 @@
   let map;
   let userMarker = null;
   let requestMarkers = []; // { marker, infoWindow, data }
+  let helperCircles = [];  // radius circles for offers
   let userPosition = null;
   let lastRequests = [];
   let activeFilter = "all";
   let currentRadiusKm = 3;
 
+  // Pin colors based on role (need vs offer) + urgency
   const ICON_URLS = {
-    help: "http://maps.google.com/mapfiles/ms/icons/green-dot.png",
-    medicine: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png",
-    ride: "http://maps.google.com/mapfiles/ms/icons/yellow-dot.png",
+    need: {
+      emergency: "http://maps.google.com/mapfiles/ms/icons/red-dot.png",
+      high: "http://maps.google.com/mapfiles/ms/icons/orange-dot.png",
+      normal: "http://maps.google.com/mapfiles/ms/icons/green-dot.png",
+      low: "http://maps.google.com/mapfiles/ms/icons/ltblue-dot.png",
+    },
+    offer: {
+      emergency: "http://maps.google.com/mapfiles/ms/icons/purple-dot.png",
+      high: "http://maps.google.com/mapfiles/ms/icons/purple-dot.png",
+      normal: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png",
+      low: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png",
+    },
   };
 
   function initMap() {
@@ -152,34 +165,25 @@
           );
           b.classList.add("border-slate-700", "text-slate-300");
         });
-        if (activeFilter === "all") {
-          btn.classList.remove("border-slate-700", "text-slate-300");
-          btn.classList.add(
+        btn.classList.remove("border-slate-700", "text-slate-300");
+        btn.classList.add(
+          "border-emerald-400/60",
+          "bg-emerald-500/10",
+          "text-emerald-200",
+          "font-semibold"
+        );
+
+        const allBtn = document.querySelector('.filter-btn[data-filter="all"]');
+        if (allBtn && activeFilter !== "all") {
+          allBtn.classList.remove(
             "border-emerald-400/60",
             "bg-emerald-500/10",
             "text-emerald-200",
             "font-semibold"
           );
-        } else {
-          btn.classList.remove("border-slate-700", "text-slate-300");
-          btn.classList.add(
-            "border-emerald-400/60",
-            "bg-emerald-500/10",
-            "text-emerald-200",
-            "font-semibold"
-          );
-          // mark "All" back to neutral
-          const allBtn = document.querySelector('.filter-btn[data-filter="all"]');
-          if (allBtn && activeFilter !== "all") {
-            allBtn.classList.remove(
-              "border-emerald-400/60",
-              "bg-emerald-500/10",
-              "text-emerald-200",
-              "font-semibold"
-            );
-            allBtn.classList.add("border-slate-700", "text-slate-300");
-          }
+          allBtn.classList.add("border-slate-700", "text-slate-300");
         }
+
         renderRequests();
       });
     });
@@ -216,13 +220,13 @@
         (err) => {
           console.error(err);
           statusEl.innerText =
-            "Could not access your location. Showing demo area around Dhaka.";
+            "Could not access your location. Showing area around Dhaka.";
           fetchAndRenderRequests();
         }
       );
     } else {
       statusEl.innerText =
-        "Geolocation not supported. Showing demo area around Dhaka.";
+        "Geolocation not supported. Showing area around Dhaka.";
       fetchAndRenderRequests();
     }
   }
@@ -232,6 +236,11 @@
       item.marker.setMap(null);
     }
     requestMarkers = [];
+
+    for (const c of helperCircles) {
+      c.setMap(null);
+    }
+    helperCircles = [];
   }
 
   async function fetchAndRenderRequests() {
@@ -253,8 +262,7 @@
       lastRequests = data.requests || [];
 
       if (!lastRequests.length) {
-        statusEl.innerText =
-          "No nearby help requests in the last hour (demo data).";
+        statusEl.innerText = "No nearby help requests or offers in the last hour.";
         renderRequests();
         return;
       }
@@ -263,7 +271,20 @@
 
       for (const r of lastRequests) {
         const pos = { lat: r.lat, lng: r.lng };
-        const iconUrl = ICON_URLS[r.type] || ICON_URLS.help;
+
+        const urgencyRaw = (r.urgency || "normal").toLowerCase();
+        const urgency =
+          ["low", "normal", "high", "emergency"].includes(urgencyRaw)
+            ? urgencyRaw
+            : "normal";
+
+        const isOffer = !!r.is_offer;
+        const roleKey = isOffer ? "offer" : "need";
+
+        let iconUrl =
+          (ICON_URLS[roleKey] && ICON_URLS[roleKey][urgency]) ||
+          (ICON_URLS[roleKey] && ICON_URLS[roleKey].normal) ||
+          ICON_URLS.need.normal;
 
         const marker = new google.maps.Marker({
           position: pos,
@@ -273,14 +294,26 @@
         });
 
         const infoHtml = `
-          <div style="max-width: 220px;">
+          <div style="max-width: 240px;">
             <h3 style="font-size: 14px; margin-bottom: 4px;">${r.title}</h3>
             <p style="font-size: 12px; color: #64748b; margin-bottom: 4px;">
               ${r.description || ""}
             </p>
-            <p style="font-size: 11px; color: #22c55e;">
-              ~ ${r.distance_km} km away · demo
+            <p style="font-size: 11px; color: #22c55e; margin-bottom: 2px;">
+              ~ ${r.distance_km} km away
             </p>
+            ${
+              r.urgency
+                ? `<p style="font-size: 11px; color: #f97316;">Urgency: ${r.urgency}</p>`
+                : ""
+            }
+            ${
+              r.is_offer
+                ? `<p style="font-size: 11px; color: #38bdf8;">Helper offer${
+                    r.radius_pref ? " • radius " + r.radius_pref + " km" : ""
+                  }</p>`
+                : ""
+            }
           </div>
         `;
 
@@ -294,12 +327,30 @@
 
         requestMarkers.push({ marker, infoWindow, data: r });
         bounds.extend(pos);
+
+        // Draw helper radius if this is an offer and radius_pref is set
+        if (isOffer && r.radius_pref) {
+          const radiusKm = parseFloat(r.radius_pref);
+          if (!isNaN(radiusKm) && radiusKm > 0) {
+            const circle = new google.maps.Circle({
+              map: map,
+              center: pos,
+              radius: radiusKm * 1000,
+              strokeColor: "#38bdf8",
+              strokeOpacity: 0.4,
+              strokeWeight: 1,
+              fillColor: "#38bdf8",
+              fillOpacity: 0.05,
+            });
+            helperCircles.push(circle);
+          }
+        }
       }
 
       if (userPosition) bounds.extend(userPosition);
       map.fitBounds(bounds, 80);
 
-      statusEl.innerText = `Showing ${lastRequests.length} nearby request(s) within ${currentRadiusKm} km (demo).`;
+      statusEl.innerText = `Showing ${lastRequests.length} nearby request(s) and offer(s) within ${currentRadiusKm} km.`;
       renderRequests();
     } catch (e) {
       console.error(e);
@@ -326,16 +377,24 @@
     summaryEl.innerText = `${filtered.length} request(s) nearby. Click a card to focus on the map.`;
 
     for (const r of filtered) {
+      const isOffer = !!r.is_offer;
+
       let tagLabel = "Help needed";
       let tagColor =
         "text-emerald-300 bg-emerald-500/10 border-emerald-400/40";
-      if (r.type === "medicine") {
+
+      if (isOffer) {
+        tagLabel = "Helper (general)";
+        tagColor = "text-sky-300 bg-sky-500/10 border-sky-400/40";
+      } else if (r.type === "medicine") {
         tagLabel = "Medicine run";
         tagColor = "text-sky-300 bg-sky-500/10 border-sky-400/40";
       } else if (r.type === "ride") {
         tagLabel = "Ride offer";
         tagColor = "text-amber-300 bg-amber-500/10 border-amber-400/40";
       }
+
+      const urgencyText = r.urgency ? r.urgency : null;
 
       const card = document.createElement("button");
       card.type = "button";
@@ -354,8 +413,18 @@
           ${r.description || ""}
         </p>
         <p class="text-[11px] text-emerald-300 mt-1">
-          ~ ${r.distance_km} km away · demo
+          ~ ${r.distance_km} km away
+          ${
+            r.is_offer && r.radius_pref
+              ? ` • radius ${r.radius_pref} km`
+              : ""
+          }
         </p>
+        ${
+          urgencyText
+            ? `<p class="text-[10px] text-orange-300 mt-0.5 capitalize">Urgency: ${urgencyText}</p>`
+            : ""
+        }
       `;
 
       card.addEventListener("click", () => {
