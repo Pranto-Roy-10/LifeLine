@@ -22,13 +22,15 @@
         {% endif %}
       </div>
 
-      <form method="POST" enctype="multipart/form-data" class="space-y-6">
+      <form id="can-help-form" method="POST" enctype="multipart/form-data" class="space-y-6">
 
         <!-- TITLE + CATEGORY -->
         <div class="grid md:grid-cols-2 gap-4">
           <div>
             <label class="text-xs text-slate-300">What can you offer? <span class="text-sky-400">*</span></label>
             <input name="title"
+                   required
+                   maxlength="120"
                    placeholder="Ride to BRACU, can take 2 people"
                    class="w-full mt-1 px-4 py-3 rounded-xl bg-slate-700 text-white border border-slate-600
                           focus:ring-2 focus:ring-sky-400 outline-none text-sm" />
@@ -37,8 +39,10 @@
           <div>
             <label class="text-xs text-slate-300">Category <span class="text-sky-400">*</span></label>
             <select name="category"
+                    required
                     class="w-full mt-1 px-4 py-3 rounded-xl bg-slate-700 border border-slate-600 text-white
                            focus:ring-2 focus:ring-sky-400 outline-none text-sm">
+              <option value="" disabled selected>Select a category</option>
               <option value="medicine">Medicine help</option>
               <option value="food">Food / groceries</option>
               <option value="tutoring">Tutoring</option>
@@ -76,13 +80,15 @@
           </div>
         </div>
 
-        <!-- 🔹 MAP PICKER + RADIUS CIRCLE -->
+        <!-- 🔹 MAP PICKER + RADIUS CIRCLE (REQUIRED) -->
         <input type="hidden" name="lat" id="helper-lat">
         <input type="hidden" name="lng" id="helper-lng">
 
         <div class="mt-2">
           <div class="flex items-center justify-between mb-2">
-            <p class="text-xs text-slate-300">Pin your base point on the map</p>
+            <p class="text-xs text-slate-300">
+              Pin your base point on the map <span class="text-sky-400">*</span>
+            </p>
             <button type="button"
                     onclick="useMyLocationForHelper()"
                     class="text-[11px] px-3 py-1 rounded-full border border-sky-400/60 text-sky-300 hover:bg-sky-500/10">
@@ -91,7 +97,7 @@
           </div>
           <div id="helper-map" class="w-full h-56 rounded-2xl border border-slate-700 overflow-hidden"></div>
           <p class="text-[10px] text-slate-500 mt-1">
-            Click on the map to set your location. We'll draw your offered radius as a circle.
+            You must pin your location. We'll use this for the neighborhood map and radius.
           </p>
         </div>
 
@@ -136,11 +142,19 @@
               </select>
             </div>
             <div>
-              <label class="text-[11px] text-slate-400">Phone / WhatsApp</label>
+              <label class="text-[11px] text-slate-400">Phone / WhatsApp <span class="text-sky-400">*</span></label>
               <input name="contact_info"
+                     type="tel"
+                     inputmode="numeric"
+                     pattern="\d{7,15}"
+                     maxlength="15"
+                     required
                      placeholder="01XXXXXXXXX"
                      class="w-full mt-1 px-4 py-2.5 rounded-xl bg-slate-700 text-white border border-slate-600
                             focus:ring-2 focus:ring-sky-400 outline-none text-sm" />
+              <p class="text-[10px] text-slate-500 mt-1">
+                Digits only, no spaces or dashes.
+              </p>
             </div>
           </div>
         </div>
@@ -149,6 +163,8 @@
         <div>
           <label class="text-xs text-slate-300">Describe how you can help</label>
           <textarea name="description" rows="5"
+                    required
+                    minlength="10"
                     placeholder="Example: I drive to BRACU every morning from Badda, can take 2 students on most weekdays..."
                     class="w-full mt-1 px-4 py-3 rounded-xl bg-slate-700 text-white border border-slate-600
                            focus:ring-2 focus:ring-sky-400 outline-none text-sm"></textarea>
@@ -188,49 +204,9 @@
       </form>
     </div>
 
-    <!-- 🟩 SIDEBAR: STATS + RECENT OFFERS -->
+    <!-- 🟩 SIDEBAR (stats + recent offers) – keep as you had -->
     <div class="space-y-8">
-
-      <div class="bg-slate-800/60 border border-slate-700 p-6 rounded-2xl shadow-md">
-        <h3 class="text-lg font-semibold text-white mb-3">Helper stats</h3>
-
-        <p class="text-sm text-slate-300 mb-2">
-          Active Needs: <span class="font-bold text-emerald-300">{{ total_need }}</span>
-        </p>
-        <p class="text-sm text-slate-300 mb-4">
-          Active Offers: <span class="font-bold text-emerald-300">{{ total_offer }}</span>
-        </p>
-
-        <h4 class="text-sm text-slate-400 uppercase tracking-wide mb-2">Categories</h4>
-        <ul class="space-y-1 text-slate-300 text-sm">
-          {% for cat, cnt in categories %}
-          <li class="flex justify-between border-b border-slate-700/50 pb-1">
-            <span>{{ cat|capitalize }}</span>
-            <span class="font-semibold">{{ cnt }}</span>
-          </li>
-          {% endfor %}
-        </ul>
-      </div>
-
-      <div class="bg-slate-800/60 border border-slate-700 p-6 rounded-2xl shadow-md h-[420px] overflow-y-auto">
-        <h3 class="text-lg font-semibold text-white mb-4">Recent Help Offers</h3>
-
-        {% for p in posts %}
-        <div class="mb-4 pb-4 border-b border-slate-700/50">
-          <div class="font-semibold text-white text-sm">{{ p.title }}</div>
-          <div class="text-xs text-slate-300 whitespace-pre-line">
-            {{ p.description or "No description" }}
-          </div>
-          <div class="text-[11px] text-slate-500 mt-1">Category: {{ p.category }}</div>
-          <div class="text-[11px] text-slate-500">
-            {{ p.created_at.strftime('%d %b %H:%M') }}
-          </div>
-        </div>
-        {% else %}
-        <p class="text-slate-500 text-sm">No recent offers.</p>
-        {% endfor %}
-      </div>
-
+      {{ super() }}
     </div>
 
   </div>
@@ -311,7 +287,7 @@
     helperCircle = new google.maps.Circle({
       map: helperMap,
       center: helperMarker.getPosition(),
-      radius: radiusKm * 1000,  // km → meters
+      radius: radiusKm * 1000,
       strokeColor: "#38bdf8",
       strokeOpacity: 0.6,
       strokeWeight: 1,
@@ -319,6 +295,19 @@
       fillOpacity: 0.08,
     });
   }
+
+  // ✅ block submit if map location not set
+  document.addEventListener("DOMContentLoaded", () => {
+    const form = document.getElementById("can-help-form");
+    form.addEventListener("submit", (e) => {
+      const lat = document.getElementById("helper-lat").value;
+      const lng = document.getElementById("helper-lng").value;
+      if (!lat || !lng) {
+        e.preventDefault();
+        alert("Please pin your location on the map before posting your offer.");
+      }
+    });
+  });
 </script>
 
 <script async defer
