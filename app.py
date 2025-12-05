@@ -80,8 +80,13 @@ def allowed_image(filename):
 db = SQLAlchemy(app)
 jwt = JWTManager(app)
 
-# Socket.IO for real-time chat
-socketio = SocketIO(app, cors_allowed_origins="*")
+# Socket.IO for real-time chat (eventlet will be auto-detected)
+socketio = SocketIO(
+    app,
+    cors_allowed_origins="*",
+    ping_timeout=60,
+    ping_interval=25
+)
 
 # --- Email / OTP mail config ---
 app.config["MAIL_SERVER"] = "smtp.gmail.com"
@@ -267,6 +272,7 @@ def serialize_message(msg: ChatMessage):
         "id": msg.id,
         "conversation_id": msg.conversation_id,
         "sender_id": msg.sender_id,
+        "sender_name": (User.query.get(msg.sender_id).name if User.query.get(msg.sender_id) else None),
         "text": msg.text,
         "created_at": int(msg.created_at.timestamp()),
         "delivered": bool(msg.delivered),
@@ -1232,7 +1238,9 @@ def chat_with_user(other_user_id):
     messages = (
         ChatMessage.query.filter_by(conversation_id=conv.id).order_by(ChatMessage.created_at.asc()).limit(100).all()
     )
-    return render_template("chat.html", conversation=conv, other_user=other, messages=messages)
+    # serialize messages for JSON/template safety
+    messages_serialized = [serialize_message(m) for m in messages]
+    return render_template("chat.html", conversation=conv, other_user=other, messages=messages_serialized)
 
 
 @app.route("/chat")
@@ -1331,13 +1339,17 @@ def on_join(data):
     # data = {conversation_id}
     conv_id = data.get("conversation_id")
     user = current_user()
+    print(f"[JOIN] User {user.id if user else 'None'} joining conversation {conv_id}")
     if not user or not conv_id:
+        print(f"[JOIN] Rejected: no user or conv_id")
         return
     conv = Conversation.query.get(conv_id)
     if not conv or user.id not in conv.participants():
+        print(f"[JOIN] Rejected: conv not found or user not participant")
         return
     room = f"chat_{conv_id}"
     join_room(room)
+    print(f"[JOIN] Successfully joined room {room}")
     emit("user_joined", {"user_id": user.id}, room=room)
 
 
@@ -1377,22 +1389,33 @@ def on_send_message(data):
     # data: {conversation_id, text, language (optional)}
     conv_id = data.get("conversation_id")
     text = data.get("text", "")
+    temp_id = data.get("temp_id")
     lang = data.get("language")
     user = current_user()
+    print(f"[SEND_MESSAGE] From user {user.id if user else 'None'} to conv {conv_id}: {text[:50]}")
     if not user or not conv_id or not text:
+        print(f"[SEND_MESSAGE] Rejected: missing user, conv_id, or text")
         return
     conv = Conversation.query.get(conv_id)
     if not conv or user.id not in conv.participants():
+        print(f"[SEND_MESSAGE] Rejected: conv not found or user not participant")
         return
 
     msg = ChatMessage(conversation_id=conv.id, sender_id=user.id, text=text, language=lang)
     db.session.add(msg)
     db.session.commit()
+    print(f"[SEND_MESSAGE] Saved message {msg.id} to DB")
 
     payload = serialize_message(msg)
+    # include the client's temporary id so client can replace optimistic UI
+    if temp_id:
+        payload['temp_id'] = temp_id
     room = f"chat_{conv_id}"
+    print(f"[SEND_MESSAGE] Broadcasting to room {room}")
     # send to room; clients should acknowledge
     emit("new_message", payload, room=room)
+    # return payload as acknowledgement to sender (Socket.IO ack)
+    return payload
 
 
 @socketio.on("message_delivered")
@@ -1424,6 +1447,28 @@ def on_message_read(data):
     db.session.commit()
     room = f"chat_{msg.conversation_id}"
     emit("read", {"message_id": mid}, room=room)
+
+
+@app.route("/chat/<int:conv_id>/delete", methods=["POST"])
+@login_required
+def delete_conversation(conv_id):
+    """Delete a conversation (only if user is a participant)."""
+    user = current_user()
+    conv = Conversation.query.get_or_404(conv_id)
+    
+    # Check if user is a participant in this conversation
+    if user.id not in conv.participants():
+        flash("You are not allowed to delete this conversation.", "error")
+        return redirect(url_for("chat_index"))
+    
+    # Delete all messages in this conversation
+    ChatMessage.query.filter_by(conversation_id=conv.id).delete()
+    # Delete the conversation
+    db.session.delete(conv)
+    db.session.commit()
+    
+    flash("Conversation deleted.", "success")
+    return redirect(url_for("chat_index"))
 
 
 @app.route("/requests/<int:request_id>/delete", methods=["POST"])

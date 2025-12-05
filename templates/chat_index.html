@@ -6,15 +6,27 @@
   {% if conversations %}
     <div class="space-y-3">
       {% for item in conversations %}
-      <a href="{{ url_for('chat_with_user', other_user_id=item.other.id) }}" class="block rounded-lg border border-slate-800 bg-slate-900/70 px-4 py-3">
-        <div class="flex items-center justify-between">
-          <div>
-            <p class="font-semibold">{{ item.other.name }}</p>
-            <p class="text-[12px] text-slate-400">{{ item.last_message or 'No messages yet' }}</p>
-          </div>
-          <div class="text-xs text-slate-400">{% if item.last_time %}{{ item.last_time | int }}{% endif %}</div>
+      <div class="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/70 px-4 py-3">
+        <a href="{{ url_for('chat_with_user', other_user_id=item.other.id) }}" class="block flex-1">
+          <p class="font-semibold">{{ item.other.name }}</p>
+          <p class="text-[12px] text-slate-400">{{ item.last_message or 'No messages yet' }}</p>
+        </a>
+        <div class="flex items-center gap-4">
+          <div class="text-xs text-slate-400 flex-shrink-0">{% if item.last_time %}{{ item.last_time | int }}{% endif %}</div>
+          <!-- Delete button (trash icon) -->
+          <form method="POST" action="{{ url_for('delete_conversation', conv_id=item.conversation.id) }}" style="display:inline;" onsubmit="return confirm('Delete this conversation?')">
+            <button type="submit" class="text-slate-400 hover:text-red-400 transition flex-shrink-0" title="Delete conversation" style="background:none;border:none;cursor:pointer;padding:4px;">
+              <!-- Trash icon (SVG) -->
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                <line x1="10" y1="11" x2="10" y2="17"></line>
+                <line x1="14" y1="11" x2="14" y2="17"></line>
+              </svg>
+            </button>
+          </form>
         </div>
-      </a>
+      </div>
       {% endfor %}
     </div>
   {% else %}
