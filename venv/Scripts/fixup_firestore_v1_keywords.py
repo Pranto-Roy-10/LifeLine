@@ -1,4 +1,4 @@
-#!C:\Users\msi\Desktop\LifeLine\LifeLine\venv\Scripts\python.exe
+#!D:\CSE471 Project\LifeLine\venv\Scripts\python.exe
 # -*- coding: utf-8 -*-
 # Copyright 2025 Google LLC
 #
