@@ -1,0 +1,6 @@
+
+
+# local DB and venv
+instance/lifeline.db
+venv/
+
