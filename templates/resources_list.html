@@ -3,189 +3,182 @@
 {% block title %}Share Items - LifeLine{% endblock %}
 
 {% block content %}
-<div class="w-full py-8 px-6">
-  <div class="max-w-7xl mx-auto">
-    <!-- Header -->
-    <div class="flex items-center justify-between mb-8">
-      <div>
-        <h1 class="text-4xl font-bold text-white mb-2">Neighborhood Resources</h1>
-        <p class="text-slate-400">Share and request items from your neighbors</p>
-      </div>
-      <div class="flex gap-3 flex-wrap justify-end">
-        <a href="{{ url_for('resources.create_resource') }}" class="px-4 py-2 rounded-lg bg-emerald-500 text-slate-900 font-semibold hover:bg-emerald-600 transition">Share an Item</a>
-        <a href="{{ url_for('resources.search_resource') }}" class="px-4 py-2 rounded-lg bg-sky-500 text-slate-900 font-semibold hover:bg-sky-600 transition">Request an Item</a>
-        {% if session.get('user_id') %}
-        <a href="{{ url_for('resources.my_requests') }}" class="px-4 py-2 rounded-lg bg-purple-600 text-white font-semibold hover:bg-purple-700 transition">My Requests</a>
-        {% endif %}
-      </div>
+<div class="w-full max-w-4xl mx-auto py-8 px-6">
+  <div class="flex items-center justify-between mb-6">
+    <h2 class="text-2xl font-semibold">Neighborhood Resources</h2>
+    <div class="flex gap-3">
+      <a href="{{ url_for('resources.create_resource') }}" class="px-4 py-2 rounded bg-emerald-500 text-slate-900 font-medium hover:bg-emerald-600">Share an Item</a>
+      <a href="{{ url_for('resources.search_resource') }}" class="px-4 py-2 rounded bg-sky-500 text-slate-900 font-medium hover:bg-sky-600">Request an Item</a>
+      {% if session.get('user_id') %}
+      <a href="{{ url_for('resources.my_requests') }}" class="px-4 py-2 rounded bg-purple-600 text-white font-medium hover:bg-purple-700">My Requests</a>
+      {% endif %}
     </div>
+  </div>
 
-    <!-- Info Banner -->
-    <div class="mb-8 p-5 rounded-lg bg-gradient-to-r from-sky-500/20 to-blue-500/20 border border-sky-500/30 backdrop-blur-sm">
-      <p class="text-sm text-sky-200">
-        <span class="font-semibold">💡 How it works:</span> Share items you don't need, or request items you're looking for. Once a request is accepted, chat with the owner to arrange details.
-      </p>
-    </div>
+  <!-- Request Item Info Banner -->
+  <div id="request-item-info" class="mb-6 p-4 rounded-xl bg-sky-500/10 border border-sky-500/30">
+    <p class="text-sm text-sky-300">
+      <span class="font-semibold">How to request an item:</span> Simply click "Request Item" on any available item below, write a message to the owner, and they will review your request. Once accepted, you can chat with them to arrange pickup.
+    </p>
+  </div>
 
-    <!-- Two Column Layout -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+  <!-- Neighbors are looking for section -->
+  <div class="mb-6 p-4 rounded-xl bg-slate-800 border border-slate-700">
+    <div class="mb-4">
+      <div class="mb-3 text-sm font-semibold text-slate-200">Neighbors are looking for:</div>
       
-      <!-- Left Column: Wanted Items (wider) -->
-      <div class="lg:col-span-1">
-        <div class="rounded-lg bg-slate-800/50 backdrop-blur border border-slate-700 p-6 h-fit sticky top-8">
-          <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
-            <svg class="w-6 h-6 text-amber-400" fill="currentColor" viewBox="0 0 20 20"><path d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z"/></svg>
-            Neighbors Looking For
-          </h3>
-          
-          <!-- Search/Filter -->
-          <form method="get" class="mb-4 space-y-3">
-            <input 
-              type="text" 
-              name="search_wanted" 
-              placeholder="Search items..." 
-              value="{{ search_wanted or '' }}" 
-              class="w-full bg-slate-700 border border-slate-600 px-3 py-2 rounded text-sm text-white placeholder-slate-400 focus:outline-none focus:border-sky-500"
-            />
-            <select name="wanted_category" class="w-full bg-slate-700 border border-slate-600 px-3 py-2 rounded text-sm text-white focus:outline-none focus:border-sky-500">
-              <option value="">All categories</option>
-              {% for c in wanted_categories %}
-              <option value="{{ c }}" {% if wanted_cat == c %}selected{% endif %}>{{ c }}</option>
-              {% endfor %}
-            </select>
-            <div class="flex gap-2">
-              <button type="submit" class="flex-1 px-3 py-2 rounded bg-sky-600 text-white text-sm font-medium hover:bg-sky-700 transition">Search</button>
-              {% if search_wanted or wanted_cat %}
-              <a href="{{ url_for('resources.list_resources') }}" class="flex-1 px-3 py-2 rounded bg-slate-600 text-white text-sm font-medium hover:bg-slate-500 transition text-center">Clear</a>
+      <!-- Search/Filter for wanted requests -->
+      <form method="get" class="flex flex-wrap items-center gap-3 mb-4">
+        <input 
+          type="text" 
+          name="search_wanted" 
+          placeholder="Search what neighbors want..." 
+          value="{{ search_wanted or '' }}" 
+          class="flex-1 min-w-40 bg-slate-700 border border-slate-600 px-3 py-2 rounded text-sm text-white placeholder-slate-400"
+        />
+        <select name="wanted_category" class="bg-slate-700 border border-slate-600 px-3 py-2 rounded text-sm text-white">
+          <option value="">All categories</option>
+          {% for c in wanted_categories %}
+          <option value="{{ c }}" {% if wanted_cat == c %}selected{% endif %}>{{ c }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="px-4 py-2 rounded bg-slate-600 text-white text-sm font-medium hover:bg-slate-500">Search</button>
+        {% if search_wanted or wanted_cat %}
+        <a href="{{ url_for('resources.list_resources') }}" class="px-4 py-2 rounded bg-slate-600 text-white text-sm font-medium hover:bg-slate-500">Clear</a>
+        {% endif %}
+      </form>
+    </div>
+
+    {% if wanted_requests %}
+    <div class="space-y-3">
+      {% for req, days_left in wanted_requests %}
+      <div class="p-4 rounded-lg bg-slate-700 border border-slate-600">
+        <div class="flex items-start gap-4">
+          <div class="flex-1">
+            <div class="flex items-center gap-2">
+              <div class="text-base font-semibold text-slate-100">{{ req.title }}</div>
+              {% if days_left is not none %}
+                {% if days_left <= 3 %}
+                  <span class="px-2 py-1 rounded text-xs font-semibold bg-red-900 text-red-200">{{ days_left }} day{{ 's' if days_left != 1 else '' }} left</span>
+                {% elif days_left <= 7 %}
+                  <span class="px-2 py-1 rounded text-xs font-semibold bg-amber-900 text-amber-200">{{ days_left }} days left</span>
+                {% else %}
+                  <span class="px-2 py-1 rounded text-xs font-semibold bg-slate-600 text-slate-200">{{ days_left }} days left</span>
+                {% endif %}
               {% endif %}
             </div>
-          </form>
+            <div class="text-xs text-slate-400">{{ req.category }}</div>
+            {% if req.description %}
+            <p class="mt-2 text-sm text-slate-300">{{ req.description }}</p>
+            {% endif %}
+            {% if req.contact_info %}
+            <div class="mt-1 text-xs text-slate-400">Contact: {{ req.contact_info }}</div>
+            {% endif %}
+          </div>
+          <div class="text-right text-xs text-slate-400 flex items-start justify-between gap-2">
+            <div>
+              {{ req.user.name if req.user else 'Unknown' }}<br>
+              {% if req.created_at %}
+                {{ req.created_at.strftime('%b %d, %Y') }}
+              {% endif %}
+            </div>
+            {% if current_user and current_user.id == req.user_id %}
+            <form method="post" action="{{ url_for('resources.delete_wanted_item', wanted_id=req.id) }}" style="display:inline;" onsubmit="return confirm('Are you sure you want to delete this wanted item?');">
+              <button type="submit" class="text-slate-400 hover:text-red-400 transition flex-shrink-0" title="Delete wanted item">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                </svg>
+              </button>
+            </form>
+            {% endif %}
+          </div>
+        </div>
+        <div class="mt-3 flex items-center gap-2">
+          {% if req.image_url %}
+          <button onclick="openImagePreview('{{ req.image_url }}', '{{ req.title }}')" class="px-3 py-1 rounded bg-slate-600 text-white text-xs font-medium hover:bg-slate-500">View Picture</button>
+          {% endif %}
+          {% if req.user and current_user and current_user.id != req.user_id %}
+          <a href="{{ url_for('chat_with_user', other_user_id=req.user.id) }}" class="px-3 py-1 rounded bg-purple-600 text-white text-xs font-medium hover:bg-purple-700">Chat with requester</a>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="text-sm text-slate-400">No neighbors are looking for items matching your search.</div>
+    {% endif %}
+  </div>
 
-          <!-- Wanted Items List -->
-          <div class="space-y-3 max-h-96 overflow-y-auto">
-            {% if wanted_requests %}
-              {% for req, days_left in wanted_requests %}
-              <div class="p-3 rounded bg-slate-700/50 border border-slate-600 hover:border-amber-500/50 transition">
-                <div class="flex justify-between items-start gap-2 mb-2">
-                  <div class="flex-1">
-                    <div class="font-semibold text-white text-sm">{{ req.title }}</div>
-                    <div class="text-xs text-slate-400">{{ req.category }}</div>
-                  </div>
-                  {% if days_left is not none %}
-                    {% if days_left <= 3 %}
-                    <span class="px-2 py-1 rounded text-xs font-bold bg-red-900 text-red-200 whitespace-nowrap">{{ days_left }}d</span>
-                    {% elif days_left <= 7 %}
-                    <span class="px-2 py-1 rounded text-xs font-bold bg-amber-900 text-amber-200 whitespace-nowrap">{{ days_left }}d</span>
-                    {% else %}
-                    <span class="px-2 py-1 rounded text-xs font-bold bg-slate-600 text-slate-200 whitespace-nowrap">{{ days_left }}d</span>
-                    {% endif %}
-                  {% endif %}
-                </div>
-                <div class="text-xs text-slate-400 mb-2">By {{ req.user.name if req.user else 'Unknown' }}</div>
-                <div class="flex gap-1 flex-wrap">
-                  {% if req.image_url %}
-                  <button onclick="openImagePreview('{{ req.image_url }}', '{{ req.title }}')" class="px-2 py-1 rounded bg-slate-600 text-white text-xs hover:bg-slate-500 transition">View</button>
-                  {% endif %}
-                  {% if current_user and current_user.id == req.user_id %}
-                  <form method="post" action="{{ url_for('resources.delete_wanted_item', wanted_id=req.id) }}" style="display:inline;" onsubmit="return confirm('Delete this wanted item?');">
-                    <button type="submit" class="text-slate-400 hover:text-red-400 transition text-xs" title="Delete">
-                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                      </svg>
-                    </button>
-                  </form>
-                  {% endif %}
-                  {% if req.user and current_user and current_user.id != req.user_id %}
-                  <a href="{{ url_for('chat_with_user', other_user_id=req.user.id) }}" class="px-2 py-1 rounded bg-purple-600 text-white text-xs hover:bg-purple-700 transition">Chat</a>
-                  {% endif %}
-                </div>
-              </div>
-              {% endfor %}
+  <div class="mb-4">
+    <form method="get" class="flex items-center gap-3">
+      <select name="category" class="bg-slate-800 border border-slate-700 px-3 py-2 rounded">
+        <option value="">All categories</option>
+        {% for c in categories %}
+        <option value="{{ c }}" {% if selected_category == c %}selected{% endif %}>{{ c }}</option>
+        {% endfor %}
+      </select>
+      <button class="px-3 py-2 rounded bg-slate-700">Filter</button>
+    </form>
+  </div>
+
+  {% if items %}
+  <div class="grid grid-cols-1 gap-4">
+    {% for it in items %}
+    <div class="p-4 rounded-xl bg-slate-800 border border-slate-700">
+      <div class="flex items-start gap-4">
+        <div class="flex-1">
+          <div class="flex justify-between items-start">
+            <div>
+              <h3 class="text-lg font-semibold">{{ it.title }}</h3>
+              <div class="text-sm text-slate-400">{{ it.category }} · {{ it.quantity or 'Quantity not specified' }}</div>
+            </div>
+            <div class="text-xs text-slate-400">Shared by {{ it.user.name if it.user else 'Unknown' }}</div>
+          </div>
+
+          {% if it.description %}
+          <p class="mt-2 text-sm text-slate-300">{{ it.description }}</p>
+          {% endif %}
+
+          <div class="mt-3 flex items-center gap-3">
+            {% if current_user and current_user.id == it.user_id %}
+              <!-- Owner can mark as claimed -->
+              <form action="{{ url_for('resources.claim_resource', resource_id=it.id) }}" method="post">
+                <button class="px-3 py-1 rounded bg-emerald-500 text-slate-900 font-medium">Mark Claimed</button>
+              </form>
+              {% if it.image_url %}
+              <button onclick="openImagePreview('{{ it.image_url }}', '{{ it.title }}')" class="px-3 py-1 rounded bg-slate-600 text-white text-xs font-medium hover:bg-slate-500">View Picture</button>
+              {% endif %}
+              <a href="{{ url_for('resources.my_items') }}" class="text-xs text-sky-300 underline">View Requests</a>
             {% else %}
-            <div class="text-xs text-slate-500 text-center py-4">No wanted items matching your search</div>
+              <!-- Other users can request -->
+              {% set status = user_request_status.get(it.id) if user_request_status else None %}
+              {% if status %}
+                <span class="px-2 py-1 rounded text-xs font-semibold
+                  {% if status == 'accepted' %} bg-green-900 text-green-200
+                  {% elif status == 'rejected' %} bg-red-900 text-red-200
+                  {% else %} bg-amber-900 text-amber-200 {% endif %}">
+                  {{ status|capitalize }}
+                </span>
+              {% endif %}
+              {% if not status or status == 'rejected' %}
+                <a href="{{ url_for('resources.request_resource', resource_id=it.id) }}" class="px-3 py-1 rounded bg-sky-500 text-slate-900 font-medium">Request Item</a>
+              {% endif %}
+              {% if it.image_url %}
+              <button onclick="openImagePreview('{{ it.image_url }}', '{{ it.title }}')" class="px-3 py-1 rounded bg-slate-600 text-white text-xs font-medium hover:bg-slate-500">View Picture</button>
+              {% endif %}
+              {% if it.contact_info %}
+              <div class="text-sm text-slate-400">Contact: {{ it.contact_info }}</div>
+              {% endif %}
             {% endif %}
           </div>
         </div>
       </div>
-
-      <!-- Right Column: Shared Items (wider) -->
-      <div class="lg:col-span-2">
-        <div class="mb-4">
-          <form method="get" class="flex items-center gap-3">
-            <select name="category" class="bg-slate-700 border border-slate-600 px-3 py-2 rounded text-white focus:outline-none focus:border-sky-500">
-              <option value="">All categories</option>
-              {% for c in categories %}
-              <option value="{{ c }}" {% if selected_category == c %}selected{% endif %}>{{ c }}</option>
-              {% endfor %}
-            </select>
-            <button class="px-4 py-2 rounded bg-sky-600 text-white font-medium hover:bg-sky-700 transition">Filter</button>
-          </form>
-        </div>
-
-        {% if items %}
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {% for it in items %}
-          <div class="rounded-lg bg-slate-800/50 backdrop-blur border border-slate-700 p-4 hover:border-emerald-500/50 transition hover:shadow-lg hover:shadow-emerald-500/10">
-            <div class="flex flex-col h-full">
-              <div class="mb-3">
-                <h3 class="text-lg font-bold text-white">{{ it.title }}</h3>
-                <div class="flex items-center justify-between mt-1">
-                  <div class="text-sm text-slate-400">{{ it.category }} · {{ it.quantity or '?' }}</div>
-                  <span class="text-xs px-2 py-1 rounded bg-slate-700 text-slate-300">{{ it.user.name if it.user else 'Unknown' }}</span>
-                </div>
-              </div>
-
-              {% if it.description %}
-              <p class="text-sm text-slate-300 mb-3 flex-grow">{{ it.description[:100] }}{{ '...' if it.description|length > 100 else '' }}</p>
-              {% endif %}
-
-              <div class="mt-auto space-y-2">
-                <div class="flex flex-wrap gap-2">
-                  {% if current_user and current_user.id == it.user_id %}
-                    <!-- Owner actions -->
-                    <form action="{{ url_for('resources.claim_resource', resource_id=it.id) }}" method="post" class="flex-1">
-                      <button class="w-full px-3 py-2 rounded bg-emerald-500 text-slate-900 font-semibold text-sm hover:bg-emerald-600 transition">Mark Claimed</button>
-                    </form>
-                    {% if it.image_url %}
-                    <button onclick="openImagePreview('{{ it.image_url }}', '{{ it.title }}')" class="px-3 py-2 rounded bg-slate-600 text-white text-sm hover:bg-slate-500 transition">View Picture</button>
-                    {% endif %}
-                  {% else %}
-                    <!-- Other user actions -->
-                    {% set status = user_request_status.get(it.id) if user_request_status else None %}
-                    {% if status %}
-                      <span class="block w-full px-3 py-2 rounded text-sm font-semibold text-center
-                        {% if status == 'accepted' %} bg-green-900 text-green-200
-                        {% elif status == 'rejected' %} bg-red-900 text-red-200
-                        {% else %} bg-amber-900 text-amber-200 {% endif %}">
-                        {{ status|capitalize }}
-                      </span>
-                    {% endif %}
-                    {% if not status or status == 'rejected' %}
-                      <a href="{{ url_for('resources.request_resource', resource_id=it.id) }}" class="block flex-1 px-3 py-2 rounded bg-sky-500 text-slate-900 font-semibold text-sm hover:bg-sky-600 transition text-center">Request Item</a>
-                    {% endif %}
-                    {% if it.image_url %}
-                    <button onclick="openImagePreview('{{ it.image_url }}', '{{ it.title }}')" class="px-3 py-2 rounded bg-slate-600 text-white text-sm hover:bg-slate-500 transition">View Picture</button>
-                    {% endif %}
-                  {% endif %}
-                </div>
-                {% if it.contact_info %}
-                <div class="text-xs text-slate-400 bg-slate-700/50 px-2 py-1 rounded">📞 {{ it.contact_info }}</div>
-                {% endif %}
-              </div>
-            </div>
-          </div>
-          {% endfor %}
-        </div>
-        {% else %}
-        <div class="p-8 rounded-lg bg-slate-800/50 border border-slate-700 text-center">
-          <p class="text-slate-400 mb-4">📦 No shared resources yet. Be the first to share an item!</p>
-          <a href="{{ url_for('resources.create_resource') }}" class="inline-block px-4 py-2 rounded bg-emerald-500 text-slate-900 font-semibold hover:bg-emerald-600 transition">Share an Item</a>
-        </div>
-        {% endif %}
-      </div>
-
     </div>
+    {% endfor %}
   </div>
+  {% else %}
+  <div class="p-6 rounded-xl bg-slate-800 border border-slate-700">No shared resources yet. Be the first to share an item.</div>
+  {% endif %}
 </div>
 
 <!-- Image Preview Modal -->
