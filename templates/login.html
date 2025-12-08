@@ -1,14 +1,29 @@
 {% extends "base.html" %} {% block title %}Log in – LifeLine{% endblock %} {%
 block content %}
 
-<section class="w-full px-6 md:px-12 py-10 md:py-16 flex justify-center">
+<section class="relative overflow-hidden w-full px-6 md:px-12 py-12 md:py-16 flex justify-center">
+  <!-- background accents -->
+  <div class="absolute inset-0 -z-10">
+    <div class="absolute -top-16 -left-10 w-64 h-64 rounded-full bg-emerald-500/15 blur-3xl"></div>
+    <div class="absolute -bottom-12 -right-10 w-72 h-72 rounded-full bg-sky-500/12 blur-3xl"></div>
+    <div class="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.06),transparent_28%),radial-gradient(circle_at_80%_0%,rgba(34,211,238,0.08),transparent_32%),linear-gradient(120deg,rgba(255,255,255,0.04)_1px,transparent_1px)] bg-[length:100%_100%,100%_100%,32px_32px] opacity-60"></div>
+  </div>
+
   <div
-    class="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900/70 p-6 md:p-8 shadow-xl"
+    class="w-full max-w-xl rounded-3xl border border-slate-800/70 bg-slate-900/80 backdrop-blur-xl p-6 md:p-8 shadow-[0_20px_60px_rgba(0,0,0,0.35)] space-y-6 animate-fade-in-up"
   >
-    <h2 class="text-xl md:text-2xl font-semibold mb-2">Log in to LifeLine</h2>
-    <p class="text-xs text-slate-400 mb-6">
-      Access your neighborhood map, help requests, and kindness dashboard.
-    </p>
+    <div class="flex items-start justify-between gap-4">
+      <div>
+        <p class="text-[11px] uppercase tracking-[0.22em] text-emerald-300 mb-2">Welcome back</p>
+        <h2 class="text-2xl md:text-3xl font-semibold">Log in to LifeLine</h2>
+        <p class="text-xs text-slate-400 mt-2">
+          Access your neighborhood map, help requests, and kindness dashboard.
+        </p>
+      </div>
+      <div class="text-[10px] px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-200 border border-emerald-500/30">
+        Secure session
+      </div>
+    </div>
 
     {# FLASH MESSAGES #} {% with messages =
     get_flashed_messages(with_categories=true) %} {% if messages %}
@@ -23,35 +38,38 @@ block content %}
     </div>
     {% endif %} {% endwith %} {# ---------------- PASSWORD LOGIN
     ---------------- #}
-    <div class="space-y-4 mb-6">
-      <h3 class="text-sm font-semibold text-slate-200">Log in with password</h3>
+    <div class="space-y-4 mb-6 p-4 rounded-2xl border border-slate-800/70 bg-slate-900/60">
+      <div class="flex items-center justify-between">
+        <h3 class="text-sm font-semibold text-slate-200">Log in with password</h3>
+        <span class="text-[11px] text-slate-400">Standard access</span>
+      </div>
 
       <form method="post" action="{{ url_for('login') }}" class="space-y-4">
-        <div>
-          <label class="block text-xs text-slate-300 mb-1">Email</label>
+        <div class="space-y-1">
+          <label class="block text-xs text-slate-300">Email</label>
           <input
             type="email"
             name="email"
             required
-            class="w-full rounded-xl bg-slate-950 border border-slate-700 focus:border-emerald-400 focus:outline-none text-sm px-3 py-2"
+            class="w-full rounded-xl bg-slate-950 border border-slate-700 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/30 focus:outline-none text-sm px-3 py-2 shadow-inner"
             placeholder="you@example.com"
           />
         </div>
 
-        <div>
-          <label class="block text-xs text-slate-300 mb-1">Password</label>
+        <div class="space-y-1">
+          <label class="block text-xs text-slate-300">Password</label>
           <input
             type="password"
             name="password"
             required
-            class="w-full rounded-xl bg-slate-950 border border-slate-700 focus:border-emerald-400 focus:outline-none text-sm px-3 py-2"
+            class="w-full rounded-xl bg-slate-950 border border-slate-700 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/30 focus:outline-none text-sm px-3 py-2 shadow-inner"
             placeholder="••••••••"
           />
         </div>
 
         <button
           type="submit"
-          class="w-full rounded-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-sm font-semibold py-2.5 mt-2 transition"
+          class="w-full btn-cta mt-1"
         >
           Log in
         </button>
@@ -59,11 +77,11 @@ block content %}
     </div>
 
     {# ---------------- GOOGLE LOGIN ---------------- #}
-    <div class="mt-2 mb-4">
+    <div class="mt-2 mb-4 p-4 rounded-2xl border border-slate-800/70 bg-slate-900/60">
       <button
         id="google-login-btn"
         type="button"
-        class="w-full rounded-full border border-slate-700 bg-white/5 hover:bg-white/10 text-sm font-semibold py-2.5 flex items-center justify-center gap-2 transition"
+        class="w-full rounded-full border border-slate-700 bg-white/5 hover:bg-white/10 text-sm font-semibold py-2.5 flex items-center justify-center gap-2 transition shadow-[0_10px_24px_rgba(0,0,0,0.25)]"
       >
         <img
           src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
@@ -75,7 +93,7 @@ block content %}
     </div>
 
     {# SEPARATOR #}
-    <div class="flex items-center my-4">
+    <div class="flex items-center my-6">
       <div class="flex-1 h-px bg-slate-800"></div>
       <span class="px-3 text-[10px] uppercase tracking-widest text-slate-500">
         or
@@ -84,10 +102,13 @@ block content %}
     </div>
 
     {# ---------------- OTP LOGIN ---------------- #}
-    <div class="space-y-3">
-      <h3 class="text-sm font-semibold text-slate-200">
-        Log in with one-time code (OTP)
-      </h3>
+    <div class="space-y-3 p-4 rounded-2xl border border-slate-800/70 bg-slate-900/60">
+      <div class="flex items-center justify-between">
+        <h3 class="text-sm font-semibold text-slate-200">
+          Log in with one-time code (OTP)
+        </h3>
+        <span class="text-[11px] text-slate-400">Quick & temporary</span>
+      </div>
       <p class="text-[11px] text-slate-400">
         Use this if you don’t remember your password or are logging in from a
         shared device. The OTP is sent to your email.
@@ -105,7 +126,7 @@ block content %}
           <input
             type="email"
             name="email"
-            class="w-full rounded-xl bg-slate-950 border border-slate-700 focus:border-sky-400 focus:outline-none text-sm px-3 py-2"
+            class="w-full rounded-xl bg-slate-950 border border-slate-700 focus:border-sky-400 focus:ring-2 focus:ring-sky-400/30 focus:outline-none text-sm px-3 py-2 shadow-inner"
             placeholder="you@example.com"
             required
           />
@@ -137,7 +158,7 @@ block content %}
           <input
             type="email"
             name="email"
-            class="w-full rounded-xl bg-slate-950 border border-slate-700 focus:border-emerald-400 focus:outline-none text-sm px-3 py-2"
+            class="w-full rounded-xl bg-slate-950 border border-slate-700 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/30 focus:outline-none text-sm px-3 py-2 shadow-inner"
             placeholder="you@example.com"
             required
           />
@@ -148,7 +169,7 @@ block content %}
           <input
             type="text"
             name="otp"
-            class="w-full rounded-xl bg-slate-950 border border-slate-700 focus:border-emerald-400 focus:outline-none text-sm px-3 py-2"
+            class="w-full rounded-xl bg-slate-950 border border-slate-700 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/30 focus:outline-none text-sm px-3 py-2 shadow-inner"
             placeholder="6-digit code"
             required
           />

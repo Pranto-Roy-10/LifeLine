@@ -1,4 +1,42 @@
 (function(){
+  // Parallax effect for home page backgrounds
+  if (window.location.pathname === "/" || window.location.pathname === "/home") {
+    document.addEventListener('mousemove', function(e) {
+      const x = (e.clientX / window.innerWidth - 0.5) * 30;
+      const y = (e.clientY / window.innerHeight - 0.5) * 30;
+      const bg1 = document.getElementById('parallax-bg-1');
+      const bg2 = document.getElementById('parallax-bg-2');
+      if(bg1) bg1.style.transform = `translate(${x}px, ${y}px)`;
+      if(bg2) bg2.style.transform = `translate(${-x}px, ${-y}px)`;
+    });
+
+    // Scroll reveal for sections
+    function revealOnScroll() {
+      const reveals = document.querySelectorAll('.scroll-reveal');
+      for (const el of reveals) {
+        const rect = el.getBoundingClientRect();
+        if (rect.top < window.innerHeight - 80) {
+          el.classList.add('visible');
+        }
+      }
+    }
+    window.addEventListener('scroll', revealOnScroll);
+    window.addEventListener('DOMContentLoaded', revealOnScroll);
+    revealOnScroll();
+  }
+(function(){
+  // Parallax effect for home page backgrounds
+  if (window.location.pathname === "/" || window.location.pathname === "/home") {
+    document.addEventListener('mousemove', function(e) {
+      const x = (e.clientX / window.innerWidth - 0.5) * 30;
+      const y = (e.clientY / window.innerHeight - 0.5) * 30;
+      const bg1 = document.getElementById('parallax-bg-1');
+      const bg2 = document.getElementById('parallax-bg-2');
+      if(bg1) bg1.style.transform = `translate(${x}px, ${y}px)`;
+      if(bg2) bg2.style.transform = `translate(${-x}px, ${-y}px)`;
+    });
+  }
+(function(){
   const socket = io();
   console.log('chat_index.js loaded');
 
