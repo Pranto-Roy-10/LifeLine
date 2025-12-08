@@ -6,12 +6,15 @@
   {% if conversations %}
     <div class="space-y-3">
       {% for item in conversations %}
-      <div class="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/70 px-4 py-3">
+      <div class="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/70 px-4 py-3" data-conv-id="{{ item.conversation.id }}" data-other-id="{{ item.other.id }}">
         <a href="{{ url_for('chat_with_user', other_user_id=item.other.id) }}" class="block flex-1">
           <p class="font-semibold">{{ item.other.name }}</p>
-          <p class="text-[12px] text-slate-400">{{ item.last_message or 'No messages yet' }}</p>
+          <p class="text-[12px] {% if item.unread_count and item.unread_count > 0 %}font-bold text-white{% else %}text-slate-400{% endif %}">{{ item.last_message or 'No messages yet' }}</p>
         </a>
         <div class="flex items-center gap-4">
+          {% if item.unread_count and item.unread_count > 0 %}
+            <div class="bg-red-600 text-white text-xs px-2 py-1 rounded-full font-semibold flex-shrink-0">New {{ item.unread_count }}</div>
+          {% endif %}
           <div class="text-xs text-slate-400 flex-shrink-0">{% if item.last_time %}{{ item.last_time | int }}{% endif %}</div>
           <!-- Delete button (trash icon) -->
           <form method="POST" action="{{ url_for('delete_conversation', conv_id=item.conversation.id) }}" style="display:inline;" onsubmit="return confirm('Delete this conversation?')">
@@ -42,5 +45,10 @@
     </a>
     {% endfor %}
   </div>
+  <script>
+    const CURRENT_USER_ID = {{ current_user.id if current_user else 'null' }};
+  </script>
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+  <script src="{{ url_for('static', filename='js/chat_index.js') }}"></script>
 </div>
 {% endblock %}

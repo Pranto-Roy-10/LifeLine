@@ -129,7 +129,10 @@
           <p class="text-[10px] text-emerald-200/70">7 neighbors helped</p>
         </div>
       </div>
-
+      <!-- Resources widget (recent shared items) -->
+      <div class="mt-4" id="resources-widget-container">
+        {% include '_resources_widget.html' %}
+      </div>
     </div>
   </div>
 </section>
@@ -273,5 +276,25 @@
 
   </div>
 </section>
+
+<script>
+  // Auto-refresh resources widget every 10 seconds
+  function refreshResourcesWidget() {
+    fetch('{{ url_for("resources.api_widget") }}')
+      .then(response => response.text())
+      .then(html => {
+        document.getElementById('resources-widget-container').innerHTML = html;
+      })
+      .catch(error => console.log('Widget refresh error:', error));
+  }
+
+  // Refresh on page load and then every 10 seconds
+  document.addEventListener('DOMContentLoaded', function() {
+    // Initial refresh
+    refreshResourcesWidget();
+    // Then refresh every 10 seconds
+    setInterval(refreshResourcesWidget, 10000);
+  });
+</script>
 
 {% endblock %}

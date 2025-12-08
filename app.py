@@ -257,6 +257,70 @@ class ChatMessage(db.Model):
     conversation = db.relationship("Conversation", backref="messages")
 
 
+# ------------------ MODELS: Resources ------------------
+class Resource(db.Model):
+    __tablename__ = "resources"
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    title = db.Column(db.String(255), nullable=False)
+    category = db.Column(db.String(80), nullable=False)
+    quantity = db.Column(db.String(50), nullable=True)
+    description = db.Column(db.Text, nullable=True)
+    area = db.Column(db.String(150), nullable=True)
+    contact_info = db.Column(db.String(150), nullable=True)
+    image_url = db.Column(db.String(300), nullable=True)
+    status = db.Column(db.String(20), default="available")  # available / claimed / removed
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship("User", backref="resources")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "title": self.title,
+            "category": self.category,
+            "quantity": self.quantity,
+            "description": self.description,
+            "area": self.area,
+            "contact_info": self.contact_info,
+            "image_url": self.image_url,
+            "status": self.status,
+            "created_at": int(self.created_at.timestamp()),
+            "user_name": self.user.name if self.user else None,
+        }
+
+
+class ResourceRequest(db.Model):
+    __tablename__ = "resource_requests"
+    id = db.Column(db.Integer, primary_key=True)
+    resource_id = db.Column(db.Integer, db.ForeignKey("resources.id"), nullable=False)
+    requester_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    message = db.Column(db.Text, nullable=True)
+    status = db.Column(db.String(20), default="pending")  # pending / accepted / rejected
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    resource = db.relationship("Resource", backref="requests")
+    requester = db.relationship("User", backref="resource_requests")
+
+
+class ResourceWantedItem(db.Model):
+    """Wanted items posted by users in the resource sharing system"""
+    __tablename__ = "resource_wanted_items"
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    title = db.Column(db.String(255), nullable=False)
+    category = db.Column(db.String(50), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    contact_info = db.Column(db.String(100), nullable=True)
+    image_url = db.Column(db.String(300), nullable=True)
+    status = db.Column(db.String(20), default="open")  # open / closed
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+
+    user = db.relationship("User", backref="wanted_items")
+
+
 def get_or_create_conversation(user1_id, user2_id):
     a, b = sorted([int(user1_id), int(user2_id)])
     conv = Conversation.query.filter_by(user_a=a, user_b=b).first()
@@ -297,7 +361,7 @@ def logout_user():
 
 def current_user():
     if "user_id" in session:
-        return User.query.get(session["user_id"])
+        return db.session.get(User, session["user_id"])
     return None
 
 
@@ -377,7 +441,19 @@ def haversine_distance_km(lat1, lon1, lat2, lon2):
 # ------------------ ROUTES: CORE PAGES ------------------
 @app.route("/")
 def home():
-    return render_template("home.html")
+    # Try to include a short preview of shared resources on the homepage.
+    try:
+        from resources import Resource
+        now = datetime.utcnow()
+        items = (
+            Resource.query.filter(Resource.status == "available")
+            .order_by(Resource.created_at.desc())
+            .limit(5)
+            .all()
+        )
+    except Exception:
+        items = []
+    return render_template("home.html", items=items)
 
 
 @app.route("/debug/session")
@@ -1239,6 +1315,22 @@ def chat_with_user(other_user_id):
     messages = (
         ChatMessage.query.filter_by(conversation_id=conv.id).order_by(ChatMessage.created_at.asc()).limit(100).all()
     )
+    # mark unread messages (sent by other user) as read when opening the conversation
+    try:
+        unread_msgs = ChatMessage.query.filter_by(conversation_id=conv.id, read=False).filter(ChatMessage.sender_id != user.id).all()
+        if unread_msgs:
+            for m in unread_msgs:
+                m.read = True
+            db.session.commit()
+            # notify room that messages were read (so other clients can update UI)
+            for m in unread_msgs:
+                try:
+                    socketio.emit('read', {'message_id': m.id, 'conversation_id': conv.id}, room=f"chat_{conv.id}")
+                except Exception:
+                    pass
+    except Exception:
+        # best-effort only; don't block rendering on notification errors
+        db.session.rollback()
     # serialize messages for JSON/template safety
     messages_serialized = [serialize_message(m) for m in messages]
     return render_template("chat.html", conversation=conv, other_user=other, messages=messages_serialized)
@@ -1263,11 +1355,14 @@ def chat_index():
         last = (
             ChatMessage.query.filter_by(conversation_id=c.id).order_by(ChatMessage.created_at.desc()).first()
         )
+        # count unread messages in this conversation that were sent by the other user
+        unread_count = ChatMessage.query.filter_by(conversation_id=c.id, read=False).filter(ChatMessage.sender_id != user.id).count()
         conversations.append({
             "conversation": c,
             "other": other,
             "last_message": last.text if last else None,
             "last_time": int(last.created_at.timestamp()) if last else None,
+            "unread_count": unread_count,
         })
 
     # also show some nearby helpers to start a new chat (trusted helpers)
@@ -1308,6 +1403,35 @@ def api_get_messages(conv_id):
         return jsonify({"error": "Unauthorized"}), 403
     msgs = ChatMessage.query.filter_by(conversation_id=conv.id).order_by(ChatMessage.created_at.asc()).all()
     return jsonify({"messages": [serialize_message(m) for m in msgs]})
+
+
+@app.route("/api/conversations/<int:conv_id>/mark_read", methods=["POST"])
+@login_required
+def api_mark_conversation_read(conv_id):
+    conv = Conversation.query.get_or_404(conv_id)
+    user = current_user()
+    if user.id not in conv.participants():
+        return jsonify({"error": "Unauthorized"}), 403
+
+    # mark all unread messages sent by the other participant as read
+    try:
+        unread_msgs = ChatMessage.query.filter_by(conversation_id=conv.id, read=False).filter(ChatMessage.sender_id != user.id).all()
+        ids = []
+        if unread_msgs:
+            for m in unread_msgs:
+                m.read = True
+                ids.append(m.id)
+            db.session.commit()
+            # emit read events so other clients (index page or sender) can update UI
+            for mid in ids:
+                try:
+                    socketio.emit('read', {'message_id': mid, 'conversation_id': conv.id}, room=f"chat_{conv.id}")
+                except Exception:
+                    pass
+        return jsonify({"marked": len(ids)})
+    except Exception:
+        db.session.rollback()
+        return jsonify({"error": "failed"}), 500
 
 
 @app.route("/api/translate", methods=["POST"])
@@ -1486,8 +1610,27 @@ def delete_request(request_id):
     flash("Request removed.", "success")
     return redirect(url_for("list_requests"))
 
+# ------------------ REGISTER BLUEPRINTS ------------------
+# Register resource pooling blueprint (must be after all models are defined)
+from resources import resources_bp
+app.register_blueprint(resources_bp)
+
 # ------------------ MAIN ------------------
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()  # create tables if not exist
+        
+        # Migrate: Add image_url column to resource_wanted_items if it doesn't exist
+        try:
+            from sqlalchemy import inspect
+            inspector = inspect(db.engine)
+            columns = [col['name'] for col in inspector.get_columns('resource_wanted_items')]
+            if 'image_url' not in columns:
+                with db.engine.connect() as conn:
+                    conn.execute(db.text('ALTER TABLE resource_wanted_items ADD COLUMN image_url VARCHAR(300)'))
+                    conn.commit()
+                print("✓ Added image_url column to resource_wanted_items")
+        except Exception as e:
+            print(f"Migration note: {e}")
+    
     socketio.run(app, debug=True)
