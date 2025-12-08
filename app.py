@@ -86,7 +86,8 @@ socketio = SocketIO(
     app,
     cors_allowed_origins="*",
     ping_timeout=60,
-    ping_interval=25
+    ping_interval=25,
+    max_http_buffer_size=100000000  # 100MB for file uploads
 )
 
 # --- Email / OTP mail config ---
@@ -269,6 +270,8 @@ class Resource(db.Model):
     area = db.Column(db.String(150), nullable=True)
     contact_info = db.Column(db.String(150), nullable=True)
     image_url = db.Column(db.String(300), nullable=True)
+    latitude = db.Column(db.Float, nullable=True)
+    longitude = db.Column(db.Float, nullable=True)
     status = db.Column(db.String(20), default="available")  # available / claimed / removed
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -297,6 +300,8 @@ class ResourceRequest(db.Model):
     resource_id = db.Column(db.Integer, db.ForeignKey("resources.id"), nullable=False)
     requester_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     message = db.Column(db.Text, nullable=True)
+    latitude = db.Column(db.Float, nullable=True)
+    longitude = db.Column(db.Float, nullable=True)
     status = db.Column(db.String(20), default="pending")  # pending / accepted / rejected
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -314,6 +319,8 @@ class ResourceWantedItem(db.Model):
     description = db.Column(db.Text, nullable=True)
     contact_info = db.Column(db.String(100), nullable=True)
     image_url = db.Column(db.String(300), nullable=True)
+    latitude = db.Column(db.Float, nullable=True)
+    longitude = db.Column(db.Float, nullable=True)
     status = db.Column(db.String(20), default="open")  # open / closed
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     expires_at = db.Column(db.DateTime, nullable=False)
@@ -1311,6 +1318,31 @@ def chat_with_user(other_user_id):
     user = current_user()
     other = User.query.get_or_404(other_user_id)
     conv = get_or_create_conversation(user.id, other.id)
+    
+    # Get all conversations for sidebar
+    all_convs = Conversation.query.filter(
+        (Conversation.user_a == user.id) | (Conversation.user_b == user.id)
+    ).all()
+    
+    # Build conversation list with details
+    conversations_list = []
+    for c in all_convs:
+        other_user_in_conv = User.query.get(c.user_a if c.user_b == user.id else c.user_b)
+        if other_user_in_conv:
+            last_msg = ChatMessage.query.filter_by(conversation_id=c.id).order_by(ChatMessage.created_at.desc()).first()
+            unread_count = ChatMessage.query.filter_by(conversation_id=c.id, read=False).filter(ChatMessage.sender_id != user.id).count()
+            conversations_list.append({
+                'id': c.id,
+                'other_user': other_user_in_conv,
+                'last_message': last_msg.text if last_msg else '',
+                'last_message_time': last_msg.created_at if last_msg else None,
+                'unread_count': unread_count,
+                'is_active': c.id == conv.id
+            })
+    
+    # Sort by last message time (newest first)
+    conversations_list.sort(key=lambda x: x['last_message_time'] if x['last_message_time'] else datetime.min, reverse=True)
+    
     # prefetch last 100 messages
     messages = (
         ChatMessage.query.filter_by(conversation_id=conv.id).order_by(ChatMessage.created_at.asc()).limit(100).all()
@@ -1333,7 +1365,7 @@ def chat_with_user(other_user_id):
         db.session.rollback()
     # serialize messages for JSON/template safety
     messages_serialized = [serialize_message(m) for m in messages]
-    return render_template("chat.html", conversation=conv, other_user=other, messages=messages_serialized)
+    return render_template("chat.html", conversation=conv, other_user=other, messages=messages_serialized, conversations=conversations_list)
 
 
 @app.route("/chat")
@@ -1511,27 +1543,50 @@ def on_stop_typing(data):
 
 @socketio.on("send_message")
 def on_send_message(data):
-    # data: {conversation_id, text, language (optional)}
+    # data: {conversation_id, text, language (optional), file_data, file_name, file_size, is_image}
     conv_id = data.get("conversation_id")
     text = data.get("text", "")
     temp_id = data.get("temp_id")
     lang = data.get("language")
+    file_data = data.get("file_data")
+    file_name = data.get("file_name")
+    file_size = data.get("file_size")
+    is_image = data.get("is_image", False)
+    
     user = current_user()
-    print(f"[SEND_MESSAGE] From user {user.id if user else 'None'} to conv {conv_id}: {text[:50]}")
-    if not user or not conv_id or not text:
-        print(f"[SEND_MESSAGE] Rejected: missing user, conv_id, or text")
+    
+    # Log file attachment info
+    if file_data:
+        file_data_preview = file_data[:50] if file_data else None
+        print(f"[SEND_MESSAGE] Has file attachment: {file_name} ({file_size}), is_image: {is_image}, data preview: {file_data_preview}...")
+    
+    print(f"[SEND_MESSAGE] From user {user.id if user else 'None'} to conv {conv_id}: {text[:50] if text else '[File attachment]'}")
+    
+    # Allow empty text if there's a file attachment
+    if not user or not conv_id or (not text and not file_data):
+        print(f"[SEND_MESSAGE] Rejected: missing user, conv_id, or content")
         return
+        
     conv = Conversation.query.get(conv_id)
     if not conv or user.id not in conv.participants():
         print(f"[SEND_MESSAGE] Rejected: conv not found or user not participant")
         return
 
-    msg = ChatMessage(conversation_id=conv.id, sender_id=user.id, text=text, language=lang)
+    msg = ChatMessage(conversation_id=conv.id, sender_id=user.id, text=text or "", language=lang)
     db.session.add(msg)
     db.session.commit()
     print(f"[SEND_MESSAGE] Saved message {msg.id} to DB")
 
     payload = serialize_message(msg)
+    
+    # Include file data in payload if present
+    if file_data:
+        payload['file_data'] = file_data
+        payload['file_name'] = file_name
+        payload['file_size'] = file_size
+        payload['is_image'] = is_image
+        print(f"[SEND_MESSAGE] Including file in payload: {file_name}, is_image: {is_image}")
+    
     # include the client's temporary id so client can replace optimistic UI
     if temp_id:
         payload['temp_id'] = temp_id
