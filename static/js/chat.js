@@ -7,10 +7,6 @@
   const translateSelect = document.getElementById('translate_to');
   const autoTranslateChk = document.getElementById('auto_translate');
 
-  // Keep input bar in normal flow inside chat-window (no fixed overlay)
-  const chatWindow = document.querySelector('.chat-window');
-  const inputBar = document.querySelector('.chat-input-bar');
-
   console.log('Chat.js loaded. CURRENT_USER_ID:', CURRENT_USER_ID, 'CONVERSATION_ID:', CONVERSATION_ID);
 
   socket.on('connect', () => {
@@ -28,20 +24,24 @@
   });
 
   function isNearBottom(threshold = 150){
+    const container = messagesEl.parentElement;
     try{
-      return (messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight) < threshold;
+      return (container.scrollHeight - container.scrollTop - container.clientHeight) < threshold;
     }catch(e){return true}
   }
 
   function scrollBottom(force=false){
+    const container = messagesEl.parentElement;
     // Only auto-scroll when user is near bottom unless forced
     if(force || isNearBottom()){
-      // smooth scroll into view of last message
-      const last = messagesEl.lastElementChild;
-      if(last){
-        try{ last.scrollIntoView({behavior: 'auto', block: 'end'}); }catch(e){ messagesEl.scrollTop = messagesEl.scrollHeight; }
-      }else{
-        messagesEl.scrollTop = messagesEl.scrollHeight;
+      // smooth scroll to bottom
+      try{ 
+        container.scrollTo({
+          top: container.scrollHeight,
+          behavior: force ? 'auto' : 'smooth'
+        });
+      }catch(e){ 
+        container.scrollTop = container.scrollHeight; 
       }
     }
   }
@@ -57,6 +57,14 @@
   }
 
   function appendMessage(m){
+    console.log('appendMessage called with:', {
+      id: m.id,
+      text: m.text?.substring(0, 50),
+      has_file_data: !!m.file_data,
+      file_name: m.file_name,
+      is_image: m.is_image
+    });
+    
     // m: {id, conversation_id, sender_id, text, created_at, delivered, read}
     const div = document.createElement('div');
     const me = (m.sender_id === CURRENT_USER_ID);
@@ -78,7 +86,7 @@
     text.textContent = m.text;
     div.appendChild(text);
 
-    // timestamp: show below the bubble (bottom-right)
+    // timestamp: show below the bubble
     const meta = document.createElement('div');
     meta.className = 'meta';
     try{
@@ -105,6 +113,7 @@
     if(m.temp_id){
       const tempEl = messagesEl.querySelector('[data-message-id="'+m.temp_id+'"]');
       if(tempEl){
+        console.log('Found temp message, updating ID');
         // update dataset id
         tempEl.dataset.messageId = m.id;
         // update timestamp/meta
@@ -116,26 +125,29 @@
         return;
       }
     }
-    // otherwise append normally
+    // For receivers or if temp not found, append the message
+    console.log('Appending new message from broadcast');
     appendMessage(m);
     // if message is from other user, ack delivered
     if(m.sender_id !== CURRENT_USER_ID){
       socket.emit('message_delivered', {message_id: m.id});
       // auto-translate if requested
-      const tgt = translateSelect.value;
-      if(autoTranslateChk.checked && tgt){
-        fetch('/api/translate', {method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({text: m.text, target: tgt})})
-          .then(r=>r.json()).then(j=>{
-            if(j.translated){
-                    const tr = document.createElement('div');
-                    tr.className = 'translation';
-                    tr.textContent = 'Translated: ' + j.translated;
-              // append under last message
-              const last = messagesEl.lastChild;
-              if(last) last.appendChild(tr);
-              scrollBottom();
-            }
-          }).catch(()=>{});
+      if(translateSelect && autoTranslateChk){
+        const tgt = translateSelect.value;
+        if(autoTranslateChk.checked && tgt){
+          fetch('/api/translate', {method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({text: m.text, target: tgt})})
+            .then(r=>r.json()).then(j=>{
+              if(j.translated){
+                      const tr = document.createElement('div');
+                      tr.className = 'translation';
+                      tr.textContent = 'Translated: ' + j.translated;
+                // append under last message
+                const last = messagesEl.lastChild;
+                if(last) last.appendChild(tr);
+                scrollBottom();
+              }
+            }).catch(()=>{});
+        }
       }
     }
   });
@@ -158,7 +170,7 @@
     }
   });
 
-  // typing indicator
+  // typing indicator with animation
   let typingTimeout = null;
   input.addEventListener('input', ()=>{
     socket.emit('typing', {conversation_id: CONVERSATION_ID});
@@ -169,17 +181,20 @@
   });
 
   socket.on('typing', (d)=>{
-    typingEl.textContent = 'User is typing...';
+    typingEl.textContent = 'Typing...';
+    typingEl.style.display = 'flex';
   });
   socket.on('stop_typing', (d)=>{
     typingEl.textContent = '';
+    typingEl.style.display = 'none';
   });
 
   sendBtn.addEventListener('click', sendMessage);
-  input.addEventListener('keydown', (e)=>{ if(e.key === 'Enter'){ e.preventDefault(); sendMessage(); } });
+  input.addEventListener('keydown', (e)=>{ if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); sendMessage(); } });
 
   function sendMessage(){
     const txt = input.value.trim();
+    
     if(!txt) return;
     
     // Optimistic UI: show message immediately on screen
@@ -214,8 +229,113 @@
     socket.emit('stop_typing', {conversation_id: CONVERSATION_ID});
   }
 
-  // CSS now handles padding-bottom for messages area (120px for absolute input)
-  // Just ensure we scroll smoothly on resize
+  // Ensure we scroll smoothly on resize
   window.addEventListener('resize', ()=>{ setTimeout(()=> scrollBottom(false), 50); });
+
+  // Add smooth entrance animation for input
+  input.addEventListener('focus', ()=>{
+    input.parentElement.style.transform = 'scale(1.01)';
+  });
+  
+  input.addEventListener('blur', ()=>{
+    input.parentElement.style.transform = 'scale(1)';
+  });
+
+  // Emoji Picker Functionality
+  const emojiToggleBtn = document.getElementById('emoji-toggle-btn');
+  const emojiPicker = document.querySelector('.emoji-picker');
+  const emojiCategories = document.querySelectorAll('.emoji-category');
+  const emojiGrid = document.querySelector('.emoji-grid');
+
+  // Comprehensive emoji database by category
+  const emojis = {
+    smileys: ['😀','😃','😄','😁','😆','😅','🤣','😂','🙂','🙃','😉','😊','😇','🥰','😍','🤩','😘','😗','😚','😙','🥲','😋','😛','😜','🤪','😝','🤑','🤗','🤭','🤫','🤔','🤐','🤨','😐','😑','😶','😏','😒','🙄','😬','🤥','😌','😔','😪','🤤','😴','😷','🤒','🤕','🤢','🤮','🤧','🥵','🥶','🥴','😵','🤯','🤠','🥳','🥸','😎','🤓','🧐','😕','😟','🙁','☹️','😮','😯','😲','😳','🥺','😦','😧','😨','😰','😥','😢','😭','😱','😖','😣','😞','😓','😩','😫','🥱'],
+    gestures: ['👋','🤚','🖐️','✋','🖖','👌','🤌','🤏','✌️','🤞','🤟','🤘','🤙','👈','👉','👆','🖕','👇','☝️','👍','👎','✊','👊','🤛','🤜','👏','🙌','👐','🤲','🤝','🙏','✍️','💪','🦾','🦿','🦵','🦶','👂','🦻','👃','🧠','🫀','🫁','🦷','🦴','👀','👁️','👅','👄','💋','🩸'],
+    hearts: ['❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❤️‍🔥','❤️‍🩹','💕','💞','💓','💗','💖','💘','💝','💟','💌','💢','💥','💫','💦','💨','🕊️','🦋','🌹','🥀','🌺','🌸','🌼','🌻','🌷','⚡','🔥','✨','🌟','⭐','🌠','💯','🎉','🎊','🎈','🎁','🎀','🏆','🥇','🥈','🥉'],
+    objects: ['⚽','🏀','🏈','⚾','🥎','🎾','🏐','🏉','🥏','🎱','🪀','🏓','🏸','🏒','🏑','🥍','🏏','🥅','⛳','🪁','🏹','🎣','🤿','🥊','🥋','🎽','🛹','🛼','🛷','⛸️','🥌','🎿','⛷️','🏂','🪂','🏋️','🤼','🤸','🤺','🤾','🏌️','🏇','🧘','🏄','🏊','🤽','🚣','🧗','🚵','🚴','🏎️','🏍️','🛺','🚲','🛴','🛵','🚗','🚕','🚙','🚌','🚎','🏎️','🚓','🚑','🚒','🚐','🛻','🚚','🚛','🚜','🦯','🦽','🦼','🛴','🚏','⛽','🚨','🚥','🚦','🛑','🚧','⚓','⛵','🛶','🚤','🛳️','⛴️','🛥️','🚢','✈️','🛩️','🛫','🛬','🪂','💺','🚁','🚟','🚠','🚡','🛰️','🚀','🛸']
+  };
+
+  // Current active category
+  let activeCategory = 'smileys';
+
+  // Populate emoji grid
+  function populateEmojiGrid(category) {
+    emojiGrid.innerHTML = '';
+    const categoryEmojis = emojis[category] || emojis.smileys;
+    
+    categoryEmojis.forEach(emoji => {
+      const emojiItem = document.createElement('span');
+      emojiItem.className = 'emoji-item';
+      emojiItem.textContent = emoji;
+      emojiItem.style.animation = 'popIn 0.2s ease-out';
+      emojiItem.addEventListener('click', () => {
+        insertEmoji(emoji);
+      });
+      emojiGrid.appendChild(emojiItem);
+    });
+  }
+
+  // Insert emoji into input
+  function insertEmoji(emoji) {
+    const startPos = input.selectionStart;
+    const endPos = input.selectionEnd;
+    const currentText = input.value;
+    
+    // Insert emoji at cursor position
+    input.value = currentText.substring(0, startPos) + emoji + currentText.substring(endPos);
+    
+    // Move cursor after emoji
+    input.selectionStart = input.selectionEnd = startPos + emoji.length;
+    
+    // Focus input and add pulse effect
+    input.focus();
+    input.style.animation = 'pulse 0.3s ease-out';
+    setTimeout(() => {
+      input.style.animation = '';
+    }, 300);
+  }
+
+  // Toggle emoji picker
+  emojiToggleBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    emojiPicker.classList.toggle('show');
+    
+    // Populate grid on first open
+    if (emojiPicker.classList.contains('show') && emojiGrid.children.length === 0) {
+      populateEmojiGrid(activeCategory);
+    }
+  });
+
+  // Category switching
+  emojiCategories.forEach(category => {
+    category.addEventListener('click', () => {
+      // Update active category
+      emojiCategories.forEach(c => c.classList.remove('active'));
+      category.classList.add('active');
+      
+      // Get category name from data attribute or default
+      activeCategory = category.dataset.category || 'smileys';
+      
+      // Repopulate grid
+      populateEmojiGrid(activeCategory);
+    });
+  });
+
+  // Set first category as active
+  if (emojiCategories.length > 0) {
+    emojiCategories[0].classList.add('active');
+  }
+
+  // Close emoji picker when clicking outside
+  document.addEventListener('click', (e) => {
+    if (!emojiPicker.contains(e.target) && e.target !== emojiToggleBtn) {
+      emojiPicker.classList.remove('show');
+    }
+  });
+
+  // Prevent picker from closing when clicking inside
+  emojiPicker.addEventListener('click', (e) => {
+    e.stopPropagation();
+  });
 
 })();

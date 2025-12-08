@@ -54,6 +54,22 @@
     transform: translateY(-2px);
     box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
   }
+
+  select option {
+    background-color: #1e293b;
+    color: #f1f5f9;
+  }
+
+  select option:hover {
+    background-color: #0f766e;
+    color: #f1f5f9;
+  }
+
+  select option:checked {
+    background: linear-gradient(#0f766e, #0f766e);
+    background-color: #0f766e !important;
+    color: #f1f5f9;
+  }
 </style>
 
 <div class="min-h-screen w-full bg-slate-950">
@@ -105,9 +121,35 @@
             <input name="area" class="form-input w-full px-4 py-3 rounded-lg text-white placeholder-slate-400" placeholder="e.g., Downtown, North Side..." />
           </div>
 
+          <!-- Map Location -->
+          <input type="hidden" name="latitude" id="resource-lat">
+          <input type="hidden" name="longitude" id="resource-lng">
+
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <label class="block text-sm font-semibold text-slate-200">
+                Pin your exact location on map <span class="text-red-400">*</span>
+              </label>
+              <button type="button"
+                      onclick="useMyLocationForResource()"
+                      class="text-xs px-3 py-1.5 rounded-full border border-emerald-400/60 text-emerald-300 hover:bg-emerald-500/10 transition">
+                📍 Use my current location
+              </button>
+            </div>
+            <div id="resource-map" class="w-full h-64 rounded-xl border border-slate-700 overflow-hidden"></div>
+            <p class="text-xs text-slate-400 mt-2">Click anywhere on the map to drop a pin. You must pin a location to post.</p>
+          </div>
+
           <div>
             <label class="block text-sm font-semibold text-slate-200 mb-2">Contact Info <span class="text-red-400">*</span></label>
-            <input name="contact_info" class="form-input w-full px-4 py-3 rounded-lg text-white placeholder-slate-400" placeholder="Phone or WhatsApp number" />
+            <input name="contact_info" 
+                   type="tel" 
+                   inputmode="numeric" 
+                   pattern="\d{7,15}" 
+                   maxlength="15" 
+                   class="form-input w-full px-4 py-3 rounded-lg text-white placeholder-slate-400" 
+                   placeholder="Phone or WhatsApp number (digits only)" 
+                   required />
           </div>
 
           <div>
@@ -134,4 +176,75 @@
     </div>
   </div>
 </div>
+
+<script>
+  let resourceMap, resourceMarker;
+
+  function initResourceMap() {
+    const defaultPos = { lat: 23.7806, lng: 90.4250 }; // Default to Dhaka
+
+    resourceMap = new google.maps.Map(document.getElementById("resource-map"), {
+      center: defaultPos,
+      zoom: 15,
+      mapTypeControl: false,
+      streetViewControl: false,
+      fullscreenControl: false,
+    });
+
+    resourceMap.addListener("click", (e) => {
+      setResourceMarker(e.latLng);
+    });
+  }
+
+  function setResourceMarker(latLng) {
+    if (resourceMarker) {
+      resourceMarker.setMap(null);
+    }
+    resourceMarker = new google.maps.Marker({
+      position: latLng,
+      map: resourceMap,
+    });
+
+    document.getElementById("resource-lat").value = latLng.lat().toFixed(6);
+    document.getElementById("resource-lng").value = latLng.lng().toFixed(6);
+  }
+
+  function useMyLocationForResource() {
+    if (!navigator.geolocation) {
+      alert("Geolocation is not supported by your browser.");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const p = {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+        };
+        resourceMap.setCenter(p);
+        resourceMap.setZoom(17);
+        setResourceMarker(p);
+      },
+      () => {
+        alert("Could not get your location.");
+      }
+    );
+  }
+
+  // Block submit if map location not set
+  document.addEventListener("DOMContentLoaded", () => {
+    const form = document.querySelector("form");
+    form.addEventListener("submit", (e) => {
+      const lat = document.getElementById("resource-lat").value;
+      const lng = document.getElementById("resource-lng").value;
+      if (!lat || !lng) {
+        e.preventDefault();
+        alert("Please pin your location on the map before sharing your item.");
+      }
+    });
+  });
+</script>
+
+<script async defer
+  src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}&callback=initResourceMap">
+</script>
 {% endblock %}

@@ -146,6 +146,17 @@
                       {% if req.message %}
                       <p class="mt-3 text-sm text-slate-300 bg-slate-800/50 p-2.5 rounded border-l-2 border-sky-500">{{ req.message }}</p>
                       {% endif %}
+                      {% if req.latitude and req.longitude %}
+                      <div class="mt-2 flex items-center gap-2">
+                        <button onclick="showRequesterLocation({{ req.latitude }}, {{ req.longitude }}, '{{ req.requester.name if req.requester else 'User' }}')" 
+                                class="text-xs px-2 py-1 rounded bg-blue-600/20 text-blue-300 border border-blue-500/30 hover:bg-blue-600/30 transition flex items-center gap-1">
+                          <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd"></path>
+                          </svg>
+                          View Location
+                        </button>
+                      </div>
+                      {% endif %}
                     </div>
                     <div class="flex flex-col gap-2 items-end">
                       {% if req.status == 'pending' %}
@@ -200,7 +211,62 @@
   </div>
 </div>
 
+<!-- Location Map Modal -->
+<div id="locationModal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 opacity-0 transition-opacity duration-300" onclick="closeLocationModal()">
+  <div class="bg-slate-800 rounded-2xl p-6 max-w-4xl w-full" onclick="event.stopPropagation()">
+    <div class="flex items-center justify-between mb-4">
+      <h3 id="locationTitle" class="text-xl font-semibold text-white"></h3>
+      <button onclick="closeLocationModal()" class="text-slate-400 hover:text-white transition">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+        </svg>
+      </button>
+    </div>
+    <div id="locationMap" class="w-full h-96 rounded-xl overflow-hidden"></div>
+  </div>
+</div>
+
 <script>
+let locationMap, locationMarker;
+
+function showRequesterLocation(lat, lng, name) {
+  const modal = document.getElementById('locationModal');
+  document.getElementById('locationTitle').textContent = name + "'s Location";
+  modal.classList.remove('hidden');
+  setTimeout(() => modal.classList.remove('opacity-0'), 50);
+
+  // Initialize or update map
+  if (!locationMap) {
+    locationMap = new google.maps.Map(document.getElementById("locationMap"), {
+      center: { lat: lat, lng: lng },
+      zoom: 15,
+      mapTypeControl: true,
+      streetViewControl: true,
+      fullscreenControl: true,
+    });
+  } else {
+    locationMap.setCenter({ lat: lat, lng: lng });
+  }
+
+  // Remove old marker if exists
+  if (locationMarker) {
+    locationMarker.setMap(null);
+  }
+
+  // Add new marker
+  locationMarker = new google.maps.Marker({
+    position: { lat: lat, lng: lng },
+    map: locationMap,
+    title: name,
+  });
+}
+
+function closeLocationModal() {
+  const modal = document.getElementById('locationModal');
+  modal.classList.add('opacity-0');
+  setTimeout(() => modal.classList.add('hidden'), 300);
+}
+
 function openImagePreview(imageUrl, title) {
   const modal = document.getElementById('imagePreviewModal');
   document.getElementById('previewImage').src = imageUrl;
@@ -214,6 +280,10 @@ function closeImagePreview() {
   modal.classList.add('opacity-0');
   setTimeout(() => modal.classList.add('hidden'), 300);
 }
+</script>
+
+<script async defer
+  src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}">
 </script>
 
 {% endblock %}

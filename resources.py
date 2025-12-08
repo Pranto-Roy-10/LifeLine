@@ -122,6 +122,8 @@ def search_resource():
         title = request.form.get("title", "").strip()
         category = request.form.get("category", "").strip()
         description = request.form.get("description", "").strip()
+        latitude = request.form.get("latitude", "").strip()
+        longitude = request.form.get("longitude", "").strip()
         
         if not title or not category:
             flash("Please provide a title and category.", "error")
@@ -147,6 +149,8 @@ def search_resource():
             category=category,
             description=description,
             image_url=image_url,
+            latitude=float(latitude) if latitude else None,
+            longitude=float(longitude) if longitude else None,
             status="open",
             expires_at=datetime.utcnow() + timedelta(days=30)
         )
@@ -155,7 +159,8 @@ def search_resource():
         flash("Your wanted item posted! Other users can now see what you're looking for.", "success")
         return redirect(url_for("resources.list_resources"))
     
-    return render_template("search_resource.html")
+    google_maps_key = current_app.config.get("GOOGLE_MAPS_API_KEY", "")
+    return render_template("search_resource.html", google_maps_key=google_maps_key)
 
 
 @resources_bp.route("/new", methods=["GET", "POST"])
@@ -176,6 +181,8 @@ def create_resource():
         description = request.form.get("description", "").strip()
         area = request.form.get("area", "").strip()
         contact_info = request.form.get("contact_info", "").strip()
+        latitude = request.form.get("latitude", "").strip()
+        longitude = request.form.get("longitude", "").strip()
         image_url = None
         # handle optional image upload
         if "image" in request.files:
@@ -203,6 +210,8 @@ def create_resource():
             area=area,
             contact_info=contact_info,
             image_url=image_url,
+            latitude=float(latitude) if latitude else None,
+            longitude=float(longitude) if longitude else None,
         )
         db.session.add(r)
         db.session.commit()
@@ -210,7 +219,8 @@ def create_resource():
         return redirect(url_for("resources.list_resources"))
 
     default_categories = ["Food", "Medicine", "Clothing", "Tools", "Electronics", "Other"]
-    return render_template("resource_create.html", categories=default_categories)
+    google_maps_key = current_app.config.get("GOOGLE_MAPS_API_KEY", "")
+    return render_template("resource_create.html", categories=default_categories, google_maps_key=google_maps_key)
 
 
 @resources_bp.route("/<int:resource_id>/claim", methods=["POST"])
@@ -263,6 +273,8 @@ def request_resource(resource_id):
     
     if request.method == "POST":
         message = request.form.get("message", "").strip()
+        latitude = request.form.get("latitude", "").strip()
+        longitude = request.form.get("longitude", "").strip()
         
         # Check if already requested and still active (pending/accepted)
         existing = (
@@ -278,14 +290,17 @@ def request_resource(resource_id):
         req = ResourceRequest(
             resource_id=resource_id,
             requester_id=user.id,
-            message=message
+            message=message,
+            latitude=float(latitude) if latitude else None,
+            longitude=float(longitude) if longitude else None,
         )
         db.session.add(req)
         db.session.commit()
         flash("Your request has been sent to the owner.", "success")
         return redirect(url_for("resources.list_resources"))
     
-    return render_template("resource_request.html", resource=r)
+    google_maps_key = current_app.config.get("GOOGLE_MAPS_API_KEY", "")
+    return render_template("resource_request.html", resource=r, google_maps_key=google_maps_key)
 
 
 @resources_bp.route("/my-items", methods=["GET"])
@@ -309,7 +324,8 @@ def my_items():
             'requests': requests
         })
     
-    return render_template("my_items.html", items_with_requests=items_with_requests)
+    google_maps_key = current_app.config.get("GOOGLE_MAPS_API_KEY", "")
+    return render_template("my_items.html", items_with_requests=items_with_requests, google_maps_key=google_maps_key)
 
 
 @resources_bp.route("/request/<int:request_id>/accept", methods=["POST"])
@@ -494,6 +510,17 @@ def delete_resource(resource_id):
         return redirect(url_for("resources.my_items"))
     
     item_title = resource.title
+    
+    # Delete all associated resource requests first
+    from app import ResourceRequest
+    associated_requests = db.session.query(ResourceRequest).filter(
+        ResourceRequest.resource_id == resource_id
+    ).all()
+    
+    for req in associated_requests:
+        db.session.delete(req)
+    
+    # Now delete the resource
     db.session.delete(resource)
     db.session.commit()
     flash(f"Your shared item '{item_title}' has been deleted.", "info")
