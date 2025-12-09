@@ -6,6 +6,7 @@ import random
 import string
 
 from sqlalchemy import func
+from flask_cors import CORS
 
 from flask import (
     Flask, render_template, request,
@@ -14,6 +15,7 @@ from flask import (
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
+from flask_migrate import Migrate
 
 from flask_mail import Mail, Message
 from email_config import EMAIL_ADDRESS, EMAIL_PASSWORD
@@ -47,6 +49,7 @@ except Exception:
 otp_store = {}
 
 app = Flask(__name__)
+CORS(app, supports_credentials=True)
 
 # -------- Firebase Admin (for Google sign-in) --------
 FIREBASE_CRED_PATH = os.getenv(
@@ -66,7 +69,7 @@ app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "dev-jwt-secret")
 # app.config["SQLALCHEMY_DATABASE_URI"] = "postgresql+psycopg2://postgres:error101@localhost:5432/lifeline_db"
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///lifeline.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-app.config["UPLOAD_FOLDER"] = os.path.join("static", "uploads")
+app.config["UPLOAD_FOLDER"] = os.path.join("static", "uploads", "profile_photos")
 app.config["ALLOWED_IMAGE_EXTENSIONS"] = {"png", "jpg", "jpeg", "gif"}
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
@@ -80,6 +83,7 @@ def allowed_image(filename):
 
 db = SQLAlchemy(app)
 jwt = JWTManager(app)
+migrate = Migrate(app, db)
 
 # Socket.IO for real-time chat (eventlet will be auto-detected)
 socketio = SocketIO(
@@ -137,6 +141,17 @@ class User(db.Model):
     id_verification_status = db.Column(db.String(20), default="none")  # none/pending/approved/rejected
     id_document_note = db.Column(db.String(255), nullable=True)
 
+    # Integer trust points and cached kindness score fields:
+    trust_score = db.Column(db.Integer, default=0)        
+    kindness_score = db.Column(db.Integer, default=0)
+
+    # profile photo, phone and dob
+    profile_photo = db.Column(db.String(255), default="default.png")
+    phone = db.Column(db.String(20))
+    dob = db.Column(db.String(20))  # or Date type if you prefer
+    
+
+
     def set_password(self, password: str):
         self.password_hash = generate_password_hash(password)
 
@@ -152,6 +167,20 @@ class User(db.Model):
     def clear_otp(self):
         self.otp_code = None
         self.otp_expires_at = None
+
+    def calculate_badge(self):
+        score = self.kindness_score or 0
+
+        if score >= 121:
+            return "Community Star", "text-yellow-300"
+        elif score >= 71:
+            return "Gold Helper", "text-yellow-400"
+        elif score >= 31:
+            return "Silver Helper", "text-slate-300"
+        elif score >= 11:
+            return "Bronze Helper", "text-amber-300"
+        else:
+            return "Newbie", "text-slate-400"
 
 
 class Request(db.Model):
@@ -187,9 +216,14 @@ class Request(db.Model):
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     expires_at = db.Column(db.DateTime, nullable=False)
+    helper_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    completed_at = db.Column(db.DateTime, nullable=True)
+
     status = db.Column(db.String(20), default="open")  # open / claimed / closed
 
-    user = db.relationship("User", backref="requests")
+    user = db.relationship("User",backref="requests",foreign_keys=[user_id])   # tell SQLAlchemy exactly which FK is for "user"
+    helper = db.relationship("User",foreign_keys=[helper_id],backref="helped_requests")
+
 
     def to_dict(self, include_user=False, user_lat=None, user_lng=None):
         d = {
@@ -445,6 +479,43 @@ def haversine_distance_km(lat1, lon1, lat2, lon2):
 
     return R * c
 
+# ------------------ COMPLETE REQUEST ------------------
+def update_user_scores(user):
+    """Recompute and store user's trust_score and kindness_score based on completed requests."""
+    if not user:
+        return
+
+    # Count completed helps where user was helper
+    helped_count = Request.query.filter(
+        Request.helper_id == user.id,
+        Request.status == "completed",
+        Request.completed_at != None
+    ).count()
+
+    # Sum total hours volunteered
+    rows = Request.query.filter(
+        Request.helper_id == user.id,
+        Request.status == "completed",
+        Request.completed_at != None
+    ).all()
+
+    total_hours = 0.0
+    for r in rows:
+        if r.created_at and r.completed_at:
+            total_hours += max(0, (r.completed_at - r.created_at).total_seconds() / 3600.0)
+    total_hours = round(total_hours, 2)
+
+    # Simple scoring (tweak if Module-1 has other rules)
+    trust_score = min(100, helped_count * 5)           # example: +5 trust per complete
+    kindness_score = helped_count * 10 + int(total_hours * 2) + trust_score
+
+    # Save to DB
+    user.trust_score = int(trust_score)
+    user.kindness_score = int(kindness_score)
+
+    db.session.commit()
+
+
 # ------------------ ROUTES: CORE PAGES ------------------
 @app.route("/")
 def home():
@@ -544,7 +615,7 @@ def login():
             access_token = create_jwt_for_user(user)
             print("JWT after login:", access_token)  # DEBUG
 
-            next_url = request.args.get("next") or url_for("home")
+            next_url = request.args.get("next") or url_for("dashboard")
             return redirect(next_url)
 
         # OTP LOGIN -----------------------------------------

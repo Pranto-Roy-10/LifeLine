@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Your Profile – LifeLine{% endblock %}
+
+{% block content %}
+<div class="min-h-screen w-full bg-slate-950 text-slate-100 px-6 md:px-12 py-10">
+
+    <h1 class="text-3xl font-bold mb-8">Your Profile</h1>
+
+    <form method="POST" action="{{ url_for('update_profile') }}" enctype="multipart/form-data"
+          class="max-w-2xl bg-slate-900 border border-slate-800 rounded-xl p-8 space-y-6">
+
+        <!-- PROFILE PHOTO -->
+        <div class="flex items-center gap-6">
+            <img src="{{ url_for('static', filename='uploads/profile_photos/' ~ user.profile_photo) }}"
+                 class="w-24 h-24 rounded-full object-cover border border-slate-700">
+
+            <div>
+                <label class="block text-sm mb-1 text-slate-300">Change Photo</label>
+                <input type="file" name="profile_photo"
+                       class="text-sm text-slate-400 file:bg-slate-800 file:text-slate-200 file:border file:border-slate-700 file:px-3 file:py-2 file:rounded-lg">
+            </div>
+        </div>
+
+        <!-- NAME -->
+        <div>
+            <label class="text-sm text-slate-400 block mb-1">Name</label>
+            <input type="text" name="name" value="{{ user.name }}"
+                   class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-200">
+        </div>
+
+        <!-- EMAIL (non-editable) -->
+        <div>
+            <label class="text-sm text-slate-400 block mb-1">Email</label>
+            <input type="text" value="{{ user.email }}" disabled
+                   class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-500 cursor-not-allowed">
+        </div>
+
+        <!-- PHONE -->
+        <div>
+            <label class="text-sm text-slate-400 block mb-1">Phone Number</label>
+            <input type="text" name="phone" value="{{ user.phone or '' }}"
+                   class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-200">
+        </div>
+
+        <!-- DOB -->
+        <div>
+            <label class="text-sm text-slate-400 block mb-1">Date of Birth</label>
+            <input type="date" name="dob" value="{{ user.dob or '' }}"
+                   class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-200">
+        </div>
+
+        <button type="submit"
+                class="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold px-4 py-2 rounded-lg">
+            Save Changes
+        </button>
+    </form>
+
+</div>
+{% endblock %}
