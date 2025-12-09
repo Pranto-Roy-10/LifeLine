@@ -4,7 +4,7 @@ import math
 import time
 import random
 import string
-
+from reputation_service import analyze_review_quality, calculate_reputation_points
 from sqlalchemy import func
 from flask_cors import CORS
 
@@ -263,7 +263,39 @@ class Request(db.Model):
             except Exception:
                 d["distance_km"] = None
         return d
+class Offer(db.Model):
+    __tablename__ = "offers"
+    id = db.Column(db.Integer, primary_key=True)
+    request_id = db.Column(db.Integer, db.ForeignKey("requests.id"), nullable=False)
+    helper_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    status = db.Column(db.String(20), default="pending")  # pending, accepted, rejected
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    # Relationships
+    request = db.relationship("Request", backref=db.backref("offers", cascade="all, delete-orphan"))
+    helper = db.relationship("User", backref="sent_offers")   
+# In app.py
+class Review(db.Model):
+    __tablename__ = "reviews"
+    id = db.Column(db.Integer, primary_key=True)
+    request_id = db.Column(db.Integer, db.ForeignKey("requests.id"), nullable=False)
+    reviewer_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    helper_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    
+    rating = db.Column(db.Integer, nullable=False)
+    comment = db.Column(db.Text, nullable=True)
+    
+    # NEW FIELD: Store the actual hours worked
+    duration_hours = db.Column(db.Float, default=1.0) 
+
+    # AI Analysis Results
+    sentiment_score = db.Column(db.Float, default=0.0)
+    is_flagged_fake = db.Column(db.Boolean, default=False)
+    flag_reason = db.Column(db.String(255), nullable=True)
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    request = db.relationship("Request", backref=db.backref("review", uselist=False))
 
 # ------------------ MODELS: Chat ------------------
 class Conversation(db.Model):
@@ -481,40 +513,45 @@ def haversine_distance_km(lat1, lon1, lat2, lon2):
 
 # ------------------ COMPLETE REQUEST ------------------
 def update_user_scores(user):
-    """Recompute and store user's trust_score and kindness_score based on completed requests."""
+    """
+    Recompute user scores. 
+    Relies on the REVIEW table because 'complete_request' guarantees 
+    Review.helper_id is ALWAYS the person who deserves the credit.
+    """
     if not user:
         return
 
-    # Count completed helps where user was helper
-    helped_count = Request.query.filter(
-        Request.helper_id == user.id,
-        Request.status == "completed",
-        Request.completed_at != None
-    ).count()
+    # 1. Get all reviews where this user was the Giver (Review.helper_id)
+    valid_reviews = Review.query.filter_by(helper_id=user.id, is_flagged_fake=False).all()
+    total_reviews = len(valid_reviews)
 
-    # Sum total hours volunteered
-    rows = Request.query.filter(
-        Request.helper_id == user.id,
-        Request.status == "completed",
-        Request.completed_at != None
-    ).all()
+    # 2. Calculate Kindness Points
+    current_kindness = 0
+    from reputation_service import calculate_reputation_points
+    
+    # Points from Ratings
+    for rev in valid_reviews:
+        current_kindness += calculate_reputation_points(rev.rating, rev.is_flagged_fake)
+        
+        # Points from Hours (Add 5 points per hour worked)
+        # We use the duration stored in the review
+        if rev.duration_hours:
+             current_kindness += int(rev.duration_hours * 5)
 
-    total_hours = 0.0
-    for r in rows:
-        if r.created_at and r.completed_at:
-            total_hours += max(0, (r.completed_at - r.created_at).total_seconds() / 3600.0)
-    total_hours = round(total_hours, 2)
+    # 3. Calculate Trust Score
+    if total_reviews > 0:
+        positive_reviews = sum(1 for r in valid_reviews if r.rating >= 4)
+        trust_percentage = (positive_reviews / total_reviews) * 100
+        
+        fake_count = Review.query.filter_by(helper_id=user.id, is_flagged_fake=True).count()
+        trust_percentage -= (fake_count * 10)
+        
+        user.trust_score = max(0, min(100, int(trust_percentage)))
+    else:
+        user.trust_score = 50
 
-    # Simple scoring (tweak if Module-1 has other rules)
-    trust_score = min(100, helped_count * 5)           # example: +5 trust per complete
-    kindness_score = helped_count * 10 + int(total_hours * 2) + trust_score
-
-    # Save to DB
-    user.trust_score = int(trust_score)
-    user.kindness_score = int(kindness_score)
-
+    user.kindness_score = int(current_kindness)
     db.session.commit()
-
 
 # ------------------ ROUTES: CORE PAGES ------------------
 @app.route("/")
@@ -1444,7 +1481,150 @@ def can_help():
         categories=categories,
         google_maps_key=GOOGLE_MAPS_API_KEY,
     )
+@app.route("/requests/<int:request_id>/offer", methods=["POST"])
+@login_required
+def make_offer(request_id):
+    """
+    Helper clicks 'Offer Help' OR 'Request Help'. 
+    Adds them to a list for the owner to review.
+    """
+    req_obj = Request.query.get_or_404(request_id)
+    user = current_user()
 
+    # 1. Validation: Can't interact with own post
+    if req_obj.user_id == user.id:
+        flash("You cannot reply to your own post.", "error")
+        # Redirect back to the correct mode
+        return redirect(url_for("list_requests", mode="offer" if req_obj.is_offer else "need"))
+
+    # 2. Validation: Request must be open
+    if req_obj.status != "open":
+        flash("This post is no longer active.", "error")
+        return redirect(url_for("list_requests", mode="offer" if req_obj.is_offer else "need"))
+
+    # 3. Check if already offered
+    existing_offer = Offer.query.filter_by(request_id=req_obj.id, helper_id=user.id).first()
+    if existing_offer:
+        flash("You have already contacted this person.", "info")
+        return redirect(url_for("list_requests", mode="offer" if req_obj.is_offer else "need"))
+
+    # 4. Create the Offer (or Request for item)
+    new_offer = Offer(request_id=req_obj.id, helper_id=user.id)
+    db.session.add(new_offer)
+    db.session.commit()
+
+    # Optional: Auto-start chat
+    get_or_create_conversation(req_obj.user_id, user.id)
+
+    if req_obj.is_offer:
+        flash("Request sent! The owner has been notified.", "success")
+        return redirect(url_for("list_requests", mode="offer")) # <--- KEEPS YOU ON OFFER PAGE
+    else:
+        flash("Offer sent! The requester has been notified.", "success")
+        return redirect(url_for("list_requests", mode="need")) # <--- KEEPS YOU ON NEED PAGE
+
+@app.route("/requests/offers/<int:offer_id>/accept", methods=["POST"])
+@login_required
+def accept_offer(offer_id):
+    """
+    Requester accepts a specific offer. 
+    Assigns helper, changes status to 'in_progress'.
+    Redirects back to wherever the user clicked the button.
+    """
+    offer = Offer.query.get_or_404(offer_id)
+    req_obj = offer.request
+    user = current_user()
+
+    # Security: Only the owner of the request can accept offers
+    if req_obj.user_id != user.id:
+        flash("Unauthorized action.", "error")
+        return redirect(url_for("dashboard"))
+
+    # 1. Update the Request
+    req_obj.helper_id = offer.helper_id
+    req_obj.status = "in_progress"  # Now it is officially active
+
+    # 2. Update the Offer statuses
+    offer.status = "accepted"
+    
+    # Reject all other pending offers for this request
+    other_offers = Offer.query.filter(
+        Offer.request_id == req_obj.id, 
+        Offer.id != offer_id
+    ).all()
+    for o in other_offers:
+        o.status = "rejected"
+
+    db.session.commit()
+
+    flash(f"You accepted {offer.helper.name}'s help! Check your Dashboard to manage it.", "success")
+    
+    # SMART REDIRECT: Go back to where the user came from (List or Dashboard)
+    return redirect(request.referrer or url_for("dashboard"))
+
+
+
+@app.route("/requests/<int:request_id>/complete", methods=["POST"])
+@login_required
+def complete_request(request_id):
+    req_obj = Request.query.get_or_404(request_id)
+    user = current_user()
+
+    # 1. PERMISSION CHECK
+    is_authorized = False
+    if req_obj.is_offer:
+        if req_obj.helper_id == user.id: is_authorized = True
+    else:
+        if req_obj.user_id == user.id: is_authorized = True
+
+    if not is_authorized:
+        flash("Unauthorized.", "error")
+        return redirect(url_for("dashboard"))
+
+    giver_id = req_obj.user_id if req_obj.is_offer else req_obj.helper_id
+
+    # 2. GET DATA FROM FORM
+    rating = int(request.form.get("rating", 5))
+    comment = request.form.get("comment", "")
+    
+    # NEW: Get the actual duration from the user input
+    try:
+        duration_input = float(request.form.get("hours", 1.0))
+    except ValueError:
+        duration_input = 1.0
+    
+    # Ensure realistic limits (e.g., minimum 0.5 hours)
+    actual_hours = max(0.1, duration_input)
+
+    # 3. UPDATE REQUEST
+    req_obj.status = "completed"
+    req_obj.completed_at = datetime.utcnow()
+
+    # 4. AI ANALYSIS
+    from reputation_service import analyze_review_quality
+    ai_result = analyze_review_quality(comment, rating)
+
+    # 5. CREATE REVIEW (With Duration)
+    review = Review(
+        request_id=req_obj.id,
+        reviewer_id=user.id,
+        helper_id=giver_id,
+        rating=rating,
+        comment=comment,
+        duration_hours=actual_hours,  # <--- Saving the real world hours
+        sentiment_score=ai_result["sentiment_score"],
+        is_flagged_fake=ai_result["is_suspicious"],
+        flag_reason=ai_result["flag_reason"]
+    )
+    db.session.add(review)
+    db.session.commit()
+
+    # 6. UPDATE SCORES
+    giver_user = User.query.get(giver_id)
+    update_user_scores(giver_user)
+
+    flash(f"Verified! {actual_hours} hours added to {giver_user.name}'s profile.", "success")
+    return redirect(url_for("dashboard"))
 
 @app.route("/requests")
 @login_required
@@ -1471,12 +1651,23 @@ def list_requests():
 
     requests_list = q.order_by(Request.created_at.desc()).all()
 
+    # --- NEW LOGIC START ---
+    # Find out which requests the current user has already offered to help with
+    user = current_user()
+    offered_ids = set()
+    if user:
+        # Get all offers made by this user
+        my_offers = Offer.query.filter_by(helper_id=user.id).all()
+        # Create a set of request_ids for easy checking
+        offered_ids = {o.request_id for o in my_offers}
+    # --- NEW LOGIC END ---
+
     return render_template(
         "list_requests.html",
         requests=requests_list,
         mode=mode,
+        offered_ids=offered_ids,  # <--- Pass this to the HTML
     )
-
 
 # ------------------ CHAT PAGES & API ------------------
 @app.route("/chat/<int:other_user_id>")
@@ -1572,54 +1763,71 @@ def chat_index():
 def dashboard():
     user = current_user()
 
-    # Make sure scores are up to date
+    # 1. Update scores before showing them
     update_user_scores(user)
 
-    # Badge label + Tailwind color class
-    badge, badge_color = user.calculate_badge()
+    # 2. CALCULATE "PEOPLE HELPED" CORRECTLY
+    # Case A: I responded to someone's "Need Help" request
+    helped_requests = Request.query.filter(
+        Request.helper_id == user.id, 
+        Request.is_offer == False, 
+        Request.status == "completed"
+    ).all()
 
-    # All completed helps where this user was the helper
-    completed_q = Request.query.filter(
-        Request.helper_id == user.id,
-        Request.status == "completed",
-        Request.completed_at != None
-    ).order_by(Request.completed_at.desc())
+    # Case B: I posted an "Offer" and someone accepted it (I am the giver)
+    fulfilled_offers = Request.query.filter(
+        Request.user_id == user.id, 
+        Request.is_offer == True, 
+        Request.status == "completed"
+    ).all()
 
-    helped_count = completed_q.count()
+    # Total list of good deeds
+    all_good_deeds = helped_requests + fulfilled_offers
+    
+    # Sort by date (newest first) for the History list
+    all_good_deeds.sort(key=lambda x: x.completed_at if x.completed_at else datetime.min, reverse=True)
 
-    # Compute total hours + build small recent history list
-    total_hours = 0.0
+    helped_count = len(all_good_deeds)
+
+    # 3. CALCULATE REAL HOURS (From Review table)
+    # We sum up duration_hours from reviews where THIS user was the "helper_id" (Giver)
+    total_hours_db = db.session.query(func.sum(Review.duration_hours))\
+        .filter(Review.helper_id == user.id, Review.is_flagged_fake == False)\
+        .scalar()
+    
+    total_hours = round(total_hours_db or 0.0, 2)
+
+    # 4. PREPARE HISTORY DATA FOR TEMPLATE
     history = []
-
-    for r in completed_q.limit(5).all():
-        hours = 0.0
-        if r.created_at and r.completed_at:
-            hours = max(0.0, (r.completed_at - r.created_at).total_seconds() / 3600.0)
-        total_hours += hours
+    for r in all_good_deeds[:5]: # Show last 5
+        # Find the review to get specific hours for this task
+        # Note: In the review table, 'helper_id' is the Giver.
+        rev = Review.query.filter_by(request_id=r.id, helper_id=user.id).first()
+        hours_spent = round(rev.duration_hours, 1) if rev else 0
 
         history.append({
             "title": r.title,
             "category": r.category or "General",
-            "hours": round(hours, 2),
+            "hours": hours_spent,
             "date": r.completed_at.strftime("%b %d, %Y") if r.completed_at else "",
         })
 
-    total_hours = round(total_hours, 2)
+    # Badge Logic
+    badge, badge_color = user.calculate_badge()
 
-    # stats object used in dashboard.html
     stats = {
         "badge": badge,
-        "badge_color": badge_color,       # e.g. "text-yellow-300"
-        "helped": helped_count,          # total people helped
-        "total_hours": total_hours,      # total hours volunteered
-        "trust": user.trust_score or 0,  # 0–100 (we already cap in update_user_scores)
+        "badge_color": badge_color,
+        "helped": helped_count,      # <--- Now correct (Creator gets credit for offers)
+        "total_hours": total_hours,
+        "trust": user.trust_score or 0,
         "kindness": user.kindness_score or 0,
     }
 
-    # Simple chart data (can be upgraded later)
-    chart_labels = ["Today"]
-    chart_trust = [stats["trust"]]
-    chart_kindness = [stats["kindness"]]
+    # Chart Data
+    chart_labels = ["Start", "Today"] 
+    chart_trust = [50, stats["trust"]]
+    chart_kindness = [0, stats["kindness"]]
 
     return render_template(
         "dashboard.html",

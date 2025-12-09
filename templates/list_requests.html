@@ -12,7 +12,6 @@
 {% block content %}
 <div class="w-full max-w-6xl mx-auto px-6 py-10">
 
-  <!-- HEADER + MODE TABS -->
   <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
     <div>
       <h2 class="text-2xl font-bold text-slate-100">
@@ -29,7 +28,6 @@
       </p>
     </div>
 
-    <!-- TABS -->
     <div class="inline-flex rounded-full bg-slate-900 border border-slate-700 p-1 text-xs">
       <a href="{{ url_for('list_requests', mode='need') }}"
          class="px-4 py-1.5 rounded-full transition
@@ -49,14 +47,12 @@
     </div>
   </div>
 
-  <!-- LIST -->
   {% if requests %}
   <div class="space-y-3">
 
     {% for r in requests %}
     <div class="rounded-2xl border border-slate-800 bg-slate-900/70 overflow-hidden">
 
-      <!-- CARD HEADER (CLICKABLE) -->
       <button type="button"
               class="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-slate-900/90 transition"
               onclick="toggleDetails('{{ r.id }}')">
@@ -66,7 +62,6 @@
               {{ r.title }}
             </p>
 
-            <!-- CATEGORY BADGE -->
             <span class="text-[11px] px-2 py-0.5 rounded-full
                          border border-slate-600 text-slate-200 bg-slate-800/80">
               {{ r.category|capitalize }}
@@ -79,6 +74,18 @@
             {% else %}
             <span class="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/40">
               Needs help
+            </span>
+            {% endif %}
+
+            {% if current_user and r.user_id == current_user.id %}
+            <span class="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 font-bold">
+              My Post
+            </span>
+            {% endif %}
+            
+            {% if r.id in offered_ids %}
+            <span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-700 text-emerald-400 border border-slate-600 font-bold">
+              ✓ {% if r.is_offer %} Request Sent {% else %} Offer Sent {% endif %}
             </span>
             {% endif %}
           </div>
@@ -96,11 +103,10 @@
               </span>
             </span>
             {% endif %}
-            <span class="text-slate-500">Created: {{ r.created_at.strftime('%d %b %H:%M') }}</span>
+            <span class="text-slate-500">Created: {{ r.created_at|default('now', true) }}</span>
           </div>
         </div>
 
-        <!-- CHEVRON -->
         <div class="ml-3">
           <span id="icon-{{ r.id }}" data-icon
                 class="inline-block transition-transform duration-150 text-slate-400">
@@ -109,11 +115,9 @@
         </div>
       </button>
 
-      <!-- DETAILS SECTION -->
       <div id="details-{{ r.id }}" data-details class="hidden border-t border-slate-800 bg-slate-950/80 px-4 py-3 text-xs text-slate-200">
         <div class="grid md:grid-cols-3 gap-4">
 
-          <!-- LEFT DESCRIPTION -->
           <div class="md:col-span-2 space-y-2">
             <p class="font-semibold text-slate-100 text-sm">Details</p>
             <p class="text-[12px] text-slate-300 whitespace-pre-line">{{ r.description or "No details provided." }}</p>
@@ -126,7 +130,6 @@
             {% endif %}
           </div>
 
-          <!-- RIGHT CONTACT + ACTIONS -->
           <div class="space-y-2 border-l border-slate-800 pl-3">
 
             <p class="font-semibold text-slate-100 text-sm">Contact & Meta</p>
@@ -146,43 +149,98 @@
             <p class="text-[11px] text-slate-400"><span class="font-semibold">Status:</span> {{ r.status|capitalize }}</p>
 
             <p class="text-[11px] text-slate-400">
-              <span class="font-semibold">Requested by:</span> {{ r.user.name }}
+              <span class="font-semibold">Posted by:</span> {{ r.user_name or r.user.name }}
             </p>
 
-            <!-- ACTION BUTTONS -->
             <div class="mt-3 flex flex-col gap-2">
 
               {% if r.helper_id %}
               <p class="text-[11px] text-slate-400">Assigned to: {{ r.helper.name }}</p>
               {% endif %}
 
-              {% if current_user and not r.helper_id and r.user.id != current_user.id %}
-              <form method="POST" action="{{ url_for('claim_request', request_id=r.id) }}">
-                <button class="w-full px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold">
-                  Claim this request
-                </button>
-              </form>
+              {% if current_user and not r.helper_id and r.user_id != current_user.id %}
+                
+                {% if r.id in offered_ids %}
+                   <div class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-emerald-400 text-sm font-semibold text-center flex justify-center items-center gap-2">
+                     <span>✓</span> {% if r.is_offer %} Request Sent {% else %} Offer Sent {% endif %}
+                   </div>
+                {% else %}
+                   <form method="POST" action="{{ url_for('make_offer', request_id=r.id) }}">
+                     {% if r.is_offer %}
+                        <button class="w-full px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold transition shadow-lg shadow-blue-900/20">
+                          👋 Request Help
+                        </button>
+                     {% else %}
+                        <button class="w-full px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold transition shadow-lg shadow-emerald-900/20">
+                          ✋ Offer to help
+                        </button>
+                     {% endif %}
+                   </form>
+                {% endif %}
+
               {% endif %}
 
-              {% if current_user and r.helper_id == current_user.id and r.status != 'completed' %}
-              <form method="POST" action="{{ url_for('complete_request', request_id=r.id) }}">
-                <button class="w-full px-3 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-semibold">
-                  Mark as Completed
+              {% if current_user and r.user_id == current_user.id %}
+                
+                {% set offer_count = r.offers|length %}
+                <button onclick="toggleCardOffers('{{ r.id }}')" 
+                        class="w-full flex items-center justify-between px-3 py-2 rounded-lg 
+                               bg-slate-800 border border-slate-700 hover:bg-slate-700 transition text-left">
+                     <div class="flex items-center gap-2">
+                        <span class="flex items-center justify-center w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-300 text-[10px] font-bold">
+                            {{ offer_count }}
+                        </span>
+                        <span class="text-xs text-slate-300 font-semibold">Responses</span>
+                     </div>
+                     <span class="text-[10px] text-slate-500">▼</span>
                 </button>
-              </form>
-              {% endif %}
 
-              {% if current_user and r.user.id == current_user.id %}
-              <form method="POST" action="{{ url_for('delete_request', request_id=r.id) }}">
-                <button class="w-full px-3 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-sm font-semibold">
-                  Remove request
-                </button>
-              </form>
+                <div id="card-offers-{{ r.id }}" class="hidden mt-2 space-y-2 pl-1">
+                    {% if offer_count == 0 %}
+                        <p class="text-[10px] text-slate-500 italic">No responses yet.</p>
+                    {% else %}
+                        {% for offer in r.offers %}
+                            {% if offer.status == 'pending' %}
+                            <div class="bg-slate-900 p-2 rounded border border-slate-700">
+                                <div class="flex justify-between items-start">
+                                    <div class="flex items-center gap-2">
+                                        <div class="w-6 h-6 rounded-full bg-slate-700 overflow-hidden">
+                                             <img src="{{ offer.helper.profile_photo or url_for('static', filename='uploads/profile_photos/default.png') }}" class="w-full h-full object-cover">
+                                        </div>
+                                        <div>
+                                            <p class="text-[11px] font-bold text-slate-200">{{ offer.helper.name }}</p>
+                                            <p class="text-[9px] text-slate-500">Trust: {{ offer.helper.trust_score }}%</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="mt-2 flex gap-2">
+                                    <a href="{{ url_for('chat_with_user', other_user_id=offer.helper_id) }}" 
+                                       class="flex-1 text-center bg-slate-800 text-slate-300 text-[10px] py-1 rounded hover:bg-slate-700 border border-slate-600">
+                                       Chat
+                                    </a>
+                                    <form action="{{ url_for('accept_offer', offer_id=offer.id) }}" method="POST" class="flex-1">
+                                        <button class="w-full bg-emerald-600 text-white text-[10px] py-1 rounded hover:bg-emerald-500 font-semibold">
+                                            Accept
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                            {% endif %}
+                        {% endfor %}
+                    {% endif %}
+                </div>
+
+                <form method="POST" action="{{ url_for('delete_request', request_id=r.id) }}" class="mt-2">
+                    <button onclick="return confirm('Are you sure you want to remove this?')" class="w-full text-center text-[10px] text-rose-400 hover:text-rose-300 hover:underline">
+                      Remove Post
+                    </button>
+                </form>
+
               {% endif %}
             </div>
 
-            <p class="text-[11px] text-slate-500">
-              Expires at: {{ r.expires_at.strftime('%d %b %H:%M') }}
+            <p class="text-[11px] text-slate-500 mt-2">
+               Expires: {{ r.expires_at.strftime('%d %b %H:%M') }}
             </p>
 
           </div>
@@ -200,7 +258,6 @@
   {% endif %}
 </div>
 
-<!-- FLOATING BUTTON -->
 {% set fab_label = "Offer help" if mode == 'offer' else "Request help" %}
 {% set fab_href = url_for('can_help') if mode == 'offer' else url_for('need_help') %}
 
@@ -211,14 +268,16 @@
   <span>＋</span><span>{{ fab_label }}</span>
 </a>
 
-<!-- Expand Script -->
 <script>
   function toggleDetails(id) {
+    // Only toggle if the click wasn't inside the "Manage Post" area (to prevent conflicts)
+    // Actually, simple toggle is fine if we manage events properly.
+    
     var body = document.getElementById('details-' + id);
     var icon = document.getElementById('icon-' + id);
-
     var isHidden = body.classList.contains('hidden');
 
+    // Close others
     document.querySelectorAll('[data-details]').forEach(el => el.classList.add('hidden'));
     document.querySelectorAll('[data-icon]').forEach(el => el.classList.remove('rotate-180'));
 
@@ -226,6 +285,16 @@
       body.classList.remove('hidden');
       icon.classList.add('rotate-180');
     }
+  }
+
+  // New function to toggle the internal list of offers inside a card
+  function toggleCardOffers(id) {
+     var list = document.getElementById('card-offers-' + id);
+     if(list) {
+         list.classList.toggle('hidden');
+     }
+     // Prevent the click from bubbling up and closing the main card details
+     event.stopPropagation();
   }
 </script>
 
