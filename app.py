@@ -615,7 +615,7 @@ def login():
             access_token = create_jwt_for_user(user)
             print("JWT after login:", access_token)  # DEBUG
 
-            next_url = request.args.get("next") or url_for("dashboard")
+            next_url = request.args.get("next") or url_for("home")
             return redirect(next_url)
 
         # OTP LOGIN -----------------------------------------
@@ -812,6 +812,7 @@ def auth_google():
     email = decoded.get("email")
     uid = decoded.get("uid")
     name = decoded.get("name") or (email.split("@")[0] if email else "Google user")
+    photo_url = decoded.get("picture")
 
     if not email:
         return jsonify({"error": "Google account has no email"}), 400
@@ -823,9 +824,15 @@ def auth_google():
             email=email,
             name=name,
             firebase_uid=uid,
+            profile_photo=photo_url or "default.png",
         )
         db.session.add(user)
-        db.session.commit()
+    else:
+        # If we have a Google photo and user still has default or empty photo, update it
+        if photo_url and (not user.profile_photo or user.profile_photo == "default.png"):
+            user.profile_photo = photo_url
+
+    db.session.commit()
 
     # Log into Flask session
     login_user(user)
@@ -857,6 +864,7 @@ def google_auth():
     uid = decoded["uid"]
     email = decoded.get("email")
     name = decoded.get("name") or (email.split("@")[0] if email else "Google User")
+    photo_url = decoded.get("picture")   # 👈 Google profile image URL
 
     # 1) Try find user by firebase_uid
     user = User.query.filter_by(firebase_uid=uid).first()
@@ -867,12 +875,21 @@ def google_auth():
 
     # 3) If still no user, create one
     if not user:
-        user = User(email=email, name=name, firebase_uid=uid)
+        user = User(
+            email=email,
+            name=name,
+            firebase_uid=uid,
+            profile_photo=photo_url or "default.png",  # 👈 store Google photo
+        )
         db.session.add(user)
     else:
         # Link existing account with this Firebase UID
         if not user.firebase_uid:
             user.firebase_uid = uid
+
+        # If user still has default/no photo, upgrade to Google photo
+        if photo_url and (not user.profile_photo or user.profile_photo == "default.png"):
+            user.profile_photo = photo_url
 
     db.session.commit()
 
@@ -913,6 +930,60 @@ def trusted_helper():
         return redirect(url_for("trusted_helper"))
 
     return render_template("trusted_helper.html", user=user)
+
+@app.route("/profile")
+@login_required
+def profile():
+    """Show logged-in user's profile page."""
+    user = current_user()
+    if not user:
+        return redirect(url_for("login", next=url_for("profile")))
+
+    # Ensure a default photo name exists so template doesn't break
+    if not user.profile_photo:
+        user.profile_photo = "default.png"
+        db.session.commit()
+
+    return render_template("profile.html", user=user)
+@app.route("/profile/update", methods=["POST"])
+@login_required
+def update_profile():
+    user = current_user()
+    if not user:
+        return redirect(url_for("login", next=url_for("profile")))
+
+    # ---- basic fields ----
+    name = request.form.get("name", "").strip()
+    phone = request.form.get("phone", "").strip()
+    dob   = request.form.get("dob", "").strip()
+
+    if name:
+        user.name = name
+        # keep navbar greeting in sync
+        session["user_name"] = name
+
+    user.phone = phone or None
+    user.dob   = dob or None
+
+    # ---- profile photo upload ----
+    file = request.files.get("profile_photo")
+    if file and file.filename:
+        if allowed_image(file.filename):
+            filename = secure_filename(file.filename)
+            # make it unique per user
+            filename = f"{user.id}_{int(time.time())}_{filename}"
+            save_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+            file.save(save_path)
+
+            # store only file name (template already uses uploads/profile_photos/)
+            user.profile_photo = filename
+        else:
+            flash("Unsupported image type. Please upload PNG/JPG/JPEG/GIF.", "error")
+            return redirect(url_for("profile"))
+
+    db.session.commit()
+    flash("Profile updated successfully.", "success")
+    return redirect(url_for("profile"))
 
 # ---------- JWT-Protected API ----------
 @app.route("/api/me")
@@ -1471,6 +1542,70 @@ def chat_index():
     # also show some nearby helpers to start a new chat (trusted helpers)
     helpers = User.query.filter(User.is_trusted_helper == True, User.id != user.id).limit(10).all()
     return render_template("chat_index.html", conversations=conversations, helpers=helpers)
+@app.route("/dashboard")
+@login_required
+def dashboard():
+    user = current_user()
+
+    # Make sure scores are up to date
+    update_user_scores(user)
+
+    # Badge label + Tailwind color class
+    badge, badge_color = user.calculate_badge()
+
+    # All completed helps where this user was the helper
+    completed_q = Request.query.filter(
+        Request.helper_id == user.id,
+        Request.status == "completed",
+        Request.completed_at != None
+    ).order_by(Request.completed_at.desc())
+
+    helped_count = completed_q.count()
+
+    # Compute total hours + build small recent history list
+    total_hours = 0.0
+    history = []
+
+    for r in completed_q.limit(5).all():
+        hours = 0.0
+        if r.created_at and r.completed_at:
+            hours = max(0.0, (r.completed_at - r.created_at).total_seconds() / 3600.0)
+        total_hours += hours
+
+        history.append({
+            "title": r.title,
+            "category": r.category or "General",
+            "hours": round(hours, 2),
+            "date": r.completed_at.strftime("%b %d, %Y") if r.completed_at else "",
+        })
+
+    total_hours = round(total_hours, 2)
+
+    # stats object used in dashboard.html
+    stats = {
+        "badge": badge,
+        "badge_color": badge_color,       # e.g. "text-yellow-300"
+        "helped": helped_count,          # total people helped
+        "total_hours": total_hours,      # total hours volunteered
+        "trust": user.trust_score or 0,  # 0–100 (we already cap in update_user_scores)
+        "kindness": user.kindness_score or 0,
+    }
+
+    # Simple chart data (can be upgraded later)
+    chart_labels = ["Today"]
+    chart_trust = [stats["trust"]]
+    chart_kindness = [stats["kindness"]]
+
+    return render_template(
+        "dashboard.html",
+        user=user,
+        stats=stats,
+        history=history,
+        chart_labels=chart_labels,
+        chart_trust=chart_trust,
+        chart_kindness=chart_kindness,
+    )
+
 
 
 @app.route("/emotional")

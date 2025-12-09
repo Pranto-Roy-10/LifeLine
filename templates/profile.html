@@ -4,56 +4,203 @@
 {% block content %}
 <div class="min-h-screen w-full bg-slate-950 text-slate-100 px-6 md:px-12 py-10">
 
-    <h1 class="text-3xl font-bold mb-8">Your Profile</h1>
+  <div class="flex items-center justify-between mb-6 gap-4">
+    <div>
+      <h1 class="text-3xl font-bold">Your Profile</h1>
+      <p class="text-slate-400 text-sm mt-1">
+        Manage your identity, contact info, and helper stats.
+      </p>
+    </div>
 
-    <form method="POST" action="{{ url_for('update_profile') }}" enctype="multipart/form-data"
-          class="max-w-2xl bg-slate-900 border border-slate-800 rounded-xl p-8 space-y-6">
+    <a href="{{ url_for('dashboard') }}"
+       class="hidden md:inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-900 border border-slate-700 text-xs text-slate-200 hover:border-emerald-400 hover:text-emerald-300 transition">
+      <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+      View Dashboard
+    </a>
+  </div>
 
-        <!-- PROFILE PHOTO -->
-        <div class="flex items-center gap-6">
-            <img src="{{ url_for('static', filename='uploads/profile_photos/' ~ user.profile_photo) }}"
-                 class="w-24 h-24 rounded-full object-cover border border-slate-700">
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
-            <div>
-                <label class="block text-sm mb-1 text-slate-300">Change Photo</label>
-                <input type="file" name="profile_photo"
-                       class="text-sm text-slate-400 file:bg-slate-800 file:text-slate-200 file:border file:border-slate-700 file:px-3 file:py-2 file:rounded-lg">
-            </div>
+    <!-- LEFT: PROFILE FORM CARD -->
+    <div class="lg:col-span-2">
+      <form method="POST"
+            action="{{ url_for('update_profile') }}"
+            enctype="multipart/form-data"
+            class="bg-slate-900/80 border border-slate-800 rounded-2xl p-8 space-y-6 shadow-[0_18px_60px_rgba(0,0,0,0.5)]">
+
+        <!-- Photo + upload -->
+        <div class="flex flex-col sm:flex-row items-start sm:items-center gap-6">
+          <div class="relative">
+            {% set photo = user.profile_photo or 'default.png' %}
+            {% if 'http' in photo %}
+              <img src="{{ photo }}"
+                   class="w-24 h-24 rounded-full object-cover border-2 border-emerald-400/80 shadow-lg">
+            {% else %}
+              <img src="{{ url_for('static', filename='uploads/profile_photos/' ~ photo) }}"
+                   class="w-24 h-24 rounded-full object-cover border-2 border-emerald-400/80 shadow-lg">
+            {% endif %}
+
+            <!-- small glowing ring -->
+            <span class="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center text-[10px] font-semibold text-slate-950 shadow">
+              ✨
+            </span>
+          </div>
+
+          <div class="flex-1">
+            <p class="text-sm font-medium text-slate-200">Profile Photo</p>
+            <p class="text-xs text-slate-500 mb-3">
+              This photo is shown in the navbar and to people you help.
+            </p>
+
+            <label class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-xs text-slate-200 cursor-pointer hover:border-emerald-400 hover:text-emerald-300 transition">
+              <span>Choose File</span>
+              <input type="file" name="profile_photo" class="hidden" onchange="document.getElementById('fileLabel').innerText = this.files[0]?.name || 'No file chosen'">
+            </label>
+            <span id="fileLabel" class="ml-2 text-[11px] text-slate-500">No file chosen</span>
+          </div>
         </div>
+
+        <hr class="border-slate-800 my-4" />
 
         <!-- NAME -->
-        <div>
-            <label class="text-sm text-slate-400 block mb-1">Name</label>
+        <div class="space-y-1">
+          <label class="text-sm text-slate-400 block">Name</label>
+          <div class="relative">
             <input type="text" name="name" value="{{ user.name }}"
-                   class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-200">
+                   class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-slate-200 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-400 focus:border-emerald-400">
+            <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-slate-500 text-xs">
+              ✏️
+            </span>
+          </div>
         </div>
 
-        <!-- EMAIL (non-editable) -->
-        <div>
-            <label class="text-sm text-slate-400 block mb-1">Email</label>
+        <!-- EMAIL -->
+        <div class="space-y-1">
+          <label class="text-sm text-slate-400 block">Email</label>
+          <div class="relative">
             <input type="text" value="{{ user.email }}" disabled
-                   class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-500 cursor-not-allowed">
+                   class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2.5 text-slate-500 text-sm cursor-not-allowed">
+            <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-slate-500 text-[11px]">
+              Linked
+            </span>
+          </div>
         </div>
 
         <!-- PHONE -->
-        <div>
-            <label class="text-sm text-slate-400 block mb-1">Phone Number</label>
-            <input type="text" name="phone" value="{{ user.phone or '' }}"
-                   class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-200">
+        <div class="space-y-1">
+          <label class="text-sm text-slate-400 block">Phone Number</label>
+          <input type="text" name="phone" value="{{ user.phone or '' }}"
+                 placeholder="+8801XXXXXXXXX"
+                 class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-slate-200 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-400 focus:border-emerald-400">
         </div>
 
         <!-- DOB -->
-        <div>
-            <label class="text-sm text-slate-400 block mb-1">Date of Birth</label>
-            <input type="date" name="dob" value="{{ user.dob or '' }}"
-                   class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-200">
+        <div class="space-y-1">
+          <label class="text-sm text-slate-400 block">Date of Birth</label>
+          <input type="date" name="dob" value="{{ user.dob or '' }}"
+                 class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-slate-200 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-400 focus:border-emerald-400">
         </div>
 
+        <!-- SAVE BUTTON -->
         <button type="submit"
-                class="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold px-4 py-2 rounded-lg">
-            Save Changes
+                class="w-full mt-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold px-4 py-2.5 rounded-lg text-sm tracking-wide shadow-lg shadow-emerald-500/20 transition">
+          Save Changes
         </button>
-    </form>
+      </form>
+    </div>
 
+    <!-- RIGHT: HELPER STATS + QUICK ACTIONS -->
+    <div class="space-y-6">
+
+      <!-- STATS CARD -->
+      <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-[0_18px_60px_rgba(0,0,0,0.5)]">
+        {% set kindness = user.kindness_score or 0 %}
+        {% set trust = user.trust_score or 0 %}
+
+        {% if kindness >= 121 %}
+          {% set badge_label = "Community Star" %}
+          {% set badge_color = "text-yellow-300" %}
+        {% elif kindness >= 71 %}
+          {% set badge_label = "Gold Helper" %}
+          {% set badge_color = "text-yellow-400" %}
+        {% elif kindness >= 31 %}
+          {% set badge_label = "Silver Helper" %}
+          {% set badge_color = "text-slate-300" %}
+        {% elif kindness >= 11 %}
+          {% set badge_label = "Bronze Helper" %}
+          {% set badge_color = "text-amber-300" %}
+        {% else %}
+          {% set badge_label = "Newbie" %}
+          {% set badge_color = "text-slate-400" %}
+        {% endif %}
+
+        <p class="text-xs uppercase tracking-[0.2em] text-slate-500 mb-2">Helper Level</p>
+        <p class="text-lg font-semibold {{ badge_color }}">
+          ⭐ {{ badge_label }}
+        </p>
+        <p class="text-[11px] text-slate-500 mt-1">
+          Your kindness score and trust grow every time you complete a verified help request.
+        </p>
+
+        <div class="mt-5 space-y-4">
+          <!-- Trust bar -->
+          <div>
+            <div class="flex justify-between text-[11px] text-slate-400 mb-1">
+              <span>Trust Score</span>
+              <span>{{ trust }}/100</span>
+            </div>
+            <div class="w-full h-2.5 rounded-full bg-slate-800 overflow-hidden">
+              <div class="h-full bg-emerald-400 rounded-full"
+                   style="width: {{ trust if trust <= 100 else 100 }}%">
+              </div>
+            </div>
+          </div>
+
+          <!-- Kindness small meter -->
+          <div>
+            <div class="flex justify-between text-[11px] text-slate-400 mb-1">
+              <span>Kindness Score</span>
+              <span>{{ kindness }}</span>
+            </div>
+            <div class="w-full h-2.5 rounded-full bg-slate-800 overflow-hidden">
+              {% set k_pct = (kindness / 150 * 100) if kindness < 150 else 100 %}
+              <div class="h-full bg-gradient-to-r from-emerald-400 via-cyan-400 to-sky-400 rounded-full"
+                   style="width: {{ k_pct }}%">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <p class="mt-4 text-[11px] text-slate-500">
+          Tip: Helping neighbors through verified requests and completing chats boosts both scores.
+        </p>
+      </div>
+
+      <!-- QUICK ACTIONS -->
+      <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-3">
+        <p class="text-xs uppercase tracking-[0.2em] text-slate-500 mb-2">Quick Actions</p>
+
+        <a href="{{ url_for('need_help') }}"
+           class="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-rose-400 hover:text-rose-200 text-xs transition">
+          <span>Request help from the community</span>
+          <span>🆘</span>
+        </a>
+
+        <a href="{{ url_for('can_help') }}"
+           class="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-emerald-400 hover:text-emerald-200 text-xs transition">
+          <span>Offer your time or resources</span>
+          <span>🤝</span>
+        </a>
+
+        <a href="{{ url_for('dashboard') }}"
+           class="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-sky-400 hover:text-sky-200 text-xs transition">
+          <span>Open full dashboard & history</span>
+          <span>📊</span>
+        </a>
+      </div>
+    </div>
+
+  </div>
 </div>
+
 {% endblock %}
