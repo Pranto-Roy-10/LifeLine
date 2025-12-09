@@ -809,9 +809,11 @@ def auth_google():
         print("Firebase verify error:", e)
         return jsonify({"error": "Invalid Google token"}), 401
 
+    decoded = firebase_auth.verify_id_token(id_token)
     email = decoded.get("email")
     uid = decoded.get("uid")
     name = decoded.get("name") or (email.split("@")[0] if email else "Google user")
+    picture = decoded.get("picture")
 
     if not email:
         return jsonify({"error": "Google account has no email"}), 400
@@ -823,8 +825,12 @@ def auth_google():
             email=email,
             name=name,
             firebase_uid=uid,
+            profile_photo=picture or "default.png"
         )
         db.session.add(user)
+    else:
+        if (not user.profile_photo or user.profile_photo == "default.png") and picture:
+            user.profile_photo = picture    
         db.session.commit()
 
     # Log into Flask session
@@ -857,7 +863,7 @@ def google_auth():
     uid = decoded["uid"]
     email = decoded.get("email")
     name = decoded.get("name") or (email.split("@")[0] if email else "Google User")
-
+    picture = decoded.get("picture")
     # 1) Try find user by firebase_uid
     user = User.query.filter_by(firebase_uid=uid).first()
 
@@ -867,9 +873,11 @@ def google_auth():
 
     # 3) If still no user, create one
     if not user:
-        user = User(email=email, name=name, firebase_uid=uid)
+        user = User(email=email, name=name, firebase_uid=uid, profile_photo=picture or "default.png")
         db.session.add(user)
     else:
+        if (not user.profile_photo or user.profile_photo == "default.png") and picture:
+            user.profile_photo = picture
         # Link existing account with this Firebase UID
         if not user.firebase_uid:
             user.firebase_uid = uid
