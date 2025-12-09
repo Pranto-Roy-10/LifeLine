@@ -72,7 +72,6 @@
               {{ r.category|capitalize }}
             </span>
 
-            <!-- NEED vs OFFER BADGE -->
             {% if r.is_offer %}
             <span class="text-[11px] px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-300 border border-sky-500/40">
               Offer help
@@ -84,24 +83,20 @@
             {% endif %}
           </div>
 
-          <!-- SMALL SUBLINE -->
           <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-400">
-            {% if r.area %}
-            <span>📍 {{ r.area }}</span>
-            {% endif %}
+            {% if r.area %}<span>📍 {{ r.area }}</span>{% endif %}
             {% if r.urgency %}
             <span>
               ⏱️ Urgency:
-              <span class="
-                {% if r.urgency == 'emergency' %}text-rose-400{% elif r.urgency == 'high' %}text-amber-300
-                {% elif r.urgency == 'normal' %}text-sky-300{% else %}text-emerald-300{% endif %}">
+              <span class="{% if r.urgency == 'emergency' %}text-rose-400
+                             {% elif r.urgency == 'high' %}text-amber-300
+                             {% elif r.urgency == 'normal' %}text-sky-300
+                             {% else %}text-emerald-300{% endif %}">
                 {{ r.urgency|capitalize }}
               </span>
             </span>
             {% endif %}
-            <span class="text-slate-500">
-              Created: {{ r.created_at.strftime('%d %b %H:%M') }}
-            </span>
+            <span class="text-slate-500">Created: {{ r.created_at.strftime('%d %b %H:%M') }}</span>
           </div>
         </div>
 
@@ -114,54 +109,31 @@
         </div>
       </button>
 
-      <!-- DETAILS: HIDDEN BY DEFAULT -->
+      <!-- DETAILS SECTION -->
       <div id="details-{{ r.id }}" data-details class="hidden border-t border-slate-800 bg-slate-950/80 px-4 py-3 text-xs text-slate-200">
         <div class="grid md:grid-cols-3 gap-4">
 
-          <!-- LEFT: DESCRIPTION -->
+          <!-- LEFT DESCRIPTION -->
           <div class="md:col-span-2 space-y-2">
             <p class="font-semibold text-slate-100 text-sm">Details</p>
-            <p class="text-[12px] text-slate-300 whitespace-pre-line">
-              {{ r.description or "No detailed description provided." }}
-            </p>
+            <p class="text-[12px] text-slate-300 whitespace-pre-line">{{ r.description or "No details provided." }}</p>
 
             {% if r.landmark %}
-            <p class="text-[11px] text-slate-400">
-              <span class="font-semibold">Landmark:</span> {{ r.landmark }}
-            </p>
+            <p class="text-[11px] text-slate-400"><span class="font-semibold">Landmark:</span> {{ r.landmark }}</p>
             {% endif %}
-
             {% if r.time_window %}
-            <p class="text-[11px] text-slate-400">
-              <span class="font-semibold">When:</span>
-              {% if r.time_window == 'anytime_today' %} Anytime today
-              {% elif r.time_window == 'next_few_hours' %} Within the next few hours
-              {% elif r.time_window == 'this_week' %} Sometime this week
-              {% else %} {{ r.time_window }}
-              {% endif %}
-            </p>
-            {% endif %}
-
-            {% if r.frequency or r.radius_pref %}
-            <p class="text-[11px] text-slate-400">
-              {% if r.frequency %}
-                <span class="font-semibold">Frequency:</span> {{ r.frequency.replace('_', ' ') }}
-              {% endif %}
-              {% if r.radius_pref %}
-                · <span class="font-semibold">Preferred radius:</span> {{ r.radius_pref }}
-              {% endif %}
-            </p>
+            <p class="text-[11px] text-slate-400"><span class="font-semibold">When:</span> {{ r.time_window }}</p>
             {% endif %}
           </div>
 
-          <!-- RIGHT: CONTACT + META -->
+          <!-- RIGHT CONTACT + ACTIONS -->
           <div class="space-y-2 border-l border-slate-800 pl-3">
-            <p class="font-semibold text-slate-100 text-sm">Contact & meta</p>
+
+            <p class="font-semibold text-slate-100 text-sm">Contact & Meta</p>
 
             {% if r.contact_method %}
             <p class="text-[11px] text-slate-300">
-              <span class="font-semibold">Contact via:</span>
-              {{ r.contact_method|replace('_', ' ')|capitalize }}
+              <span class="font-semibold">Contact via:</span> {{ r.contact_method }}
             </p>
             {% endif %}
 
@@ -169,93 +141,92 @@
             <p class="text-[11px] text-slate-300">
               <span class="font-semibold">Contact info:</span> {{ r.contact_info }}
             </p>
-            {% else %}
-            <p class="text-[11px] text-slate-500">
-              No phone/contact shared. Use in-app chat (future).
-            </p>
             {% endif %}
 
-            <p class="text-[11px] text-slate-400">
-              <span class="font-semibold">Status:</span> {{ r.status|capitalize }}
-            </p>
+            <p class="text-[11px] text-slate-400"><span class="font-semibold">Status:</span> {{ r.status|capitalize }}</p>
 
             <p class="text-[11px] text-slate-400">
-              <span class="font-semibold">Requested by:</span>
-              {{ r.user.name if r.user else "Unknown" }}
+              <span class="font-semibold">Requested by:</span> {{ r.user.name }}
             </p>
 
-            {% if r.user and current_user and r.user.id != current_user.id %}
-            <div class="mt-3">
-              <a href="{{ url_for('chat_with_user', other_user_id=r.user.id) }}"
-                 class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-sm font-semibold">
-                Message
-              </a>
+            <!-- ACTION BUTTONS -->
+            <div class="mt-3 flex flex-col gap-2">
+
+              {% if r.helper_id %}
+              <p class="text-[11px] text-slate-400">Assigned to: {{ r.helper.name }}</p>
+              {% endif %}
+
+              {% if current_user and not r.helper_id and r.user.id != current_user.id %}
+              <form method="POST" action="{{ url_for('claim_request', request_id=r.id) }}">
+                <button class="w-full px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold">
+                  Claim this request
+                </button>
+              </form>
+              {% endif %}
+
+              {% if current_user and r.helper_id == current_user.id and r.status != 'completed' %}
+              <form method="POST" action="{{ url_for('complete_request', request_id=r.id) }}">
+                <button class="w-full px-3 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-semibold">
+                  Mark as Completed
+                </button>
+              </form>
+              {% endif %}
+
+              {% if current_user and r.user.id == current_user.id %}
+              <form method="POST" action="{{ url_for('delete_request', request_id=r.id) }}">
+                <button class="w-full px-3 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-sm font-semibold">
+                  Remove request
+                </button>
+              </form>
+              {% endif %}
             </div>
-            {% endif %}
 
             <p class="text-[11px] text-slate-500">
               Expires at: {{ r.expires_at.strftime('%d %b %H:%M') }}
             </p>
+
           </div>
         </div>
       </div>
-
     </div>
     {% endfor %}
 
   </div>
+
   {% else %}
   <div class="mt-10 text-center text-sm text-slate-400">
-    No open requests found in this category yet.
+    No open requests found.
   </div>
   {% endif %}
 </div>
 
-<!-- FLOATING ACTION BUTTON -->
-{% if mode == 'offer' %}
-  {% set fab_label = "Offer help" %}
-  {% set fab_href = url_for('can_help') %}
-{% else %}
-  {% set fab_label = "Request help" %}
-  {% set fab_href = url_for('need_help') %}
-{% endif %}
+<!-- FLOATING BUTTON -->
+{% set fab_label = "Offer help" if mode == 'offer' else "Request help" %}
+{% set fab_href = url_for('can_help') if mode == 'offer' else url_for('need_help') %}
 
 <a href="{{ fab_href }}"
    class="fixed bottom-6 right-6 md:bottom-8 md:right-10 z-20 inline-flex items-center gap-2
           px-4 py-2.5 rounded-full shadow-lg shadow-emerald-500/25
           bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-semibold transition">
-  <span>＋</span>
-  <span>{{ fab_label }}</span>
+  <span>＋</span><span>{{ fab_label }}</span>
 </a>
 
-<!-- EXPAND/COLLAPSE SCRIPT (ES5-style, no arrow functions) -->
+<!-- Expand Script -->
 <script>
   function toggleDetails(id) {
     var body = document.getElementById('details-' + id);
     var icon = document.getElementById('icon-' + id);
-    if (!body || !icon) return;
 
     var isHidden = body.classList.contains('hidden');
 
-    // Close all others
-    var detailEls = document.querySelectorAll('[data-details]');
-    for (var i = 0; i < detailEls.length; i++) {
-      detailEls[i].classList.add('hidden');
-    }
+    document.querySelectorAll('[data-details]').forEach(el => el.classList.add('hidden'));
+    document.querySelectorAll('[data-icon]').forEach(el => el.classList.remove('rotate-180'));
 
-    var iconEls = document.querySelectorAll('[data-icon]');
-    for (var j = 0; j < iconEls.length; j++) {
-      iconEls[j].classList.remove('rotate-180');
-    }
-
-    // Toggle this one
     if (isHidden) {
       body.classList.remove('hidden');
       icon.classList.add('rotate-180');
-    } else {
-      body.classList.add('hidden');
-      icon.classList.remove('rotate-180');
     }
   }
 </script>
+
 {% endblock %}

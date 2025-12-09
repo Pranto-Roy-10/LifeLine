@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block title %}Dashboard – LifeLine{% endblock %}
+
+{% block content %}
+<div class="w-full min-h-screen bg-slate-950 text-slate-100 px-6 md:px-12 py-10 space-y-12">
+
+    <!-- HEADER -->
+    <div>
+        <h1 class="text-3xl font-bold mb-1">Welcome back, {{ user.name }} 👋</h1>
+        <p class="text-slate-400">Here’s your kindness summary</p>
+
+        <!-- Badge -->
+        <p class="mt-3 text-sm italic {{ stats.badge_color }}">
+            ⭐ {{ stats.badge }}
+        </p>
+    </div>
+
+    <!-- MAIN STATS GRID -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+        <!-- People Helped -->
+        <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-6">
+            <p class="text-slate-400">People Helped</p>
+            <h2 class="text-4xl font-bold text-emerald-400 mt-3">{{ stats.helped }}</h2>
+        </div>
+
+        <!-- Total Hours -->
+        <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-6">
+            <p class="text-slate-400">Total Hours</p>
+            <h2 class="text-4xl font-bold text-emerald-400 mt-3">{{ stats.total_hours }}h</h2>
+        </div>
+
+        <!-- Trust Score -->
+        <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-6">
+            <p class="text-slate-400">Trust Score</p>
+            <div class="w-full bg-slate-700 h-3 rounded-full mt-4">
+                <div class="bg-emerald-400 h-3 rounded-full"
+                    style="width: {{ stats.trust }}%">
+                </div>
+            </div>
+            <p class="mt-3 text-slate-300">{{ stats.trust }}% progress</p>
+        </div>
+
+    </div>
+
+    <!-- KINDNESS SCORE BOX -->
+    <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-8">
+        <p class="text-slate-400">Kindness Score</p>
+        <h2 class="text-5xl font-bold text-emerald-400 mt-3">{{ stats.kindness }}</h2>
+    </div>
+
+    <!-- KINDNESS CIRCLE -->
+    <div class="flex justify-center">
+        <div class="bg-[#0D1529] p-8 rounded-3xl shadow-lg w-80 text-center border border-white/5">
+            <h2 class="text-xl font-bold mb-4">Your Kindness Score</h2>
+
+            <div class="relative w-40 h-40 mx-auto">
+                <svg class="w-40 h-40 transform -rotate-90">
+                    <circle cx="80" cy="80" r="70" stroke="#1A2337" stroke-width="12" fill="none" />
+                    <circle cx="80" cy="80" r="70"
+                            stroke="#32D48E" stroke-width="12" fill="none"
+                            stroke-dasharray="439"
+                            stroke-dashoffset="{{ 439 - (stats.kindness / 100) * 439 }}"
+                            stroke-linecap="round"/>
+                </svg>
+
+                <div class="absolute inset-0 flex items-center justify-center">
+                    <span class="text-3xl font-bold">{{ stats.kindness }}</span>
+                </div>
+            </div>
+
+            <p class="mt-3 text-white/70 text-sm">Next badge at 100 points</p>
+        </div>
+    </div>
+
+    <!-- PROGRESS CHART -->
+    <div class="bg-[#0D1529] p-8 rounded-3xl shadow-lg border border-white/5">
+        <h2 class="text-xl font-bold mb-6">Your Progress Over Time</h2>
+        <canvas id="trustChart" height="120"></canvas>
+    </div>
+
+    <!-- HISTORY SECTION -->
+    <div>
+       <div class="flex justify-end mb-4">
+           <a href="/history"
+              class="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 hover:bg-slate-700 transition">
+              View Full History →
+           </a>
+    </div>
+
+        <h2 class="text-2xl font-bold mb-4">Recent Help Activity</h2>
+
+        {% if history %}
+            <div class="space-y-4">
+                {% for item in history %}
+                    <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-5">
+                        <p class="text-lg font-semibold">{{ item.title }} ({{ item.category }})</p>
+                        <p class="text-slate-400 text-sm mt-1">
+                            {{ item.hours }} hours • {{ item.date }}
+                        </p>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p class="text-slate-500">You have no completed activities yet.</p>
+        {% endif %}
+    </div>
+</div>
+
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    const ctx = document.getElementById('trustChart');
+
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: {{ chart_labels|safe }},
+            datasets: [
+                {
+                    label: 'Trust Score',
+                    data: {{ chart_trust|safe }},
+                    borderWidth: 3,
+                    tension: 0.4,
+                    borderColor: '#32D48E'
+                },
+                {
+                    label: 'Kindness Score',
+                    data: {{ chart_kindness|safe }},
+                    borderWidth: 3,
+                    tension: 0.4,
+                    borderColor: '#1F8AF2'
+                }
+            ]
+        },
+        options: {
+            plugins: { 
+                legend: { 
+                    labels: { color: 'white' } 
+                } 
+            },
+            scales: {
+                x: { ticks: { color: 'white' } },
+                y: { ticks: { color: 'white' } }
+            }
+        }
+    });
+</script>
+{% endblock %}

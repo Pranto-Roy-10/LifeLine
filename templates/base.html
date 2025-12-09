@@ -42,6 +42,9 @@
         </a>
         <!-- Nav links -->
         <div class="hidden md:flex items-center gap-6 text-sm">
+          <a href="{{ url_for('dashboard') }}" class="hover:text-emerald-300 transition"
+            >Dashboard</a
+          >
           <a href="#features" class="hover:text-emerald-300 transition"
             >Features</a
           >
@@ -53,52 +56,56 @@
 
         <!-- Auth buttons -->
         <div class="flex items-center gap-3">
-          {% if session.get('user_id') %} {# TRUSTED HELPER BADGE (only if
-          verified) #} {% if session.get('is_trusted_helper') %}
-          <span
-            class="text-[10px] px-2 py-1 rounded-full bg-emerald-600/20 text-emerald-300 border border-emerald-500/50 hidden md:inline"
-          >
-            ✔ Trusted Helper
-          </span>
+
+          {% if session.get('user_id') %}
+      
+              {% if session.get('is_trusted_helper') %}
+              <span
+                class="text-[10px] px-2 py-1 rounded-full bg-emerald-600/20 text-emerald-300 border border-emerald-500/50 hidden md:inline"
+              >
+                ✔ Trusted Helper
+              </span>
+              {% endif %}
+
+              <!-- NAVBAR PROFILE PHOTO -->
+              <a href="{{ url_for('profile') }}" class="flex items-center gap-2">
+                {% set uploaded_photo = current_user.profile_photo or 'default.png' %}
+                {% set photo_path = 'uploads/' ~ uploaded_photo %}
+                 <img src="{{ url_for('static',
+                         filename='uploads/profile_photos/' ~ current_user.profile_photo) }}"
+                         class="w-8 h-8 rounded-full border border-slate-700 object-cover"
+                         alt="{{ session.get('user_name') }} Profile Photo">
+
+                 <span class="hidden md:inline text-xs text-slate-300">
+                     Hi, {{ session.get('user_name') }}
+                 </span>
+              </a>   
+
+              <!-- Logout -->
+              <a
+                href="{{ url_for('logout') }}"
+                class="text-xs md:text-sm px-3 py-1.5 rounded-full border border-slate-700 hover:border-rose-400 hover:text-rose-300 transition"
+              >
+                Log out
+              </a>
+
           {% else %}
-          <a
-            href="{{ url_for('trusted_helper') }}"
-            class="text-xs md:text-sm px-3 py-1.5 rounded-full border border-emerald-400 hover:border-emerald-300 hover:text-emerald-300 transition"
-          >
-            Become Trusted Helper
-          </a>
-          {% endif %}
 
-          <!-- Greeting -->
-          <span class="hidden md:inline text-xs text-slate-300">
-            Hi, {{ session.get('user_name') }}
-          </span>
+              <!-- Login -->
+              <a
+                href="{{ url_for('login') }}"
+                class="text-xs md:text-sm px-3 py-1.5 rounded-full border border-slate-700 hover:border-emerald-400 hover:text-emerald-300 transition"
+              >
+                Log in
+              </a>
 
-          <!-- Logout -->
-          <a
-            href="{{ url_for('logout') }}"
-            class="text-xs md:text-sm px-3 py-1.5 rounded-full border border-slate-700 hover:border-rose-400 hover:text-rose-300 transition"
-          >
-            Log out
-          </a>
-
-          {% else %}
-
-          <!-- Login -->
-          <a
-            href="{{ url_for('login') }}"
-            class="text-xs md:text-sm px-3 py-1.5 rounded-full border border-slate-700 hover:border-emerald-400 hover:text-emerald-300 transition"
-          >
-            Log in
-          </a>
-
-          <!-- Signup -->
-          <a
-            href="{{ url_for('signup') }}"
-            class="text-xs md:text-sm px-3 md:px-4 py-1.5 rounded-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold transition"
-          >
-            Join as Helper
-          </a>
+              <!-- Signup -->
+              <a
+                href="{{ url_for('signup') }}"
+                class="text-xs md:text-sm px-3 md:px-4 py-1.5 rounded-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold transition"
+              >
+                Join as Helper
+              </a>
 
           {% endif %}
         </div>

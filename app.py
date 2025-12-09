@@ -6,6 +6,7 @@ import random
 import string
 
 from sqlalchemy import func
+from flask_cors import CORS
 
 from flask import (
     Flask, render_template, request,
@@ -14,6 +15,7 @@ from flask import (
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
+from flask_migrate import Migrate
 
 from flask_mail import Mail, Message
 from email_config import EMAIL_ADDRESS, EMAIL_PASSWORD
@@ -47,6 +49,7 @@ except Exception:
 otp_store = {}
 
 app = Flask(__name__)
+CORS(app, supports_credentials=True)
 
 # -------- Firebase Admin (for Google sign-in) --------
 FIREBASE_CRED_PATH = os.getenv(
@@ -65,7 +68,7 @@ app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "dev-jwt-secret")
 # SQLite for now (file lifeline.db in project root).
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///lifeline.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-app.config["UPLOAD_FOLDER"] = os.path.join("static", "uploads")
+app.config["UPLOAD_FOLDER"] = os.path.join("static", "uploads", "profile_photos")
 app.config["ALLOWED_IMAGE_EXTENSIONS"] = {"png", "jpg", "jpeg", "gif"}
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
@@ -79,6 +82,7 @@ def allowed_image(filename):
 
 db = SQLAlchemy(app)
 jwt = JWTManager(app)
+migrate = Migrate(app, db)
 
 # Socket.IO for real-time chat
 socketio = SocketIO(app, cors_allowed_origins="*")
@@ -130,6 +134,17 @@ class User(db.Model):
     id_verification_status = db.Column(db.String(20), default="none")  # none/pending/approved/rejected
     id_document_note = db.Column(db.String(255), nullable=True)
 
+    # Integer trust points and cached kindness score fields:
+    trust_score = db.Column(db.Integer, default=0)        
+    kindness_score = db.Column(db.Integer, default=0)
+
+    # profile photo, phone and dob
+    profile_photo = db.Column(db.String(255), default="default.png")
+    phone = db.Column(db.String(20))
+    dob = db.Column(db.String(20))  # or Date type if you prefer
+    
+
+
     def set_password(self, password: str):
         self.password_hash = generate_password_hash(password)
 
@@ -145,6 +160,20 @@ class User(db.Model):
     def clear_otp(self):
         self.otp_code = None
         self.otp_expires_at = None
+
+    def calculate_badge(self):
+        score = self.kindness_score or 0
+
+        if score >= 121:
+            return "Community Star", "text-yellow-300"
+        elif score >= 71:
+            return "Gold Helper", "text-yellow-400"
+        elif score >= 31:
+            return "Silver Helper", "text-slate-300"
+        elif score >= 11:
+            return "Bronze Helper", "text-amber-300"
+        else:
+            return "Newbie", "text-slate-400"
 
 
 class Request(db.Model):
@@ -180,9 +209,14 @@ class Request(db.Model):
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     expires_at = db.Column(db.DateTime, nullable=False)
+    helper_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    completed_at = db.Column(db.DateTime, nullable=True)
+
     status = db.Column(db.String(20), default="open")  # open / claimed / closed
 
-    user = db.relationship("User", backref="requests")
+    user = db.relationship("User",backref="requests",foreign_keys=[user_id])   # tell SQLAlchemy exactly which FK is for "user"
+    helper = db.relationship("User",foreign_keys=[helper_id],backref="helped_requests")
+
 
     def to_dict(self, include_user=False, user_lat=None, user_lng=None):
         d = {
@@ -367,6 +401,43 @@ def haversine_distance_km(lat1, lon1, lat2, lon2):
 
     return R * c
 
+# ------------------ COMPLETE REQUEST ------------------
+def update_user_scores(user):
+    """Recompute and store user's trust_score and kindness_score based on completed requests."""
+    if not user:
+        return
+
+    # Count completed helps where user was helper
+    helped_count = Request.query.filter(
+        Request.helper_id == user.id,
+        Request.status == "completed",
+        Request.completed_at != None
+    ).count()
+
+    # Sum total hours volunteered
+    rows = Request.query.filter(
+        Request.helper_id == user.id,
+        Request.status == "completed",
+        Request.completed_at != None
+    ).all()
+
+    total_hours = 0.0
+    for r in rows:
+        if r.created_at and r.completed_at:
+            total_hours += max(0, (r.completed_at - r.created_at).total_seconds() / 3600.0)
+    total_hours = round(total_hours, 2)
+
+    # Simple scoring (tweak if Module-1 has other rules)
+    trust_score = min(100, helped_count * 5)           # example: +5 trust per complete
+    kindness_score = helped_count * 10 + int(total_hours * 2) + trust_score
+
+    # Save to DB
+    user.trust_score = int(trust_score)
+    user.kindness_score = int(kindness_score)
+
+    db.session.commit()
+
+
 # ------------------ ROUTES: CORE PAGES ------------------
 @app.route("/")
 def home():
@@ -454,7 +525,7 @@ def login():
             access_token = create_jwt_for_user(user)
             print("JWT after login:", access_token)  # DEBUG
 
-            next_url = request.args.get("next") or url_for("home")
+            next_url = request.args.get("next") or url_for("dashboard")
             return redirect(next_url)
 
         # OTP LOGIN -----------------------------------------
@@ -1426,6 +1497,7 @@ def on_message_read(data):
     emit("read", {"message_id": mid}, room=room)
 
 
+# ----------------- REQUEST -----------------
 @app.route("/requests/<int:request_id>/delete", methods=["POST"])
 @login_required
 def delete_request(request_id):
@@ -1439,6 +1511,230 @@ def delete_request(request_id):
     db.session.commit()
     flash("Request removed.", "success")
     return redirect(url_for("list_requests"))
+
+
+@app.route("/request/<int:request_id>/claim", methods=["POST"])
+@login_required
+def claim_request(request_id):
+    user = current_user()
+    if not user:
+        flash("You must be logged in to claim a request.", "error")
+        return redirect(url_for("login"))
+
+    r = Request.query.get_or_404(request_id)
+
+    # Only allow claiming if it's open and not already claimed/completed
+    if r.status != "open":
+        flash("This request cannot be claimed (already claimed or closed).", "error")
+        return redirect(url_for("list_requests"))
+
+    # Prevent claiming your own request
+    if r.user_id == user.id:
+        flash("You cannot claim your own request.", "error")
+        return redirect(url_for("list_requests"))
+
+    r.helper_id = user.id
+    r.status = "claimed"
+    db.session.add(r)
+    db.session.commit()
+
+    flash("You have claimed this request. Good luck!", "success")
+    return redirect(url_for("list_requests"))
+
+
+@app.route("/request/<int:request_id>/complete", methods=["POST"])
+@login_required
+def complete_request(request_id):
+    user = current_user()  
+    if not user:
+        flash("You must be logged in to claim a request.", "error")
+        return redirect(url_for("login"))
+
+    r = Request.query.get_or_404(request_id)
+
+    # Security: only the helper assigned to this request can mark it complete
+    if r.helper_id != user.id:
+        flash("You are not allowed to complete this request.", "error")
+        return redirect(url_for("dashboard"))
+
+    r.status = "completed"
+    r.completed_at = datetime.utcnow()
+
+    db.session.add(r)
+    db.session.commit()
+
+    # Recompute helper stats
+    update_user_scores(user)
+
+    flash("Request marked as completed!", "success")
+    return redirect(url_for("dashboard"))
+
+
+# ----------------- PROFILE ------------------
+# ----------------- PROFILE ------------------
+@app.route("/profile", methods=["GET"])
+@login_required
+def profile():
+    return render_template("profile.html", user=current_user())
+
+@app.route("/profile/update", methods=["POST"])
+@login_required
+def update_profile():
+
+    user = current_user()
+
+    # Update simple fields
+    user.name = request.form.get("name", user.name)
+    user.phone = request.form.get("phone", user.phone)
+    user.dob = request.form.get("dob", user.dob)
+
+    # Image upload
+    file = request.files.get("profile_photo")
+
+    if file and file.filename != "" and allowed_image(file.filename):
+        filename = secure_filename(file.filename)
+        save_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+        file.save(save_path)
+
+        user.profile_photo = filename
+
+    db.session.commit()
+
+    # Update navbar immediately
+    session["user_name"] = user.name
+
+    flash("Profile updated successfully!", "success")
+    return redirect(url_for("profile"))
+
+
+# ------------------ DASHBOARD ------------------
+@app.route("/dashboard")
+@login_required
+def dashboard():
+    user = current_user()   
+
+    # Completed helps where this user was the helper
+    completed = Request.query.filter(
+        Request.helper_id == user.id,
+        Request.status == "completed",
+        Request.completed_at != None
+    ).order_by(Request.completed_at.desc()).all()
+
+    helped = len(completed)
+
+    # Total volunteering hours
+    total_hours = 0.0
+    for r in completed:
+        if r.created_at and r.completed_at:
+            total_hours += max(0, (r.completed_at - r.created_at).total_seconds() / 3600.0)
+    total_hours = round(total_hours, 2)
+
+    # Use stored fields when available
+    trust_score = user.trust_score or 0
+    kindness_score = user.kindness_score or (helped * 10 + int(total_hours * 2) + trust_score)
+    badge, badge_color = user.calculate_badge()
+
+    # Badge logic
+    if helped >= 25:
+        badge = "Gold Helper"
+        badge_color = "text-yellow-300"
+    elif helped >= 10:
+        badge = "Silver Helper"
+        badge_color = "text-slate-300"
+    elif helped >= 1:
+        badge = "Bronze Helper"
+        badge_color = "text-orange-300"
+    else:
+        badge = "Newbie"
+        badge_color = "text-slate-400"
+
+    # Prepare history items for template
+    history_items = []
+    for r in completed[:10]:
+        hrs = 0.0
+        if r.created_at and r.completed_at:
+            hrs = round(max(0, (r.completed_at - r.created_at).total_seconds() / 3600.0), 2)
+        history_items.append({
+            "title": r.title,
+            "category": r.category,
+            "date": r.completed_at.strftime("%Y-%m-%d %H:%M") if r.completed_at else "",
+            "hours": hrs
+        })
+
+    # Fake/simple progression data 
+    chart_labels = [ (r.completed_at.strftime("%b %d") if r.completed_at else "") for r in completed[-7:] ]
+    chart_trust = [ trust_score for _ in chart_labels ]       # simple snapshot
+    chart_kindness = [ kindness_score for _ in chart_labels ]
+
+    return render_template(
+        "dashboard.html",
+        user=user,
+        stats={
+            "helped": helped,
+            "total_hours": total_hours,
+            "trust": trust_score,
+            "kindness": kindness_score,
+            "badge": badge,
+            "badge_color": badge_color
+        },
+        history=history_items,
+        chart_labels=chart_labels,
+        chart_trust=chart_trust,
+        chart_kindness=chart_kindness
+    )
+
+# ------------------ HISTORY ------------------
+@app.route("/history")
+@login_required
+def history_page():
+    user = current_user()
+
+    # Filters
+    category = request.args.get("category")
+    search = request.args.get("search", "").strip()
+    date_from = request.args.get("from")
+    date_to = request.args.get("to")
+
+    q = Request.query.filter(
+        Request.helper_id == user.id,
+        Request.status == "completed"
+    )
+
+    # Apply filters
+    if category and category != "all":
+        q = q.filter(Request.category == category)
+
+    if search:
+        q = q.filter(Request.title.ilike(f"%{search}%"))
+
+    if date_from:
+        q = q.filter(Request.completed_at >= date_from)
+
+    if date_to:
+        q = q.filter(Request.completed_at <= date_to)
+
+    q = q.order_by(Request.completed_at.desc())
+
+    # Final data
+    items = q.all()
+
+    # For dropdown categories
+    categories = (
+        db.session.query(Request.category)
+        .filter(Request.helper_id == user.id, Request.status == "completed")
+        .distinct()
+        .all()
+    )
+
+    categories = [c[0] for c in categories]
+
+    return render_template(
+        "history.html",
+        user=user,
+        items=items,
+        categories=categories
+    )
+
 
 # ------------------ MAIN ------------------
 if __name__ == "__main__":
