@@ -4,6 +4,8 @@ import math
 import time
 import random
 import string
+
+
 from reputation_service import analyze_review_quality, calculate_reputation_points
 from sqlalchemy import func
 from flask_cors import CORS
@@ -21,7 +23,8 @@ from flask_mail import Mail, Message
 from email_config import EMAIL_ADDRESS, EMAIL_PASSWORD
 
 import firebase_admin
-from firebase_admin import credentials, auth as firebase_auth
+from firebase_admin import credentials, auth as firebase_auth, messaging
+
 
 from flask_jwt_extended import (
     JWTManager, create_access_token, jwt_required, get_jwt_identity
@@ -51,15 +54,58 @@ otp_store = {}
 app = Flask(__name__)
 CORS(app, supports_credentials=True)
 
-# -------- Firebase Admin (for Google sign-in) --------
+# -------- Firebase Admin (for Google sign-in + FCM) --------
 FIREBASE_CRED_PATH = os.getenv(
     "GOOGLE_APPLICATION_CREDENTIALS",
     "firebase-service-account.json",  # default path
 )
 
 if not firebase_admin._apps:
-    cred = credentials.Certificate(FIREBASE_CRED_PATH)
-    firebase_admin.initialize_app(cred)
+    try:
+        cred = credentials.Certificate(FIREBASE_CRED_PATH)
+        firebase_admin.initialize_app(cred)
+        print("[Firebase] Initialized with", FIREBASE_CRED_PATH)
+    except Exception as e:
+        # IMPORTANT: don't crash the app if Firebase isn't configured locally
+        print("[Firebase] WARNING: could not initialize Firebase Admin:", e)
+        print("[Firebase] Google login / push notifications will be disabled on this machine.")
+# ------------- FCM PUSH HELPERS -------------
+def send_push_notification(token, title, body, data=None):
+    """
+    Low-level helper: send a push to a single FCM token.
+    Safe to call even if Firebase Admin isn't configured.
+    """
+    if not token:
+        return
+
+    # If Firebase Admin didn't initialize (e.g. teammate doesn't have JSON),
+    # just skip sending silently.
+    if not firebase_admin._apps:
+        print("[FCM] Skipping push; Firebase Admin not initialized on this machine.")
+        return
+
+    try:
+        msg = messaging.Message(
+            token=token,
+            notification=messaging.Notification(
+                title=title,
+                body=body,
+            ),
+            data={k: str(v) for k, v in (data or {}).items()},
+        )
+        resp = messaging.send(msg)
+        print("[FCM] Sent push, id:", resp)
+    except Exception as e:
+        print("[FCM] Error sending push:", e)
+
+
+def send_push_to_user(user, title, body, data=None):
+    """
+    Convenience wrapper; reads user.fcm_token.
+    """
+    if not user or not getattr(user, "fcm_token", None):
+        return
+    send_push_notification(user.fcm_token, title, body, data=data)
 
 # ------------------ CONFIG ------------------
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-change-me")
@@ -122,7 +168,8 @@ class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(255), unique=True, nullable=False)
     name = db.Column(db.String(120), nullable=False)
-
+    lat = db.Column(db.Float, nullable=True)  # User's last known latitude
+    lng = db.Column(db.Float, nullable=True)  # User's last known longitude
     # For normal email/password users (nullable so Firebase-only accounts still work)
     password_hash = db.Column(db.String(255), nullable=True)
 
@@ -150,7 +197,9 @@ class User(db.Model):
     phone = db.Column(db.String(20))
     dob = db.Column(db.String(20))  # or Date type if you prefer
     
+    fcm_token = db.Column(db.String(512), nullable=True)
 
+    
 
     def set_password(self, password: str):
         self.password_hash = generate_password_hash(password)
@@ -181,7 +230,7 @@ class User(db.Model):
             return "Bronze Helper", "text-amber-300"
         else:
             return "Newbie", "text-slate-400"
-
+    
 
 class Request(db.Model):
     __tablename__ = "requests"
@@ -263,6 +312,173 @@ class Request(db.Model):
             except Exception:
                 d["distance_km"] = None
         return d
+# ------------------ FCM HELPER FUNCTIONS ------------------
+
+# ------------------ FCM HELPER FUNCTIONS ------------------
+
+def send_fcm_to_token(token, title, body, data=None):
+    """
+    Low-level helper: send a push to a single FCM token.
+    Safe: will not crash the app if Firebase isn't configured.
+    """
+    if not token:
+        return False
+
+    # If Firebase Admin failed to initialize on this machine, skip
+    if not firebase_admin._apps:
+        print("[FCM] Skipping send_fcm_to_token: Firebase not initialized")
+        return False
+
+    try:
+        msg = messaging.Message(
+            notification=messaging.Notification(title=title, body=body),
+            data={k: str(v) for k, v in (data or {}).items()},
+            token=token,
+        )
+        resp = messaging.send(msg)
+        print("[FCM] Sent message:", resp)
+        return True
+    except Exception as e:
+        print("[FCM] ERROR sending FCM:", e)
+        return False
+
+
+# --------- FCM HELPER ---------
+def send_fcm_to_user(user, title, body, data=None):
+    """
+    Send a push notification to a single user if they have an fcm_token.
+    Returns True on success, False otherwise.
+    """
+    if not user or not getattr(user, "fcm_token", None):
+        print("[FCM] No token for user", getattr(user, "id", None))
+        return False
+
+    try:
+        msg = messaging.Message(
+            token=user.fcm_token,
+            notification=messaging.Notification(
+                title=title,
+                body=body,
+            ),
+            data={k: str(v) for k, v in (data or {}).items()},
+        )
+        resp = messaging.send(msg)
+        print("[FCM] Sent push:", resp)
+        return True
+    except Exception as e:
+        print("[FCM] Error sending push:", e)
+        return False
+def send_fcm_for_emotional_chat(listener, from_user):
+    """
+    Notify listener AND save to DB for the bell icon.
+    """
+    try:
+        # 1. Send Mobile Push (Popup)
+        send_push_to_user(
+            listener,
+            title="Emotional Support Request",
+            body=f"{from_user.name} is feeling low and wants to chat.",
+            data={"type": "EMOTIONAL_CHAT", "sender_id": str(from_user.id)}
+        )
+
+        # 2. SAVE TO DB (This fixes the Bell Icon)
+        push_notification(
+            user_id=listener.id,
+            type="chat",
+            message=f"{from_user.name} is feeling low and wants to chat.",
+            link=url_for('chat_with_user', other_user_id=from_user.id)
+        )
+        print(f"[FCM] Emotional chat alert saved for listener {listener.id}")
+
+    except Exception as e:
+        print(f"[FCM] Error in send_fcm_for_emotional_chat: {e}")
+# --- 1. NEARBY HELP REQUEST ---
+# --- UPDATE IN app.py ---
+
+
+def send_fcm_for_need_request(req_obj):
+    """
+    Notify users nearby AND save to database for the bell icon stack.
+    """
+    try:
+        # FIX: Get ALL users with location (removed fcm_token filter)
+        candidates = User.query.filter(
+            User.lat.isnot(None),
+            User.lng.isnot(None),
+            User.id != req_obj.user_id 
+        ).all()
+
+        count = 0
+        radius_km = 5.0 
+
+        for u in candidates:
+            dist = haversine_distance_km(req_obj.lat, req_obj.lng, u.lat, u.lng)
+            
+            if dist <= radius_km:
+                title = f"Help needed nearby ({round(dist, 1)}km)"
+                body = f"{req_obj.user.name} needs help with {req_obj.category}: {req_obj.title}"
+                
+                # 1. SAVE TO DB (Always do this for the Bell Icon)
+                push_notification(
+                    user_id=u.id,
+                    type="nearby",
+                    message=body,
+                    link=url_for('list_requests') 
+                )
+
+                # 2. Send Mobile Push (Only if they have a token)
+                if u.fcm_token:
+                    send_fcm_to_user(
+                        u, 
+                        title=title, 
+                        body=body,
+                        data={"type": "NEARBY_REQUEST", "request_id": str(req_obj.id)}
+                    )
+                
+                count += 1
+        
+        print(f"[FCM] Saved nearby alerts for {count} users.")
+
+    except Exception as e:
+        print(f"[FCM] Error in send_fcm_for_need_request: {e}")
+
+
+def send_fcm_for_sos(from_user):
+    """
+    SOS Alert -> Notify Verified Helpers AND save to DB stack.
+    """
+    try:
+        # FIX: Get ALL Trusted Helpers (removed fcm_token filter)
+        helpers = User.query.filter(
+            User.is_trusted_helper == True,
+            User.id != from_user.id
+        ).all()
+
+        alert_count = 0
+        for h in helpers:
+            # 1. SAVE TO DB (Always do this for the Bell Icon)
+            push_notification(
+                user_id=h.id,
+                type="sos",
+                message=f"🚨 SOS: {from_user.name} needs immediate help!",
+                link=url_for('chat_with_user', other_user_id=from_user.id)
+            )
+
+            # 2. Send Mobile Push (Only if they have a token)
+            if h.fcm_token:
+                send_fcm_to_user(
+                    h,
+                    title="🚨 SOS ALERT!",
+                    body=f"EMERGENCY: {from_user.name} needs help!",
+                    data={"type": "SOS_ALERT", "from_user_id": str(from_user.id)}
+                )
+            
+            alert_count += 1
+            
+        print(f"[FCM] SOS alerts saved for {alert_count} trusted helpers.")
+
+    except Exception as e:
+        print(f"[FCM] Error in send_fcm_for_sos: {e}")
 class Offer(db.Model):
     __tablename__ = "offers"
     id = db.Column(db.Integer, primary_key=True)
@@ -322,9 +538,23 @@ class ChatMessage(db.Model):
     language = db.Column(db.String(10), nullable=True)  # original language code if known
 
     conversation = db.relationship("Conversation", backref="messages")
+# ------------------ MODELS: Notifications ------------------
+class Notification(db.Model):
+    __tablename__ = "notifications"
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
 
+    type = db.Column(db.String(50), nullable=False)  # "chat", "offer", "accepted", "sos", "nearby"
+    message = db.Column(db.String(255), nullable=False)
+    link = db.Column(db.String(255), nullable=True)  # where to go when clicked
+
+    is_read = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship("User", backref="notifications")
 
 # ------------------ MODELS: Resources ------------------
+
 class Resource(db.Model):
     __tablename__ = "resources"
     id = db.Column(db.Integer, primary_key=True)
@@ -403,6 +633,16 @@ def get_or_create_conversation(user1_id, user2_id):
     db.session.add(conv)
     db.session.commit()
     return conv
+
+def push_notification(user_id, type, message, link=None):
+    n = Notification(
+        user_id=user_id,
+        type=type,
+        message=message,
+        link=link
+    )
+    db.session.add(n)
+    db.session.commit()
 
 
 def serialize_message(msg: ChatMessage):
@@ -483,6 +723,37 @@ def generate_otp_code():
     """Generate a 6-digit numeric OTP."""
     return "".join(random.choices(string.digits, k=6))
 
+def get_notification_count(user: User) -> int:
+    """
+    How many 'notifications' the user has.
+    - New offers on my requests (still pending)
+    - Active jobs where I'm the helper (requests in progress)
+    """
+    if not user:
+        return 0
+
+    # 1) Offers that other users made on *my* requests
+    pending_offers_for_me = (
+        Offer.query
+        .join(Request, Offer.request_id == Request.id)
+        .filter(
+            Request.user_id == user.id,
+            Offer.status == "pending"
+        )
+        .count()
+    )
+
+    # 2) Requests where I am the assigned helper and it's still in progress
+    my_active_jobs = (
+        Request.query
+        .filter(
+            Request.helper_id == user.id,
+            Request.status == "in_progress"
+        )
+        .count()
+    )
+
+    return pending_offers_for_me + my_active_jobs
 
 # Make current user available in all templates as `current_user`
 @app.context_processor
@@ -493,7 +764,16 @@ def inject_user():
         translation_enabled = True
     elif globals().get('gt_translator'):
         translation_enabled = True
-    return dict(current_user=current_user(), translation_enabled=translation_enabled)
+
+    user = current_user()
+    notification_count = get_notification_count(user) if user else 0
+
+    return dict(
+        current_user=user,
+        translation_enabled=translation_enabled,
+        notification_count=notification_count,
+    )
+
 
 # ------------------ GEO UTILS ------------------
 def haversine_distance_km(lat1, lon1, lat2, lon2):
@@ -552,6 +832,62 @@ def update_user_scores(user):
 
     user.kindness_score = int(current_kindness)
     db.session.commit()
+
+def send_push_to_user(user: User, title: str, body: str, data: dict | None = None):
+    """
+    Best-effort push via FCM.
+    - Does nothing if Firebase isn't configured
+    - Does nothing if user has no fcm_token
+    - Never crashes a request; logs errors only
+    """
+    try:
+        # If Firebase wasn't initialised successfully at startup, skip
+        if not firebase_admin._apps:
+            return
+
+        if not user or not getattr(user, "fcm_token", None):
+            return
+
+        message = messaging.Message(
+            token=user.fcm_token,
+            notification=messaging.Notification(
+                title=title,
+                body=body,
+            ),
+            data={k: str(v) for k, v in (data or {}).items()},
+        )
+        resp = messaging.send(message)
+        print("[FCM] Sent push:", resp)
+    except Exception as e:
+        print("[FCM] ERROR sending push:", e)
+        
+def send_fcm_notification(token, title, body, data=None):
+    """
+    Send a push notification to a single FCM device token.
+    We send a DATA-ONLY message so our JS/service worker controls display.
+    """
+    if not token:
+        print("[FCM] No token provided, skipping")
+        return
+
+    try:
+        payload_data = {
+            "title": title,
+            "body": body,
+        }
+        if data:
+            # merge any extra keys
+            payload_data.update({str(k): str(v) for k, v in data.items()})
+
+        message = messaging.Message(
+            token=token,
+            data=payload_data,   # <--- DATA ONLY, no "notification" field
+        )
+        response = messaging.send(message)
+        print("[FCM] Successfully sent message:", response)
+    except Exception as e:
+        print("[FCM] Error sending message:", e)
+
 
 # ------------------ ROUTES: CORE PAGES ------------------
 @app.route("/")
@@ -850,8 +1186,7 @@ def auth_google():
     email = decoded.get("email")
     uid = decoded.get("uid")
     name = decoded.get("name") or (email.split("@")[0] if email else "Google user")
-    photo_url = decoded.get("photo_url")
-
+    photo_url = decoded.get("picture")
 
     if not email:
         return jsonify({"error": "Google account has no email"}), 400
@@ -867,7 +1202,8 @@ def auth_google():
         )
         db.session.add(user)
     else:
-        if (not user.profile_photo or user.profile_photo == "default.png") and photo_url:
+        # If we have a Google photo and user still has default or empty photo, update it
+        if photo_url and (not user.profile_photo or user.profile_photo == "default.png"):
             user.profile_photo = photo_url
 
     db.session.commit()
@@ -903,7 +1239,12 @@ def google_auth():
     uid = decoded["uid"]
     email = decoded.get("email")
     name = decoded.get("name") or (email.split("@")[0] if email else "Google User")
-    photo_url = decoded.get("picture")
+
+    photo_url = decoded.get("picture")   # 👈 Google profile image URL
+
+
+    picture = decoded.get("picture")
+
     # 1) Try find user by firebase_uid
     user = User.query.filter_by(firebase_uid=uid).first()
 
@@ -913,16 +1254,20 @@ def google_auth():
 
     # 3) If still no user, create one
     if not user:
+
         user = User(
             email=email,
             name=name,
             firebase_uid=uid,
             profile_photo=photo_url or "default.png",  # 👈 store Google photo
         )
+
+        user = User(email=email, name=name, firebase_uid=uid, profile_photo=picture or "default.png")
+
         db.session.add(user)
     else:
-        if (not user.profile_photo or user.profile_photo == "default.png") and photo_url:
-            user.profile_photo = photo_url
+        if (not user.profile_photo or user.profile_photo == "default.png") and picture:
+            user.profile_photo = picture
         # Link existing account with this Firebase UID
         if not user.firebase_uid:
             user.firebase_uid = uid
@@ -946,6 +1291,8 @@ def google_auth():
     return jsonify({"redirect_url": next_url})
 
 # ---------- TRUSTED HELPER VERIFICATION ----------
+# In app.py
+
 @app.route("/trusted-helper", methods=["GET", "POST"])
 @login_required
 def trusted_helper():
@@ -963,14 +1310,13 @@ def trusted_helper():
         user.is_trusted_helper = True
         db.session.commit()
 
-        # 🔄 Keep session in sync so navbar updates
+        #  Keep session in sync so navbar updates
         session["is_trusted_helper"] = True
 
         flash("You are now a VERIFIED Trusted Helper!", "success")
         return redirect(url_for("trusted_helper"))
 
     return render_template("trusted_helper.html", user=user)
-
 @app.route("/profile")
 @login_required
 def profile():
@@ -1043,6 +1389,8 @@ def api_me():
             "id_verification_status": user.id_verification_status,
         }
     )
+    
+
 
 # ------------------ API: NEARBY REQUESTS FOR MAP ------------------
 @app.route("/api/requests/nearby")
@@ -1140,36 +1488,6 @@ def api_create_request():
     db.session.add(req)
     db.session.commit()
     return jsonify({"request": req.to_dict(include_user=True)}), 201
-
-
-
-@app.route("/request/<int:request_id>/claim", methods=["POST"])
-@login_required
-def claim_request(request_id):
-    user = current_user()  
-    if not user:
-        flash("You must be logged in.", "error")
-        return redirect(url_for("login"))
-
-    r = Request.query.get_or_404(request_id)
-
-    # Cannot claim your own request
-    if r.user_id == user.id:
-        flash("You cannot claim your own request.", "error")
-        return redirect(url_for("list_requests"))
-
-    # Cannot claim already claimed request
-    if r.helper_id:
-        flash("This request is already claimed.", "error")
-        return redirect(url_for("list_requests"))
-
-    r.helper_id = user.id
-    r.status = "claimed"
-
-    db.session.commit()
-
-    flash("You have successfully claimed this request!", "success")
-    return redirect(url_for("dashboard"))
 
 
 # List active requests (optionally nearby)
@@ -1320,23 +1638,70 @@ def need_help():
         expires_at = datetime.utcnow() + timedelta(minutes=expiry_minutes)
 
         req = Request(
-            user_id=user.id,
-            title=title,
-            category=category,
-            description=description_main,
-            is_offer=False,
-            area=area or None,
-            landmark=landmark or None,
-            urgency=urgency or None,
-            time_window=time_window or None,
-            contact_method=contact_method or None,
-            contact_info=contact_info or None,
-            lat=lat,
-            lng=lng,
-            expires_at=expires_at,
+        user_id=user.id,
+        title=title,
+        category=category,
+        description=description_main,
+        is_offer=False,
+        area=area or None,
+        landmark=landmark or None,
+        urgency=urgency or None,
+        time_window=time_window or None,
+        contact_method=contact_method or None,
+        contact_info=contact_info or None,
+        lat=lat,
+        lng=lng,
+        expires_at=expires_at,
         )
         db.session.add(req)
         db.session.commit()
+
+        db.session.add(req)
+        db.session.commit()
+
+        # ---- Push notifications to helpers ----
+        try:
+            print(f"[FCM] Trigger nearby helpers for req {req.id}")
+            send_fcm_for_need_request(req)
+
+        except Exception as e:
+            print("[FCM] nearby help push error:", e)
+
+        # Fallback / additional broadcast: notify all trusted helpers with FCM tokens
+        try:
+            send_fcm_to_trusted_helpers(
+                title="Someone nearby needs help",
+                body=f"{user.name} posted: “{title}” (category: {category})",
+                data={
+                    "type": "NEED_HELP",
+                    "request_id": req.id,
+                    "category": category,
+                },
+            )
+        except Exception as e:
+            print("[FCM] Failed to broadcast need_help notification:", e)
+
+        # ---- Flash + redirect as before ----
+        if current_user():
+            flash("Your need request has been posted.", "success")
+        else:
+            flash("Your quick help request has been posted (as guest).", "success")
+
+        return redirect(url_for("need_help"))
+
+        #  Push: notify trusted helpers
+        try:
+            send_fcm_to_trusted_helpers(
+                title="Someone nearby needs help",
+                body=f"{user.name} posted: “{title}” (category: {category})",
+                data={
+                    "type": "NEED_HELP",
+                    "request_id": req.id,
+                    "category": category,
+                },
+            )
+        except Exception as e:
+            print("[FCM] Failed to broadcast need_help notification:", e)
 
         if current_user():
             flash("Your need request has been posted.", "success")
@@ -1492,44 +1857,75 @@ def can_help():
 @app.route("/requests/<int:request_id>/offer", methods=["POST"])
 @login_required
 def make_offer(request_id):
-    """
-    Helper clicks 'Offer Help' OR 'Request Help'. 
-    Adds them to a list for the owner to review.
-    """
     req_obj = Request.query.get_or_404(request_id)
     user = current_user()
 
-    # 1. Validation: Can't interact with own post
+    # Cannot offer help to your own post
     if req_obj.user_id == user.id:
         flash("You cannot reply to your own post.", "error")
-        # Redirect back to the correct mode
         return redirect(url_for("list_requests", mode="offer" if req_obj.is_offer else "need"))
 
-    # 2. Validation: Request must be open
+    # Request must be open
     if req_obj.status != "open":
         flash("This post is no longer active.", "error")
         return redirect(url_for("list_requests", mode="offer" if req_obj.is_offer else "need"))
 
-    # 3. Check if already offered
+    # Already contacted?
     existing_offer = Offer.query.filter_by(request_id=req_obj.id, helper_id=user.id).first()
     if existing_offer:
         flash("You have already contacted this person.", "info")
         return redirect(url_for("list_requests", mode="offer" if req_obj.is_offer else "need"))
 
-    # 4. Create the Offer (or Request for item)
-    new_offer = Offer(request_id=req_obj.id, helper_id=user.id)
+    # --- FIX: Force new offers to always be 'pending' ---
+    new_offer = Offer(
+        request_id=req_obj.id,
+        helper_id=user.id,
+        status="pending"
+    )
     db.session.add(new_offer)
     db.session.commit()
+        # Push: notify the owner of this request
+    try:
+        title = "New response on your LifeLine post"
+        if req_obj.is_offer:
+            body = f"{user.name} is interested in your offer: “{req_obj.title}”"
+        else:
+            body = f"{user.name} offered help on: “{req_obj.title}”"
 
-    # Optional: Auto-start chat
+        send_fcm_to_user(
+            req_obj.user_id,
+            title=title,
+            body=body,
+            data={
+                "type": "REQUEST_REPLY",
+                "request_id": req_obj.id,
+                "from_user_id": user.id,
+            },
+        )
+    except Exception as e:
+        print("[FCM] Failed to send offer notification:", e)
+
+    # Auto-start chat
     get_or_create_conversation(req_obj.user_id, user.id)
 
-    if req_obj.is_offer:
-        flash("Request sent! The owner has been notified.", "success")
-        return redirect(url_for("list_requests", mode="offer")) # <--- KEEPS YOU ON OFFER PAGE
-    else:
-        flash("Offer sent! The requester has been notified.", "success")
-        return redirect(url_for("list_requests", mode="need")) # <--- KEEPS YOU ON NEED PAGE
+    flash("Your offer has been sent!", "success")
+
+    return redirect(url_for("list_requests", mode="offer" if req_obj.is_offer else "need"))
+
+@app.route("/debug/fcm-users")
+def debug_fcm_users():
+    users = User.query.all()
+    data = []
+    for u in users:
+        data.append({
+            "id": u.id,
+            "email": u.email,
+            "is_trusted_helper": bool(u.is_trusted_helper),
+            "has_fcm_token": bool(u.fcm_token),
+            "fcm_token": u.fcm_token[:20] + "..." if u.fcm_token else None,
+        })
+    return jsonify(data)
+
 
 @app.route("/requests/offers/<int:offer_id>/accept", methods=["POST"])
 @login_required
@@ -1566,7 +1962,21 @@ def accept_offer(offer_id):
     db.session.commit()
 
     flash(f"You accepted {offer.helper.name}'s help! Check your Dashboard to manage it.", "success")
-    
+        #  Push: notify helper that their offer was accepted
+    try:
+        send_fcm_to_user(
+            offer.helper_id,
+            title="Your help has been accepted 🎉",
+            body=f"{user.name} accepted your offer on: “{req_obj.title}”",
+            data={
+                "type": "OFFER_ACCEPTED",
+                "request_id": req_obj.id,
+                "owner_id": user.id,
+            },
+        )
+    except Exception as e:
+        print("[FCM] Failed to send offer-accepted notification:", e)
+
     # SMART REDIRECT: Go back to where the user came from (List or Dashboard)
     return redirect(request.referrer or url_for("dashboard"))
 
@@ -1848,30 +2258,77 @@ def dashboard():
     )
 
 
-
+@app.route("/api/user/location", methods=["POST"])
+@login_required
+def update_user_location():
+    """
+    Updates the logged-in user's live location.
+    Required for receiving 'nearby' help requests.
+    """
+    data = request.get_json() or {}
+    try:
+        lat = float(data.get("lat"))
+        lng = float(data.get("lng"))
+        
+        user = current_user()
+        user.lat = lat
+        user.lng = lng
+        db.session.commit()
+        
+        return jsonify({"ok": True})
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid location data"}), 400
+    
 @app.route("/emotional")
 def emotional_ping():
     user = current_user()
+    
+    # 1. Guest Handling: If not logged in, use the Emergency Guest account
     if not user:
-        # quick guest flow: use Emergency Guest
         user = get_emergency_user()
         login_user(user)
-    # find a trusted helper (listener)
-    listener = User.query.filter(User.is_trusted_helper == True, User.id != user.id).first()
-    if not listener:
-        # create or get a generic listener account
-        listener = User.query.filter_by(email="listener@lifeline.local").first()
-        if not listener:
-            listener = User(email="listener@lifeline.local", name="Listener")
-            listener.is_trusted_helper = True
-            # set random password
-            listener.password_hash = generate_password_hash(os.urandom(12).hex())
-            db.session.add(listener)
-            db.session.commit()
 
+    # 2. Find a Listener (Trusted Helper)
+    # Exclude the user themselves so they don't chat with themselves
+    listener = User.query.filter(User.is_trusted_helper == True, User.id != user.id).first()
+    
+    # Fallback: If no trusted helper is found, try to find ANY other user (for demo purposes)
+    if not listener:
+        listener = User.query.filter(User.id != user.id).first()
+
+    # If still no listener, we can't start a chat
+    if not listener:
+        flash("No listeners are currently available. Please try posting a request.", "info")
+        return redirect(url_for('home'))
+
+    print(f"[Emotional] Connecting user {user.id} with listener {listener.id}")
+
+    # 3. Create or Get Conversation
     conv = get_or_create_conversation(user.id, listener.id)
+
+    # 4. Notify the Listener (Quiet Notification, not SOS)
+    try:
+        send_fcm_for_emotional_chat(listener, user)
+    except Exception as e:
+        print(f"[FCM] Error sending emotional chat push: {e}")
+
+    # 5. Redirect to the Chat Room
     return redirect(url_for('chat_with_user', other_user_id=listener.id))
 
+# In app.py
+
+
+@app.route("/sos/trigger", methods=["POST"])
+@login_required
+def trigger_sos():
+    user = current_user()
+    
+    # 1. Broadcast the alert
+    send_fcm_for_sos(user) 
+    
+    # 2. Feedback to the user
+    flash("SOS BROADCAST SENT! Nearby Trusted Helpers have been alerted.", "error")
+    return redirect(request.referrer or url_for("home"))
 
 @app.route("/api/conversations/<int:conv_id>/messages")
 @login_required
@@ -1882,6 +2339,46 @@ def api_get_messages(conv_id):
         return jsonify({"error": "Unauthorized"}), 403
     msgs = ChatMessage.query.filter_by(conversation_id=conv.id).order_by(ChatMessage.created_at.asc()).all()
     return jsonify({"messages": [serialize_message(m) for m in msgs]})
+
+@app.route("/api/notifications")
+def api_notifications():
+    if "user_id" not in session:
+        return jsonify([])
+
+    user_id = session["user_id"]
+    
+    notes = Notification.query.filter_by(user_id=user_id)\
+        .order_by(Notification.created_at.desc())\
+        .limit(10).all()
+
+    return jsonify([
+        {
+            "id": n.id,
+            "type": n.type,
+            "message": n.message,
+            "link": n.link,
+            "created_at": n.created_at.strftime("%I:%M %p")
+        }
+        for n in notes
+    ])
+@app.route("/debug/test-push")
+@login_required
+def debug_test_push():
+    user = current_user()
+    if not user or not getattr(user, "fcm_token", None):
+        return "No FCM token for this user. Make sure initFCM ran.", 400
+
+    send_push_to_user(
+        user,
+        title="LifeLine test notification",
+        body="If you see this, FCM is working ",
+        data={
+            "type": "DEBUG",
+            "user_id": str(user.id),
+        },
+    )
+    return "Test push sent!"
+
 
 
 @app.route("/api/conversations/<int:conv_id>/mark_read", methods=["POST"])
@@ -1912,6 +2409,29 @@ def api_mark_conversation_read(conv_id):
         db.session.rollback()
         return jsonify({"error": "failed"}), 500
 
+@app.route("/api/notification-count")
+def api_notification_count():
+    if "user_id" not in session:
+        return jsonify({"count": 0})
+
+    user_id = session["user_id"]
+
+    unread = Notification.query.filter_by(user_id=user_id, is_read=False).count()
+    return jsonify({"count": unread})
+
+@app.route("/api/notifications/read", methods=["POST"])
+def api_mark_notifications_read():
+    if "user_id" not in session:
+        return jsonify({"ok": False})
+
+    user_id = session["user_id"]
+
+    Notification.query.filter_by(user_id=user_id, is_read=False)\
+        .update({"is_read": True})
+
+    db.session.commit()
+
+    return jsonify({"ok": True})
 
 @app.route("/api/translate", methods=["POST"])
 @login_required
@@ -1935,6 +2455,29 @@ def api_translate():
 
     translated = translate_text(text, target)
     return jsonify({"translated": translated})
+
+@app.route("/api/fcm/register", methods=["POST"])
+@login_required
+def api_register_fcm():
+    """
+    Save/update the current logged-in user's FCM token.
+    Frontend should call this after it gets a token from Firebase Messaging.
+    """
+    user = current_user()
+    data = request.get_json() or {}
+    token = (data.get("token") or "").strip()
+
+    if not token:
+        return jsonify({"error": "token required"}), 400
+
+    user.fcm_token = token
+    db.session.commit()
+
+    return jsonify({"ok": True})
+
+@app.route('/firebase-messaging-sw.js')
+def firebase_sw():
+    return app.send_static_file('firebase-messaging-sw.js')
 
 
 # ------------------ SOCKET.IO EVENTS ------------------
@@ -1987,62 +2530,107 @@ def on_stop_typing(data):
     room = f"chat_{conv_id}"
     emit("stop_typing", {"user_id": user.id}, room=room, include_self=False)
 
-
 @socketio.on("send_message")
 def on_send_message(data):
-    # data: {conversation_id, text, language (optional), file_data, file_name, file_size, is_image}
+    """
+    Handle a chat message and send a push notification to the other participant.
+    Expected data:
+      {
+        "conversation_id": int,
+        "text": str,
+        "temp_id": optional client-side id,
+        "language": optional,
+        "file_data": optional,
+        "file_name": optional,
+        "file_size": optional,
+        "is_image": optional
+      }
+    """
     conv_id = data.get("conversation_id")
-    text = data.get("text", "")
+    text = (data.get("text") or "").strip()
     temp_id = data.get("temp_id")
     lang = data.get("language")
     file_data = data.get("file_data")
     file_name = data.get("file_name")
     file_size = data.get("file_size")
     is_image = data.get("is_image", False)
-    
+
     user = current_user()
-    
-    # Log file attachment info
-    if file_data:
-        file_data_preview = file_data[:50] if file_data else None
-        print(f"[SEND_MESSAGE] Has file attachment: {file_name} ({file_size}), is_image: {is_image}, data preview: {file_data_preview}...")
-    
-    print(f"[SEND_MESSAGE] From user {user.id if user else 'None'} to conv {conv_id}: {text[:50] if text else '[File attachment]'}")
-    
-    # Allow empty text if there's a file attachment
-    if not user or not conv_id or (not text and not file_data):
-        print(f"[SEND_MESSAGE] Rejected: missing user, conv_id, or content")
-        return
-        
-    conv = Conversation.query.get(conv_id)
-    if not conv or user.id not in conv.participants():
-        print(f"[SEND_MESSAGE] Rejected: conv not found or user not participant")
+    print(f"[SEND_MESSAGE] from user={user.id if user else None}, conv={conv_id}, text='{text[:50]}'")
+
+    # ---------- Validation ----------
+    if not user or not conv_id:
+        print("[SEND_MESSAGE] Missing user or conversation_id")
         return
 
-    msg = ChatMessage(conversation_id=conv.id, sender_id=user.id, text=text or "", language=lang)
+    conv = Conversation.query.get(conv_id)
+    if not conv:
+        print(f"[SEND_MESSAGE] Conversation {conv_id} not found")
+        return
+
+    if user.id not in conv.participants():
+        print(f"[SEND_MESSAGE] User {user.id} is not a participant of conv {conv_id}")
+        return
+
+    if not text and not file_data:
+        print("[SEND_MESSAGE] Empty message and no file; not saving")
+        return
+
+    # ---------- Save message ----------
+    msg = ChatMessage(
+        conversation_id=conv.id,
+        sender_id=user.id,
+        text=text or "",
+        language=lang,
+    )
     db.session.add(msg)
     db.session.commit()
     print(f"[SEND_MESSAGE] Saved message {msg.id} to DB")
 
+    # ---------- Build payload for Socket.IO ----------
     payload = serialize_message(msg)
-    
-    # Include file data in payload if present
+    payload["temp_id"] = temp_id
+
     if file_data:
-        payload['file_data'] = file_data
-        payload['file_name'] = file_name
-        payload['file_size'] = file_size
-        payload['is_image'] = is_image
-        print(f"[SEND_MESSAGE] Including file in payload: {file_name}, is_image: {is_image}")
-    
-    # include the client's temporary id so client can replace optimistic UI
-    if temp_id:
-        payload['temp_id'] = temp_id
-    room = f"chat_{conv_id}"
-    print(f"[SEND_MESSAGE] Broadcasting to room {room}")
-    # send to room; clients should acknowledge
+        payload["has_file"] = True
+        payload["file_name"] = file_name
+        payload["file_size"] = file_size
+        payload["is_image"] = is_image
+
+    room = f"chat_{conv.id}"
+    print(f"[SEND_MESSAGE] Emitting 'new_message' to room {room}")
     emit("new_message", payload, room=room)
-    # return payload as acknowledgement to sender (Socket.IO ack)
-    return payload
+
+    # ---------- Determine the other participant ----------
+    other_id = conv.user_a if conv.user_b == user.id else conv.user_b
+    other_user = User.query.get(other_id) if other_id else None
+    has_token = bool(other_user and getattr(other_user, "fcm_token", None))
+    print(f"[SEND_MESSAGE] Other participant user_id={other_id}, has_token={has_token}")
+
+    # ---------- Send push to the other participant ----------
+    try:
+        if other_user and other_user.fcm_token:
+            preview = text or "[Attachment]"
+            if len(preview) > 80:
+                preview = preview[:80] + "…"
+
+            send_push_to_user(
+                other_user,
+                title=f"New message from {user.name}",
+                body=preview,
+                data={
+                    "type": "NEW_CHAT_MESSAGE",
+                    "conversation_id": str(conv.id),
+                    "sender_id": str(user.id),
+                },
+            )
+            print(f"[FCM] Chat push sent to user {other_user.id}")
+        else:
+            print("[FCM] Other user missing or has no fcm_token; skipping chat push")
+    except Exception as e:
+        print("[FCM] Error sending chat push:", e)
+
+    
 
 
 @socketio.on("message_delivered")
@@ -2111,6 +2699,19 @@ def delete_request(request_id):
     db.session.commit()
     flash("Request removed.", "success")
     return redirect(url_for("list_requests"))
+
+@app.route("/debug/fcm-test")
+@login_required
+def debug_fcm_test():
+    user = current_user()
+    ok = send_fcm_to_user(
+        user,
+        "LifeLine test notification",
+        "If you see this, FCM end-to-end works.",
+        data={"type": "debug_test"},
+    )
+    return f"Sent: {ok}"
+
 
 # ------------------ REGISTER BLUEPRINTS ------------------
 # Register resource pooling blueprint (must be after all models are defined)

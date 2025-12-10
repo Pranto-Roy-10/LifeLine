@@ -1,23 +1,41 @@
-{% extends 'base.html' %}
-{% block content %}
+{% extends 'base.html' %} {% block content %}
 <div class="chat-fullpage-container">
   <div class="chat-sidebar">
     <div class="chat-sidebar-header">
       <h3>Messages</h3>
-      <a href="{{ url_for('chat_index') }}" class="back-to-conversations" title="All Conversations">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M19 12H5M12 19l-7-7 7-7"/>
+      <a
+        href="{{ url_for('chat_index') }}"
+        class="back-to-conversations"
+        title="All Conversations"
+      >
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <path d="M19 12H5M12 19l-7-7 7-7" />
         </svg>
       </a>
     </div>
-    
+
     <div class="sidebar-conversations-list" id="sidebar-conversations">
       {% for conv in conversations %}
-      <a href="{{ url_for('chat_with_user', other_user_id=conv.other_user.id) }}" class="sidebar-conversation-item {% if conv.is_active %}active{% endif %}">
-        <div class="sidebar-conv-avatar">{{ conv.other_user.name[0].upper() }}</div>
+      <a
+        href="{{ url_for('chat_with_user', other_user_id=conv.other_user.id) }}"
+        class="sidebar-conversation-item {% if conv.is_active %}active{% endif %}"
+      >
+        <div class="sidebar-conv-avatar">
+          {{ conv.other_user.name[0].upper() }}
+        </div>
         <div class="sidebar-conv-info">
           <div class="sidebar-conv-name">{{ conv.other_user.name }}</div>
-          <div class="sidebar-conv-preview">{{ conv.last_message[:30] }}{% if conv.last_message|length > 30 %}...{% endif %}</div>
+          <div class="sidebar-conv-preview">
+            {{ conv.last_message[:30] }}{% if conv.last_message|length > 30
+            %}...{% endif %}
+          </div>
         </div>
         {% if conv.unread_count > 0 %}
         <div class="sidebar-conv-unread">{{ conv.unread_count }}</div>
@@ -48,7 +66,7 @@
             <option value="ar">Arabic</option>
           </select>
           <label class="auto-translate-label">
-            <input type="checkbox" id="auto_translate">
+            <input type="checkbox" id="auto_translate" />
             <span>Auto</span>
           </label>
         </div>
@@ -64,27 +82,47 @@
     <div class="chat-input-container">
       <div class="emoji-picker" id="emoji-picker">
         <div class="emoji-categories">
-          <button class="emoji-category active" data-category="smileys">😊</button>
+          <button class="emoji-category active" data-category="smileys">
+            😊
+          </button>
           <button class="emoji-category" data-category="gestures">👋</button>
           <button class="emoji-category" data-category="hearts">❤️</button>
           <button class="emoji-category" data-category="objects">⚡</button>
         </div>
         <div class="emoji-grid" id="emoji-grid"></div>
       </div>
-      
+
       <div class="chat-input-wrapper">
         <button class="emoji-btn" id="emoji-toggle-btn" title="Emojis">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
             <circle cx="12" cy="12" r="10"></circle>
             <path d="M8 14s1.5 2 4 2 4-2 4-2"></path>
             <line x1="9" y1="9" x2="9.01" y2="9"></line>
             <line x1="15" y1="9" x2="15.01" y2="9"></line>
           </svg>
         </button>
-        
-        <input id="message_input" class="chat-input-modern" placeholder="Type a message..." />
+
+        <input
+          id="message_input"
+          class="chat-input-modern"
+          placeholder="Type a message..."
+        />
         <button id="send_btn" class="send-btn-modern">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
             <line x1="22" y1="2" x2="11" y2="13"></line>
             <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
           </svg>
