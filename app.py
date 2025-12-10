@@ -813,11 +813,8 @@ def auth_google():
     email = decoded.get("email")
     uid = decoded.get("uid")
     name = decoded.get("name") or (email.split("@")[0] if email else "Google user")
-<<<<<<< HEAD
-    photo_url = decoded.get("picture")
-=======
-    picture = decoded.get("picture")
->>>>>>> wip/sync-app
+    photo_url = decoded.get("photo_url")
+
 
     if not email:
         return jsonify({"error": "Google account has no email"}), 400
@@ -829,25 +826,15 @@ def auth_google():
             email=email,
             name=name,
             firebase_uid=uid,
-<<<<<<< HEAD
             profile_photo=photo_url or "default.png",
         )
         db.session.add(user)
     else:
-        # If we have a Google photo and user still has default or empty photo, update it
-        if photo_url and (not user.profile_photo or user.profile_photo == "default.png"):
+        if (not user.profile_photo or user.profile_photo == "default.png") and photo_url:
             user.profile_photo = photo_url
 
     db.session.commit()
-=======
-            profile_photo=picture or "default.png"
-        )
-        db.session.add(user)
-    else:
-        if (not user.profile_photo or user.profile_photo == "default.png") and picture:
-            user.profile_photo = picture    
-        db.session.commit()
->>>>>>> wip/sync-app
+
 
     # Log into Flask session
     login_user(user)
@@ -879,12 +866,7 @@ def google_auth():
     uid = decoded["uid"]
     email = decoded.get("email")
     name = decoded.get("name") or (email.split("@")[0] if email else "Google User")
-<<<<<<< HEAD
-    photo_url = decoded.get("picture")   # 👈 Google profile image URL
-
-=======
-    picture = decoded.get("picture")
->>>>>>> wip/sync-app
+    photo_url = decoded.get("picture")
     # 1) Try find user by firebase_uid
     user = User.query.filter_by(firebase_uid=uid).first()
 
@@ -894,20 +876,16 @@ def google_auth():
 
     # 3) If still no user, create one
     if not user:
-<<<<<<< HEAD
         user = User(
             email=email,
             name=name,
             firebase_uid=uid,
             profile_photo=photo_url or "default.png",  # 👈 store Google photo
         )
-=======
-        user = User(email=email, name=name, firebase_uid=uid, profile_photo=picture or "default.png")
->>>>>>> wip/sync-app
         db.session.add(user)
     else:
-        if (not user.profile_photo or user.profile_photo == "default.png") and picture:
-            user.profile_photo = picture
+        if (not user.profile_photo or user.profile_photo == "default.png") and photo_url:
+            user.profile_photo = photo_url
         # Link existing account with this Firebase UID
         if not user.firebase_uid:
             user.firebase_uid = uid
@@ -1125,6 +1103,36 @@ def api_create_request():
     db.session.add(req)
     db.session.commit()
     return jsonify({"request": req.to_dict(include_user=True)}), 201
+
+
+
+@app.route("/request/<int:request_id>/claim", methods=["POST"])
+@login_required
+def claim_request(request_id):
+    user = current_user()  
+    if not user:
+        flash("You must be logged in.", "error")
+        return redirect(url_for("login"))
+
+    r = Request.query.get_or_404(request_id)
+
+    # Cannot claim your own request
+    if r.user_id == user.id:
+        flash("You cannot claim your own request.", "error")
+        return redirect(url_for("list_requests"))
+
+    # Cannot claim already claimed request
+    if r.helper_id:
+        flash("This request is already claimed.", "error")
+        return redirect(url_for("list_requests"))
+
+    r.helper_id = user.id
+    r.status = "claimed"
+
+    db.session.commit()
+
+    flash("You have successfully claimed this request!", "success")
+    return redirect(url_for("dashboard"))
 
 
 # List active requests (optionally nearby)
