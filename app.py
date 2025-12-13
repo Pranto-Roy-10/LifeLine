@@ -21,7 +21,7 @@ from flask import (
 )
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
-from werkzeug.utils import secure_filename
+from werkzeug.utils import secure_filename 
 from flask_migrate import Migrate
 
 from flask_mail import Mail, Message
@@ -29,7 +29,6 @@ from email_config import EMAIL_ADDRESS, EMAIL_PASSWORD
 
 import firebase_admin
 from firebase_admin import credentials, auth as firebase_auth, messaging
-
 
 from flask_jwt_extended import (
     JWTManager, create_access_token, jwt_required, get_jwt_identity
@@ -177,7 +176,7 @@ class User(db.Model):
     
     fcm_tokens = db.relationship('FCMToken', backref='user', lazy='dynamic')
 
-    
+
 
     def set_password(self, password: str):
         self.password_hash = generate_password_hash(password)
@@ -208,7 +207,7 @@ class User(db.Model):
             return "Bronze Helper", "text-amber-300"
         else:
             return "Newbie", "text-slate-400"
-    
+        
 
 class Request(db.Model):
     __tablename__ = "requests"
@@ -570,15 +569,18 @@ class FCMToken(db.Model):
     
 class Offer(db.Model):
     __tablename__ = "offers"
+
+# ------------------ MODEL: Impact Story ------------------
+class ImpactStory(db.Model):
+    __tablename__ = "impact_stories"
     id = db.Column(db.Integer, primary_key=True)
-    request_id = db.Column(db.Integer, db.ForeignKey("requests.id"), nullable=False)
-    helper_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
-    status = db.Column(db.String(20), default="pending")  # pending, accepted, rejected
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    title = db.Column(db.String(255))
+    body = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    # Relationships
-    request = db.relationship("Request", backref=db.backref("offers", cascade="all, delete-orphan"))
-    helper = db.relationship("User", backref="sent_offers")   
+    user = db.relationship("User", backref="impact_stories")
+
 
 
 class SOSResponse(db.Model):
@@ -594,28 +596,24 @@ class SOSResponse(db.Model):
         "Request", backref=db.backref("sos_responses", cascade="all, delete-orphan")
     )
     helper = db.relationship("User", backref="sos_responses")
-# In app.py
-class Review(db.Model):
-    __tablename__ = "reviews"
+# ------------------ MODEL: Event ------------------
+class Event(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    request_id = db.Column(db.Integer, db.ForeignKey("requests.id"), nullable=False)
-    reviewer_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
-    helper_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
-    
-    rating = db.Column(db.Integer, nullable=False)
-    comment = db.Column(db.Text, nullable=True)
-    
-    # NEW FIELD: Store the actual hours worked
-    duration_hours = db.Column(db.Float, default=1.0) 
+    creator_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
 
-    # AI Analysis Results
-    sentiment_score = db.Column(db.Float, default=0.0)
-    is_flagged_fake = db.Column(db.Boolean, default=False)
-    flag_reason = db.Column(db.String(255), nullable=True)
-    
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    event_type = db.Column(db.String(50))  # donation / cleanup / repair
+    date = db.Column(db.DateTime, nullable=False)
+
+    lat = db.Column(db.Float, nullable=False)
+    lng = db.Column(db.Float, nullable=False)
+    area = db.Column(db.String(150))
+
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    request = db.relationship("Request", backref=db.backref("review", uselist=False))
+    creator = db.relationship("User", backref="events")
+
 
 # ------------------ MODELS: Chat ------------------
 class Conversation(db.Model):
@@ -642,23 +640,9 @@ class ChatMessage(db.Model):
     language = db.Column(db.String(10), nullable=True)  # original language code if known
 
     conversation = db.relationship("Conversation", backref="messages")
-# ------------------ MODELS: Notifications ------------------
-class Notification(db.Model):
-    __tablename__ = "notifications"
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
 
-    type = db.Column(db.String(50), nullable=False)  # "chat", "offer", "accepted", "sos", "nearby"
-    message = db.Column(db.String(255), nullable=False)
-    link = db.Column(db.String(255), nullable=True)  # where to go when clicked
-
-    is_read = db.Column(db.Boolean, default=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    user = db.relationship("User", backref="notifications")
 
 # ------------------ MODELS: Resources ------------------
-
 class Resource(db.Model):
     __tablename__ = "resources"
     id = db.Column(db.Integer, primary_key=True)
@@ -738,16 +722,6 @@ def get_or_create_conversation(user1_id, user2_id):
     db.session.commit()
     return conv
 
-def push_notification(user_id, type, message, link=None):
-    n = Notification(
-        user_id=user_id,
-        type=type,
-        message=message,
-        link=link
-    )
-    db.session.add(n)
-    db.session.commit()
-
 
 def serialize_message(msg: ChatMessage):
     return {
@@ -760,6 +734,30 @@ def serialize_message(msg: ChatMessage):
         "delivered": bool(msg.delivered),
         "read": bool(msg.read),
         "language": msg.language,
+    }
+
+# ------------------ IMPACT ANALYTICS ------------------
+def calculate_impact(user_id):
+    completed = Request.query.filter_by(
+        helper_id=user_id,
+        status="completed"
+    ).all()
+
+    hours = sum(
+        ((r.completed_at - r.created_at).total_seconds() / 3600)
+        for r in completed if r.completed_at
+    )
+
+    items = Resource.query.filter_by(user_id=user_id).count()
+
+    rides = [r for r in completed if r.category == "ride"]
+    carbon = len(rides) * 2.5
+
+    return {
+        "helped": len(completed),
+        "hours": round(hours, 1),
+        "items": items,
+        "carbon": round(carbon, 1)
     }
 
 
@@ -842,16 +840,7 @@ def inject_user():
         translation_enabled = True
     elif globals().get('gt_translator'):
         translation_enabled = True
-
-    user = current_user()
-    notification_count = get_notification_count(user) if user else 0
-
-    return dict(
-        current_user=user,
-        translation_enabled=translation_enabled,
-        notification_count=notification_count,
-    )
-
+    return dict(current_user=current_user(), translation_enabled=translation_enabled)
 
 # ------------------ GEO UTILS ------------------
 def haversine_distance_km(lat1, lon1, lat2, lon2):
@@ -936,6 +925,70 @@ def send_fcm_notification(token, title, body, data=None):
     except Exception as e:
         print("[FCM] Error sending message:", e)
         return False  # ✅
+# ------------------ EVENT NOTIFICATION SERVICE ------------------
+
+import requests
+
+def notify_nearby_users(event):
+    users = User.query.filter(User.lat.isnot(None), User.lng.isnot(None)).all()
+
+    for u in users:
+        url = "https://maps.googleapis.com/maps/api/distancematrix/json"
+        params = {
+            "origins": f"{u.lat},{u.lng}",
+            "destinations": f"{event.lat},{event.lng}",
+            "key": GOOGLE_MAPS_API_KEY
+        }
+
+        res = requests.get(url, params=params).json()
+        try:
+            distance_m = res["rows"][0]["elements"][0]["distance"]["value"]
+            if distance_m <= 3000:
+                send_event_notification(u, event)
+        except:
+            pass
+
+def send_event_notification(user, event):
+    # Demo-safe notification
+    print(f"[EVENT] Notify {user.email}: '{event.title}' is near you")
+
+
+# ------------------ COMPLETE REQUEST ------------------
+def update_user_scores(user):
+    """Recompute and store user's trust_score and kindness_score based on completed requests."""
+    if not user:
+        return
+
+    # Count completed helps where user was helper
+    helped_count = Request.query.filter(
+        Request.helper_id == user.id,
+        Request.status == "completed",
+        Request.completed_at != None
+    ).count()
+
+    # Sum total hours volunteered
+    rows = Request.query.filter(
+        Request.helper_id == user.id,
+        Request.status == "completed",
+        Request.completed_at != None
+    ).all()
+
+    total_hours = 0.0
+    for r in rows:
+        if r.created_at and r.completed_at:
+            total_hours += max(0, (r.completed_at - r.created_at).total_seconds() / 3600.0)
+    total_hours = round(total_hours, 2)
+
+    # Simple scoring (tweak if Module-1 has other rules)
+    trust_score = min(100, helped_count * 5)           # example: +5 trust per complete
+    kindness_score = helped_count * 10 + int(total_hours * 2) + trust_score
+
+    # Save to DB
+    user.trust_score = int(trust_score)
+    user.kindness_score = int(kindness_score)
+
+    db.session.commit()
+
 
 # ------------------ ROUTES: CORE PAGES ------------------
 @app.route("/")
@@ -1091,6 +1144,47 @@ def login():
 def logout():
     logout_user()
     flash("You have been logged out.", "info")
+    return redirect(url_for("home"))
+
+
+# Quick SOS trigger used by the header form (templates/base.html -> url_for('trigger_sos'))
+@app.route("/trigger_sos", methods=["POST"])
+def trigger_sos():
+    """Create a simple emergency request and notify nearby trusted helpers.
+    This is a lightweight fallback so templates that call `trigger_sos` won't fail.
+    """
+    user = current_user()
+    if user is None:
+        user = get_emergency_user()
+        login_user(user)
+
+    title = "Emergency Help Requested"
+    description = "SOS triggered from UI"
+    expires_at = datetime.utcnow() + timedelta(minutes=60)
+
+    req = Request(
+        user_id=user.id,
+        title=title,
+        category="emergency",
+        description=description,
+        is_offer=False,
+        expires_at=expires_at,
+    )
+    db.session.add(req)
+    db.session.commit()
+
+    # Notify a small set of trusted helpers (best-effort)
+    try:
+        helpers = User.query.filter(User.is_trusted_helper == True, User.id != user.id).limit(10).all()
+        for h in helpers:
+            try:
+                send_push_to_user(h, "Emergency nearby", f"{user.name} needs help: {title}", data={"request_id": req.id})
+            except Exception:
+                pass
+    except Exception:
+        db.session.rollback()
+
+    flash("SOS triggered — local helpers notified.", "success")
     return redirect(url_for("home"))
 
 # ---------- OTP / EMAIL HELPERS & ROUTES ----------
@@ -1396,7 +1490,8 @@ def auth_google():
     email = decoded.get("email")
     uid = decoded.get("uid")
     name = decoded.get("name") or (email.split("@")[0] if email else "Google user")
-    photo_url = decoded.get("picture")
+    photo_url = decoded.get("photo_url")
+
 
     if not email:
         return jsonify({"error": "Google account has no email"}), 400
@@ -1412,8 +1507,7 @@ def auth_google():
         )
         db.session.add(user)
     else:
-        # If we have a Google photo and user still has default or empty photo, update it
-        if photo_url and (not user.profile_photo or user.profile_photo == "default.png"):
+        if (not user.profile_photo or user.profile_photo == "default.png") and photo_url:
             user.profile_photo = photo_url
 
     db.session.commit()
@@ -1449,12 +1543,7 @@ def google_auth():
     uid = decoded["uid"]
     email = decoded.get("email")
     name = decoded.get("name") or (email.split("@")[0] if email else "Google User")
-
-    photo_url = decoded.get("picture")   # 👈 Google profile image URL
-
-
-    picture = decoded.get("picture")
-
+    photo_url = decoded.get("picture")
     # 1) Try find user by firebase_uid
     user = User.query.filter_by(firebase_uid=uid).first()
 
@@ -1464,20 +1553,16 @@ def google_auth():
 
     # 3) If still no user, create one
     if not user:
-
         user = User(
             email=email,
             name=name,
             firebase_uid=uid,
             profile_photo=photo_url or "default.png",  # 👈 store Google photo
         )
-
-        user = User(email=email, name=name, firebase_uid=uid, profile_photo=picture or "default.png")
-
         db.session.add(user)
     else:
-        if (not user.profile_photo or user.profile_photo == "default.png") and picture:
-            user.profile_photo = picture
+        if (not user.profile_photo or user.profile_photo == "default.png") and photo_url:
+            user.profile_photo = photo_url
         # Link existing account with this Firebase UID
         if not user.firebase_uid:
             user.firebase_uid = uid
@@ -1501,8 +1586,6 @@ def google_auth():
     return jsonify({"redirect_url": next_url})
 
 # ---------- TRUSTED HELPER VERIFICATION ----------
-# In app.py
-
 @app.route("/trusted-helper", methods=["GET", "POST"])
 @login_required
 def trusted_helper():
@@ -1520,7 +1603,7 @@ def trusted_helper():
         user.is_trusted_helper = True
         db.session.commit()
 
-        #  Keep session in sync so navbar updates
+        # 🔄 Keep session in sync so navbar updates
         session["is_trusted_helper"] = True
 
         flash("You are now a VERIFIED Trusted Helper!", "success")
@@ -1628,8 +1711,6 @@ def api_me():
             "id_verification_status": user.id_verification_status,
         }
     )
-    
-
 
 # ------------------ API: NEARBY REQUESTS FOR MAP ------------------
 @app.route("/api/requests/nearby")
@@ -1947,6 +2028,14 @@ def need_help():
             print("[FCM] Failed to broadcast need_help notification:", e)
 
         # ---- Flash + redirect as before ----
+        if current_user():
+            flash("Your need request has been posted.", "success")
+        else:
+            flash("Your quick help request has been posted (as guest).", "success")
+
+        return redirect(url_for("need_help"))
+
+
         if current_user():
             flash("Your need request has been posted.", "success")
         else:
@@ -2313,7 +2402,6 @@ def list_requests():
     # if mode == "all" -> no extra filter
 
     requests_list = q.order_by(Request.created_at.desc()).all()
-
     # --- NEW LOGIC START ---
     # Find out which requests the current user has already offered to help with
     user = current_user()
@@ -2324,6 +2412,21 @@ def list_requests():
         # Create a set of request_ids for easy checking
         offered_ids = {o.request_id for o in my_offers}
     # --- NEW LOGIC END ---
+    sos_responded_ids = set()
+    if user:
+        my_sos = SOSResponse.query.filter_by(helper_id=user.id).all()
+        sos_responded_ids = {r.request_id for r in my_sos}
+
+    sos_response_counts = {}
+    try:
+        rows = (
+            db.session.query(SOSResponse.request_id, func.count(SOSResponse.id))
+            .group_by(SOSResponse.request_id)
+            .all()
+        )
+        sos_response_counts = {int(rid): int(cnt) for rid, cnt in rows}
+    except Exception:
+        sos_response_counts = {}
 
     sos_responded_ids = set()
     if user:
@@ -2345,10 +2448,10 @@ def list_requests():
         "list_requests.html",
         requests=requests_list,
         mode=mode,
-        offered_ids=offered_ids,  # <--- Pass this to the HTML
         sos_responded_ids=sos_responded_ids,
         sos_response_counts=sos_response_counts,
     )
+
 
 # ------------------ CHAT PAGES & API ------------------
 @app.route("/chat/<int:other_user_id>")
@@ -2488,71 +2591,54 @@ def api_nearby_requests():
 def dashboard():
     user = current_user()
 
-    # 1. Update scores before showing them
+    # Make sure scores are up to date
     update_user_scores(user)
 
-    # 2. CALCULATE "PEOPLE HELPED" CORRECTLY
-    # Case A: I responded to someone's "Need Help" request
-    helped_requests = Request.query.filter(
-        Request.helper_id == user.id, 
-        Request.is_offer == False, 
-        Request.status == "completed"
-    ).all()
+    # Badge label + Tailwind color class
+    badge, badge_color = user.calculate_badge()
 
-    # Case B: I posted an "Offer" and someone accepted it (I am the giver)
-    fulfilled_offers = Request.query.filter(
-        Request.user_id == user.id, 
-        Request.is_offer == True, 
-        Request.status == "completed"
-    ).all()
+    # All completed helps where this user was the helper
+    completed_q = Request.query.filter(
+        Request.helper_id == user.id,
+        Request.status == "completed",
+        Request.completed_at != None
+    ).order_by(Request.completed_at.desc())
 
-    # Total list of good deeds
-    all_good_deeds = helped_requests + fulfilled_offers
-    
-    # Sort by date (newest first) for the History list
-    all_good_deeds.sort(key=lambda x: x.completed_at if x.completed_at else datetime.min, reverse=True)
+    helped_count = completed_q.count()
 
-    helped_count = len(all_good_deeds)
-
-    # 3. CALCULATE REAL HOURS (From Review table)
-    # We sum up duration_hours from reviews where THIS user was the "helper_id" (Giver)
-    total_hours_db = db.session.query(func.sum(Review.duration_hours))\
-        .filter(Review.helper_id == user.id, Review.is_flagged_fake == False)\
-        .scalar()
-    
-    total_hours = round(total_hours_db or 0.0, 2)
-
-    # 4. PREPARE HISTORY DATA FOR TEMPLATE
+    # Compute total hours + build small recent history list
+    total_hours = 0.0
     history = []
-    for r in all_good_deeds[:5]: # Show last 5
-        # Find the review to get specific hours for this task
-        # Note: In the review table, 'helper_id' is the Giver.
-        rev = Review.query.filter_by(request_id=r.id, helper_id=user.id).first()
-        hours_spent = round(rev.duration_hours, 1) if rev else 0
+
+    for r in completed_q.limit(5).all():
+        hours = 0.0
+        if r.created_at and r.completed_at:
+            hours = max(0.0, (r.completed_at - r.created_at).total_seconds() / 3600.0)
+        total_hours += hours
 
         history.append({
             "title": r.title,
             "category": r.category or "General",
-            "hours": hours_spent,
+            "hours": round(hours, 2),
             "date": r.completed_at.strftime("%b %d, %Y") if r.completed_at else "",
         })
 
-    # Badge Logic
-    badge, badge_color = user.calculate_badge()
+    total_hours = round(total_hours, 2)
 
+    # stats object used in dashboard.html
     stats = {
         "badge": badge,
-        "badge_color": badge_color,
-        "helped": helped_count,      # <--- Now correct (Creator gets credit for offers)
-        "total_hours": total_hours,
-        "trust": user.trust_score or 0,
+        "badge_color": badge_color,       # e.g. "text-yellow-300"
+        "helped": helped_count,          # total people helped
+        "total_hours": total_hours,      # total hours volunteered
+        "trust": user.trust_score or 0,  # 0–100 (we already cap in update_user_scores)
         "kindness": user.kindness_score or 0,
     }
 
-    # Chart Data
-    chart_labels = ["Start", "Today"] 
-    chart_trust = [50, stats["trust"]]
-    chart_kindness = [0, stats["kindness"]]
+    # Simple chart data (can be upgraded later)
+    chart_labels = ["Today"]
+    chart_trust = [stats["trust"]]
+    chart_kindness = [stats["kindness"]]
 
     return render_template(
         "dashboard.html",
@@ -2564,8 +2650,10 @@ def dashboard():
         chart_kindness=chart_kindness,
     )
 
+# ------------------ API: Dashboard & Impact ------------------
 
-@app.route("/api/user/location", methods=["POST"])
+# 1) Dashboard summary
+@app.route("/api/dashboard/summary", methods=["GET"])
 @login_required
 def update_user_location():
     """
@@ -2593,6 +2681,72 @@ def update_user_location():
 @app.route("/sos/trigger", methods=["POST"])
 @login_required
 def trigger_sos():
+def api_dashboard_summary():
+    user = current_user()
+    # update scores (make sure values are fresh)
+    update_user_scores(user)
+
+    # total hours volunteered (sum of completed requests where user was helper)
+    total_hours = (
+        db.session.query(func.coalesce(func.sum(func.julianday(Request.completed_at) - func.julianday(Request.created_at)), 0.0))
+        .filter(Request.helper_id == user.id, Request.status == "completed", Request.completed_at != None)
+        .scalar()
+    )
+    # convert days to hours (julianday returns days)
+    total_hours = float(total_hours) * 24 if total_hours else 0.0
+    total_hours = round(total_hours, 2)
+
+    # people helped: distinct requester count where helper == user (exclude null)
+    people_helped = (
+        db.session.query(func.count(func.distinct(Request.user_id)))
+        .filter(Request.helper_id == user.id, Request.status == "completed", Request.completed_at != None, Request.user_id != None)
+        .scalar()
+    ) or 0
+
+    return jsonify({
+        "total_hours": total_hours,
+        "people_helped": int(people_helped),
+        "trust_score": int(user.trust_score or 0),
+        "kindness_score": int(user.kindness_score or 0)
+    })
+
+
+# 2) Dashboard kindness meter
+@app.route("/api/dashboard/kindness", methods=["GET"])
+@login_required
+def api_dashboard_kindness():
+    user = current_user()
+    score = int(user.kindness_score or 0)
+    # same logic as calculate_badge thresholds
+    if score >= 121:
+        level = "Community Star"
+    elif score >= 71:
+        level = "Gold Helper"
+    elif score >= 31:
+        level = "Silver Helper"
+    elif score >= 11:
+        level = "Bronze Helper"
+    else:
+        level = "Newbie"
+
+    # percent to next (simple example)
+    next_threshold = 121 if score >= 121 else (71 if score >= 71 else (31 if score >= 31 else (11 if score >= 11 else 11)))
+    prev_threshold = 71 if score >= 71 and score < 121 else (31 if score >= 31 and score < 71 else (11 if score >= 11 and score < 31 else 0))
+    span = max(1, next_threshold - prev_threshold)
+    progress_in_span = score - prev_threshold
+    percent_to_next = min(100, int((progress_in_span / span) * 100)) if span else 100
+
+    return jsonify({
+        "score": score,
+        "level": level,
+        "percent_to_next": percent_to_next
+    })
+
+
+# 3) Dashboard: impact over time (monthly hours) ?months param default 6
+@app.route("/api/dashboard/impact-over-time", methods=["GET"])
+@login_required
+def api_dashboard_impact_over_time():
     user = current_user()
 
     # Prefer client-provided GPS for accuracy; fallback to user's last-known location
@@ -2682,9 +2836,115 @@ def trigger_sos():
 
 
 @app.route("/sos/<int:request_id>/accept/<int:helper_id>", methods=["POST"])
+    months = int(request.args.get("months", 6))
+    now = datetime.utcnow()
+    labels = []
+    data = []
+    # build monthly buckets
+    for i in range(months - 1, -1, -1):
+        # approximate month start
+        bucket_start = (now - timedelta(days=30 * i)).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        bucket_end = (bucket_start + timedelta(days=32)).replace(day=1)
+        hours = db.session.query(func.coalesce(func.sum(func.julianday(Request.completed_at) - func.julianday(Request.created_at)), 0.0)).filter(
+            Request.helper_id == user.id,
+            Request.status == "completed",
+            Request.completed_at != None,
+            Request.created_at >= bucket_start,
+            Request.completed_at < bucket_end
+        ).scalar() or 0.0
+        hours = float(hours) * 24
+        labels.append(bucket_start.strftime("%b %Y"))
+        data.append(round(hours, 2))
+    return jsonify({"labels": labels, "data": data})
+
+
+# ------------------ Impact APIs ------------------
+
+# 4) Impact summary (resources shared, carbon saved simple estimate, hours)
+@app.route("/api/impact/summary", methods=["GET"])
+@login_required
+def api_impact_summary():
+    user = current_user()
+    # resources shared count (Resource model exists)
+    resources_shared = Resource.query.filter(Resource.user_id == user.id).count()
+    # hours volunteered (reuse query)
+    hours_vol = db.session.query(func.coalesce(func.sum(func.julianday(Request.completed_at) - func.julianday(Request.created_at)), 0.0)).filter(
+        Request.helper_id == user.id,
+        Request.status == "completed",
+        Request.completed_at != None
+    ).scalar() or 0.0
+    hours_vol = float(hours_vol) * 24
+    # helped people
+    helped_people = db.session.query(func.count(func.distinct(Request.user_id))).filter(
+        Request.helper_id == user.id,
+        Request.status == "completed",
+        Request.completed_at != None,
+        Request.user_id != None
+    ).scalar() or 0
+    # carbon saved estimate (example: each resource share counts as 0.5 "unit" saved)
+    carbon_units = db.session.query(func.coalesce(func.sum(Resource.quantity), 0)).filter(Resource.user_id == user.id).scalar() or 0
+    # convert to percent (arbitrary scale for UI)
+    carbon_saved_percent = min(100, int(carbon_units * 2))  # example formula
+
+    return jsonify({
+        "resources_shared": int(resources_shared),
+        "hours_volunteered": round(hours_vol, 2),
+        "helped_people": int(helped_people),
+        "carbon_saved_percent": carbon_saved_percent
+    })
+
+
+# 5) Impact by category (pie data) - uses Resource.category aggregations
+@app.route("/api/impact/by-category", methods=["GET"])
+@login_required
+def api_impact_by_category():
+    user = current_user()
+    rows = db.session.query(Resource.category, func.coalesce(func.sum(Resource.quantity), 0)).filter(Resource.user_id == user.id).group_by(Resource.category).all()
+    labels = [r[0] or "Uncategorized" for r in rows]
+    values = [int(r[1]) for r in rows]
+    return jsonify({"labels": labels, "values": values})
+
+
+# 6) Create an impact story
+@app.route("/api/impact/story", methods=["POST"])
+@login_required
+def api_impact_story_create():
+    user = current_user()
+    data = request.get_json(silent=True) or {}
+    title = (data.get("title") or "").strip()
+    body = (data.get("body") or "").strip()
+    if not title or not body:
+        return jsonify({"error": "title and body required"}), 400
+    s = ImpactStory(user_id=user.id, title=title[:255], body=body)
+    db.session.add(s)
+    db.session.commit()
+    return jsonify({"id": s.id, "created_at": int(s.created_at.timestamp())}), 201
+
+
+# 7) List impact stories (pagination)
+@app.route("/api/impact/stories", methods=["GET"])
+@login_required
+def api_impact_stories():
+    page = int(request.args.get("page", 1))
+    per_page = int(request.args.get("per_page", 10))
+    q = ImpactStory.query.order_by(ImpactStory.created_at.desc())
+    total = q.count()
+    items = q.offset((page - 1) * per_page).limit(per_page).all()
+    stories = [{
+        "id": it.id,
+        "title": it.title,
+        "body": it.body,
+        "author_name": it.user.name if it.user else None,
+        "created_at": int(it.created_at.timestamp())
+    } for it in items]
+    return jsonify({"total": total, "page": page, "per_page": per_page, "stories": stories})
+
+# ------------------ Event Pages -------------------
+@app.route("/events/create", methods=["GET", "POST"])
 @login_required
 def accept_sos_responder(request_id, helper_id):
     """SOS owner selects a responder to connect with (enables chat/call + completion review flow)."""
+def create_event():
     user = current_user()
     req_obj = Request.query.get_or_404(request_id)
 
@@ -2849,6 +3109,52 @@ def api_sos_status(request_id):
         }
     )
 
+    if request.method == "POST":
+        event = Event(
+            creator_id=user.id,
+            title=request.form["title"],
+            description=request.form["description"],
+            event_type=request.form["event_type"],
+            date=datetime.strptime(request.form["date"], "%Y-%m-%d"),
+            lat=float(request.form["lat"]),
+            lng=float(request.form["lng"]),
+            area=request.form["area"]
+        )
+        db.session.add(event)
+        db.session.commit()
+
+        notify_nearby_users(event)
+
+        flash("Event created & nearby users notified!", "success")
+        return redirect(url_for("dashboard"))
+
+    return render_template("create_event.html")
+
+
+@app.route("/emotional")
+def emotional_ping():
+    user = current_user()
+    if not user:
+        # quick guest flow: use Emergency Guest
+        user = get_emergency_user()
+        login_user(user)
+    # find a trusted helper (listener)
+    listener = User.query.filter(User.is_trusted_helper == True, User.id != user.id).first()
+    if not listener:
+        # create or get a generic listener account
+        listener = User.query.filter_by(email="listener@lifeline.local").first()
+        if not listener:
+            listener = User(email="listener@lifeline.local", name="Listener")
+            listener.is_trusted_helper = True
+            # set random password
+            listener.password_hash = generate_password_hash(os.urandom(12).hex())
+            db.session.add(listener)
+            db.session.commit()
+
+    conv = get_or_create_conversation(user.id, listener.id)
+    return redirect(url_for('chat_with_user', other_user_id=listener.id))
+
+
 @app.route("/api/conversations/<int:conv_id>/messages")
 @login_required
 def api_get_messages(conv_id):
@@ -2858,46 +3164,6 @@ def api_get_messages(conv_id):
         return jsonify({"error": "Unauthorized"}), 403
     msgs = ChatMessage.query.filter_by(conversation_id=conv.id).order_by(ChatMessage.created_at.asc()).all()
     return jsonify({"messages": [serialize_message(m) for m in msgs]})
-
-@app.route("/api/notifications")
-def api_notifications():
-    if "user_id" not in session:
-        return jsonify([])
-
-    user_id = session["user_id"]
-    
-    notes = Notification.query.filter_by(user_id=user_id)\
-        .order_by(Notification.created_at.desc())\
-        .limit(10).all()
-
-    return jsonify([
-        {
-            "id": n.id,
-            "type": n.type,
-            "message": n.message,
-            "link": n.link,
-            "created_at": n.created_at.strftime("%I:%M %p")
-        }
-        for n in notes
-    ])
-@app.route("/debug/test-push")
-@login_required
-def debug_test_push():
-    user = current_user()
-    if not user or not getattr(user, "fcm_token", None):
-        return "No FCM token for this user. Make sure initFCM ran.", 400
-
-    send_push_to_user(
-        user,
-        title="LifeLine test notification",
-        body="If you see this, FCM is working ",
-        data={
-            "type": "DEBUG",
-            "user_id": str(user.id),
-        },
-    )
-    return "Test push sent!"
-
 
 
 @app.route("/api/conversations/<int:conv_id>/mark_read", methods=["POST"])
@@ -2928,6 +3194,8 @@ def api_mark_conversation_read(conv_id):
         db.session.rollback()
         return jsonify({"error": "failed"}), 500
 
+
+
 @app.route("/api/notification-count")
 def api_notification_count():
     if "user_id" not in session:
@@ -2951,7 +3219,6 @@ def api_mark_notifications_read():
     db.session.commit()
 
     return jsonify({"ok": True})
-
 
 @app.route("/api/translate", methods=["POST"])
 @login_required
@@ -3114,59 +3381,39 @@ def on_stop_typing(data):
     room = f"chat_{conv_id}"
     emit("stop_typing", {"user_id": user.id}, room=room, include_self=False)
 
+
 @socketio.on("send_message")
 def on_send_message(data):
-    """
-    Handle a chat message and send a push notification to the other participant.
-    Expected data:
-      {
-        "conversation_id": int,
-        "text": str,
-        "temp_id": optional client-side id,
-        "language": optional,
-        "file_data": optional,
-        "file_name": optional,
-        "file_size": optional,
-        "is_image": optional
-      }
-    """
+    # data: {conversation_id, text, language (optional), file_data, file_name, file_size, is_image}
     conv_id = data.get("conversation_id")
-    text = (data.get("text") or "").strip()
+    text = data.get("text", "")
     temp_id = data.get("temp_id")
     lang = data.get("language")
     file_data = data.get("file_data")
     file_name = data.get("file_name")
     file_size = data.get("file_size")
     is_image = data.get("is_image", False)
-
+    
     user = current_user()
-    print(f"[SEND_MESSAGE] from user={user.id if user else None}, conv={conv_id}, text='{text[:50]}'")
-
-    # ---------- Validation ----------
-    if not user or not conv_id:
-        print("[SEND_MESSAGE] Missing user or conversation_id")
+    
+    # Log file attachment info
+    if file_data:
+        file_data_preview = file_data[:50] if file_data else None
+        print(f"[SEND_MESSAGE] Has file attachment: {file_name} ({file_size}), is_image: {is_image}, data preview: {file_data_preview}...")
+    
+    print(f"[SEND_MESSAGE] From user {user.id if user else 'None'} to conv {conv_id}: {text[:50] if text else '[File attachment]'}")
+    
+    # Allow empty text if there's a file attachment
+    if not user or not conv_id or (not text and not file_data):
+        print(f"[SEND_MESSAGE] Rejected: missing user, conv_id, or content")
         return
-
+        
     conv = Conversation.query.get(conv_id)
-    if not conv:
-        print(f"[SEND_MESSAGE] Conversation {conv_id} not found")
+    if not conv or user.id not in conv.participants():
+        print(f"[SEND_MESSAGE] Rejected: conv not found or user not participant")
         return
 
-    if user.id not in conv.participants():
-        print(f"[SEND_MESSAGE] User {user.id} is not a participant of conv {conv_id}")
-        return
-
-    if not text and not file_data:
-        print("[SEND_MESSAGE] Empty message and no file; not saving")
-        return
-
-    # ---------- Save message ----------
-    msg = ChatMessage(
-        conversation_id=conv.id,
-        sender_id=user.id,
-        text=text or "",
-        language=lang,
-    )
+    msg = ChatMessage(conversation_id=conv.id, sender_id=user.id, text=text or "", language=lang)
     db.session.add(msg)
     db.session.commit()
     print(f"[SEND_MESSAGE] Saved message {msg.id} to DB")
@@ -3195,16 +3442,21 @@ def on_send_message(data):
 
     # ---------- Build payload for Socket.IO ----------
     payload = serialize_message(msg)
-    payload["temp_id"] = temp_id
-
+    
+    # Include file data in payload if present
     if file_data:
-        payload["has_file"] = True
-        payload["file_name"] = file_name
-        payload["file_size"] = file_size
-        payload["is_image"] = is_image
-
-    room = f"chat_{conv.id}"
-    print(f"[SEND_MESSAGE] Emitting 'new_message' to room {room}")
+        payload['file_data'] = file_data
+        payload['file_name'] = file_name
+        payload['file_size'] = file_size
+        payload['is_image'] = is_image
+        print(f"[SEND_MESSAGE] Including file in payload: {file_name}, is_image: {is_image}")
+    
+    # include the client's temporary id so client can replace optimistic UI
+    if temp_id:
+        payload['temp_id'] = temp_id
+    room = f"chat_{conv_id}"
+    print(f"[SEND_MESSAGE] Broadcasting to room {room}")
+    # send to room; clients should acknowledge
     emit("new_message", payload, room=room)
 
     # ---------- Determine the other participant ----------
@@ -3248,6 +3500,9 @@ def on_send_message(data):
     except Exception as e:
         # This will now catch other errors, not the persistent AttributeError
         print("[FCM] Error sending chat push:", e)
+
+    # return payload as acknowledgement to sender (Socket.IO ack)
+    return payload
 
 
 @socketio.on("message_delivered")
@@ -3589,4 +3844,5 @@ if __name__ == "__main__":
             print(f"Migration note: {e}")
     
     debug_mode = os.getenv("FLASK_DEBUG", "0") == "1"
-    socketio.run(app, debug=debug_mode, use_reloader=False)
+    socketio.run(app, debug=debug_mode, use_reloader=False, port=1379)
+    
