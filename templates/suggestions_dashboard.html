@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Main Content -->
+        <div class="lg:col-span-2">
+            <!-- Smart Suggestions Widget -->
+            {% include 'smart_suggestions_widget.html' %}
+            
+            <!-- Recent Requests -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h3 class="text-xl font-bold text-gray-800 mb-4">📋 Recent Requests Nearby</h3>
+                <div id="recent-requests" class="space-y-3">
+                    <p class="text-gray-600">Loading...</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Sidebar -->
+        <div class="lg:col-span-1">
+            <!-- User Stats -->
+            <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                <h3 class="text-lg font-bold text-gray-800 mb-4">🏆 Your Profile</h3>
+                <div class="space-y-3">
+                    <div>
+                        <p class="text-sm text-gray-600">Trust Score</p>
+                        <p class="text-2xl font-bold text-indigo-600" id="trust-score">--</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-600">Kindness Score</p>
+                        <p class="text-2xl font-bold text-green-600" id="kindness-score">--</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-600">Badge</p>
+                        <p class="text-lg font-bold text-yellow-600" id="user-badge">--</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Trending Categories -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h3 class="text-lg font-bold text-gray-800 mb-4">🔥 Trending Help Needed</h3>
+                <div id="trending-categories" class="space-y-2">
+                    <p class="text-gray-600 text-sm">Loading...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .trending-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.75rem;
+        background: #f9fafb;
+        border-radius: 0.5rem;
+        border-left: 3px solid #4f46e5;
+    }
+    
+    .trending-count {
+        background: #4f46e5;
+        color: white;
+        padding: 0.25rem 0.75rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+</style>
+
+<script>
+    // Load recent requests
+    function loadRecentRequests() {
+        fetch('/api/nearby-requests?limit=5')
+        .then(response => response.json())
+        .then(data => {
+            const container = document.getElementById('recent-requests');
+            container.innerHTML = '';
+            
+            if (data.requests && data.requests.length > 0) {
+                data.requests.forEach(req => {
+                    const item = document.createElement('div');
+                    item.className = 'p-3 border border-gray-200 rounded bg-gray-50 hover:bg-indigo-50 transition cursor-pointer';
+                    item.innerHTML = `
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <h4 class="font-semibold text-gray-800">${escapeHtml(req.title)}</h4>
+                                <p class="text-sm text-gray-600">${req.distance_km || 0}km away</p>
+                            </div>
+                            <span class="text-xs font-semibold ${getUrgencyColor(req.urgency)}">
+                                ${(req.urgency || 'normal').toUpperCase()}
+                            </span>
+                        </div>
+                    `;
+                    item.addEventListener('click', () => {
+                        window.location.href = `/list_requests#request-${req.id}`;
+                    });
+                    container.appendChild(item);
+                });
+            } else {
+                container.innerHTML = '<p class="text-gray-600 text-sm">No nearby requests at the moment.</p>';
+            }
+        })
+        .catch(error => {
+            console.error('Error loading recent requests:', error);
+        });
+    }
+    
+    // Load trending categories
+    function loadTrendingCategories() {
+        fetch('/api/trending-categories?hours=24&limit=5')
+        .then(response => response.json())
+        .then(data => {
+            const container = document.getElementById('trending-categories');
+            container.innerHTML = '';
+            
+            if (data.trending_categories && data.trending_categories.length > 0) {
+                data.trending_categories.forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = 'trending-item';
+                    div.innerHTML = `
+                        <span class="font-semibold text-gray-800 capitalize">${escapeHtml(item.category)}</span>
+                        <span class="trending-count">${item.count}</span>
+                    `;
+                    container.appendChild(div);
+                });
+            } else {
+                container.innerHTML = '<p class="text-gray-600 text-sm">No trending categories yet.</p>';
+            }
+        })
+        .catch(error => {
+            console.error('Error loading trending categories:', error);
+        });
+    }
+    
+    // Load user insights
+    function loadUserInsights() {
+        fetch('/api/suggestion-insights')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.insights) {
+                const insights = data.insights.user_score;
+                document.getElementById('trust-score').textContent = insights.trust_score || 0;
+                document.getElementById('kindness-score').textContent = insights.kindness_score || 0;
+                document.getElementById('user-badge').textContent = insights.badge || 'Newbie';
+            }
+        })
+        .catch(error => {
+            console.error('Error loading user insights:', error);
+        });
+    }
+    
+    function getUrgencyColor(urgency) {
+        const u = (urgency || 'normal').toLowerCase();
+        if (u === 'emergency') return 'bg-red-100 text-red-800';
+        if (u === 'high') return 'bg-yellow-100 text-yellow-800';
+        return 'bg-blue-100 text-blue-800';
+    }
+    
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    // Load on page init
+    document.addEventListener('DOMContentLoaded', () => {
+        loadRecentRequests();
+        loadTrendingCategories();
+        loadUserInsights();
+    });
+</script>
+{% endblock %}
