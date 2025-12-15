@@ -7,6 +7,9 @@ import string
 
 
 from reputation_service import analyze_review_quality, calculate_reputation_points
+from smart_suggestion_service import (
+    SmartSuggestionService, WeatherService, LocationMatcher, DemandAnalyzer
+)
 from sqlalchemy import func
 from flask_cors import CORS
 
@@ -2176,6 +2179,50 @@ def chat_index():
     # also show some nearby helpers to start a new chat (trusted helpers)
     helpers = User.query.filter(User.is_trusted_helper == True, User.id != user.id).limit(10).all()
     return render_template("chat_index.html", conversations=conversations, helpers=helpers)
+@app.route("/suggestions")
+@login_required
+def suggestions_dashboard():
+    """Smart Suggestion AI Dashboard"""
+    user = current_user()
+    # Note: User location is optional; API will use defaults if not set
+    return render_template("suggestions_dashboard.html")
+
+
+@app.route("/api/nearby-requests", methods=["GET"])
+def api_nearby_requests():
+    """Get nearby requests using user or fallback location"""
+    try:
+        user = current_user()
+        limit = request.args.get("limit", type=int, default=10)
+
+        fallback_lat = float(os.getenv("DEFAULT_LAT", "23.8103"))
+        fallback_lng = float(os.getenv("DEFAULT_LNG", "90.4125"))
+
+        user_lat = request.args.get("lat", type=float)
+        user_lng = request.args.get("lng", type=float)
+
+        if user_lat is None:
+            user_lat = getattr(user, "lat", None) or fallback_lat
+        if user_lng is None:
+            user_lng = getattr(user, "lng", None) or fallback_lng
+
+        exclude_user_id = getattr(user, "id", None)
+
+        nearby = LocationMatcher.get_nearby_requests(
+            db=db,
+            Request=Request,
+            user_lat=user_lat,
+            user_lng=user_lng,
+            exclude_user_id=exclude_user_id,
+            limit=limit
+        )
+
+        return jsonify({"requests": nearby}), 200
+    except Exception as e:
+        print(f"[API] Error in api_nearby_requests: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/dashboard")
 @login_required
 def dashboard():
@@ -2713,10 +2760,237 @@ def debug_fcm_test():
     return f"Sent: {ok}"
 
 
+# ==================== SMART SUGGESTION AI ROUTES ====================
+
+@app.route("/api/suggestions", methods=["POST"])
+def get_smart_suggestions():
+    """
+    Get AI-powered smart suggestions based on:
+    - User location (lat/lng)
+    - Weather conditions
+    - Current time
+    - Local demand patterns
+    
+    Request body:
+    {
+        "lat": float,
+        "lng": float,
+        "max_suggestions": int (optional, default 5)
+    }
+    """
+    try:
+        data = request.get_json() or {}
+        user = current_user()
+
+        # Get user location
+        fallback_lat = float(os.getenv("DEFAULT_LAT", "23.8103"))
+        fallback_lng = float(os.getenv("DEFAULT_LNG", "90.4125"))
+
+        # Explicitly check if lat/lng are in payload
+        # If coords are NOT in payload, skip user profile and go straight to defaults
+        # This allows the widget to intentionally use demo data
+        has_payload_coords = "lat" in data and "lng" in data and data["lat"] is not None and data["lng"] is not None
+        
+        if has_payload_coords:
+            user_lat = data["lat"]
+            user_lng = data["lng"]
+            location_source = "payload"
+        else:
+            # No payload coords = skip user profile, use defaults (for demo/testing)
+            user_lat = fallback_lat
+            user_lng = fallback_lng
+            location_source = "fallback_default"
+        
+        max_suggestions = min(int(data.get("max_suggestions", 5)), 10)
+        
+        # Generate suggestions
+        suggestions = SmartSuggestionService.get_suggestions(
+            db=db,
+            Request=Request,
+            user_id=getattr(user, "id", 0),
+            user_lat=user_lat,
+            user_lng=user_lng,
+            max_suggestions=max_suggestions,
+            include_explanation=True
+        )
+        
+        return jsonify({
+            "success": True,
+            "suggestions": suggestions,
+            "generated_at": datetime.utcnow().isoformat(),
+            "location_source": location_source,
+            "location_used": {"lat": user_lat, "lng": user_lng}
+        }), 200
+        
+    except Exception as e:
+        print(f"[API] Error in get_smart_suggestions: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/weather", methods=["GET"])
+def get_weather():
+    """
+    Get current weather for user's location
+    Query params:
+    - lat: latitude
+    - lng: longitude
+    """
+    try:
+        user = current_user()
+        fallback_lat = float(os.getenv("DEFAULT_LAT", "23.8103"))
+        fallback_lng = float(os.getenv("DEFAULT_LNG", "90.4125"))
+
+        lat = request.args.get("lat", type=float)
+        lng = request.args.get("lng", type=float)
+
+        if lat is None:
+            lat = getattr(user, "lat", None) or fallback_lat
+        if lng is None:
+            lng = getattr(user, "lng", None) or fallback_lng
+        
+        weather_data = WeatherService.get_weather(lat, lng)
+        conditions = WeatherService.extract_conditions(weather_data)
+        
+        if not conditions:
+            # Graceful fallback for UI when weather fails
+            demo = {
+                "condition": "Unknown",
+                "description": "Weather unavailable",
+                "temp": None,
+                "humidity": None,
+                "wind_speed": None,
+            }
+            return jsonify({"success": False, "weather": demo}), 200
+        
+        return jsonify({
+            "success": True,
+            "weather": conditions,
+            "raw_data": weather_data
+        }), 200
+        
+    except Exception as e:
+        print(f"[API] Error in get_weather: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/trending-categories", methods=["GET"])
+def get_trending_categories():
+    """
+    Get trending help categories across the platform
+    Query params:
+    - hours: lookback period in hours (default 24)
+    - limit: number of categories (default 5)
+    """
+    try:
+        hours = request.args.get("hours", type=int, default=24)
+        limit = request.args.get("limit", type=int, default=5)
+        
+        trending = SmartSuggestionService.get_trending_categories(
+            db=db,
+            Request=Request,
+            hours=max(1, min(hours, 720)),  # Between 1 hour and 30 days
+            limit=max(1, min(limit, 20))
+        )
+        
+        return jsonify({
+            "success": True,
+            "trending_categories": trending,
+            "period_hours": hours
+        }), 200
+        
+    except Exception as e:
+        print(f"[API] Error in get_trending_categories: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/suggestion-insights", methods=["GET"])
+@login_required
+def get_suggestion_insights():
+    """
+    Get insights about suggestions and user opportunities
+    """
+    try:
+        user = current_user()
+        
+        if not user.lat or not user.lng:
+            return jsonify({"error": "User location required"}), 400
+        
+        # Get all nearby open requests
+        nearby_requests = LocationMatcher.get_nearby_requests(
+            db=db,
+            Request=Request,
+            user_lat=user.lat,
+            user_lng=user.lng,
+            exclude_user_id=user.id,
+            limit=50
+        )
+        
+        # Get weather
+        weather_data = WeatherService.get_weather(user.lat, user.lng)
+        weather_conditions = WeatherService.extract_conditions(weather_data)
+        
+        # Get time period
+        time_period = DemandAnalyzer.get_time_period()
+        
+        # Get trending categories
+        trending = SmartSuggestionService.get_trending_categories(
+            db=db, Request=Request, hours=24, limit=5
+        )
+        
+        # Analyze suggestions
+        insights = {
+            "total_nearby_requests": len(nearby_requests),
+            "weather_summary": {
+                "condition": weather_conditions.get("condition"),
+                "temperature": weather_conditions.get("temp"),
+                "humidity": weather_conditions.get("humidity"),
+            },
+            "current_time_period": time_period,
+            "trending_categories": trending,
+            "user_score": {
+                "trust_score": user.trust_score or 0,
+                "kindness_score": user.kindness_score or 0,
+                "badge": user.calculate_badge()[0]
+            },
+            "recommendations": {
+                "weather_opportunities": DemandAnalyzer.get_weather_suggestions(
+                    weather_conditions.get("condition", "")
+                ),
+                "time_opportunities": DemandAnalyzer.get_time_suggestions(time_period),
+                "temperature_opportunities": DemandAnalyzer.get_temp_suggestions(
+                    DemandAnalyzer.categorize_temperature(weather_conditions.get("temp"))
+                )
+            }
+        }
+        
+        return jsonify({
+            "success": True,
+            "insights": insights
+        }), 200
+        
+    except Exception as e:
+        print(f"[API] Error in get_suggestion_insights: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ==================== END SMART SUGGESTION AI ROUTES ====================
+
+
 # ------------------ REGISTER BLUEPRINTS ------------------
 # Register resource pooling blueprint (must be after all models are defined)
 from resources import resources_bp
 app.register_blueprint(resources_bp)
+
+# ------------------ SUGGESTIONS DASHBOARD PAGE ------------------
+@app.route("/suggestions", endpoint="suggestions")
+def suggestions_page():
+    """Render the Smart Suggestions dashboard page."""
+    try:
+        return render_template("suggestions_dashboard.html")
+    except Exception as e:
+        print(f"[UI] Error rendering suggestions_dashboard: {e}")
+        # Fallback to home if template missing
+        return redirect(url_for("home"))
 
 # ------------------ MAIN ------------------
 if __name__ == "__main__":
@@ -2736,4 +3010,5 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Migration note: {e}")
     
-    socketio.run(app, debug=True)
+    debug_mode = os.getenv("FLASK_DEBUG", "0") == "1"
+    socketio.run(app, debug=debug_mode, use_reloader=False)
