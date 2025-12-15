@@ -34,27 +34,34 @@ messaging.onBackgroundMessage((payload) => {
   self.registration.showNotification(title, options);
 });
 
-self.addEventListener("notificationclick", (event) => {
+
+self.addEventListener("notificationclick", function (event) {
   event.notification.close();
+
   const data = event.notification.data || {};
   let url = "/";
 
   if (data.type === "NEW_CHAT_MESSAGE" && data.conversation_id) {
     url = `/chat/${data.conversation_id}`;
-  } else if (data.type === "NEARBY_REQUEST" && data.request_id) {
-    url = `/requests/${data.request_id}`;
+  }
+
+  if (data.type === "NEED_HELP" && data.request_id) {
+    url = `/requests`;
+  }
+
+  if (data.type === "EMOTIONAL_CHAT" && data.sender_id) {
+    url = `/chat/${data.sender_id}`;
   }
 
   event.waitUntil(
-    clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
-      for (const client of clientList) {
-        if (client.url.includes(url) && "focus" in client) {
-          return client.focus();
+    clients.matchAll({ type: "window", includeUncontrolled: true })
+      .then((clientList) => {
+        for (const client of clientList) {
+          if (client.url.includes(url) && "focus" in client) {
+            return client.focus();
+          }
         }
-      }
-      if (clients.openWindow) {
         return clients.openWindow(url);
-      }
-    })
+      })
   );
 });

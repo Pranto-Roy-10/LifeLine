@@ -1,15 +1,15 @@
-{% extends "base.html" %}
-
-{% block title %}LifeLine – Home{% endblock %}
-
-{% block content %}
+{% extends "base.html" %} {% block title %}LifeLine – Home{% endblock %} {%
+block content %}
 
 <!-- HERO: MAIN BANNER -->
-<section class="w-full px-6 md:px-12 py-10 md:py-16 grid lg:grid-cols-2 gap-10 items-center">
-
+<section
+  class="w-full px-6 md:px-12 py-10 md:py-16 grid lg:grid-cols-2 gap-10 items-center"
+>
   <!-- LEFT: TEXT + PRIMARY ACTIONS -->
   <div>
-    <p class="text-xs font-semibold tracking-[0.25em] text-emerald-300 uppercase mb-3">
+    <p
+      class="text-xs font-semibold tracking-[0.25em] text-emerald-300 uppercase mb-3"
+    >
       LIFELINE · NEIGHBORHOOD NETWORK
     </p>
 
@@ -27,10 +27,16 @@
 
     <!-- PRIMARY ACTION BUTTONS -->
     <div class="flex flex-wrap gap-3 mb-4">
-      <a href="{{ url_for('need_help') }}" class="flex-1 md:flex-none px-5 py-2.5 rounded-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-sm font-semibold text-center transition">
+      <a
+        href="{{ url_for('need_help') }}"
+        class="flex-1 md:flex-none px-5 py-2.5 rounded-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-sm font-semibold text-center transition"
+      >
         I Need Help
       </a>
-      <a href="{{ url_for('can_help') }}" class="flex-1 md:flex-none px-5 py-2.5 rounded-full border border-emerald-400/70 text-emerald-300 hover:bg-emerald-500/10 text-sm font-semibold text-center transition">
+      <a
+        href="{{ url_for('can_help') }}"
+        class="flex-1 md:flex-none px-5 py-2.5 rounded-full border border-emerald-400/70 text-emerald-300 hover:bg-emerald-500/10 text-sm font-semibold text-center transition"
+      >
         I Can Help
       </a>
       <a href="{{ url_for('suggestions') }}" class="flex-1 md:flex-none px-5 py-2.5 rounded-full border border-emerald-500/60 hover:border-emerald-400 text-emerald-300 hover:text-emerald-200 text-sm font-semibold text-center transition" title="See AI Suggestions">
@@ -42,7 +48,10 @@
     </div>
 
     <!-- SECONDARY QUICK LINK -->
-    <a href="/emotional" class="inline-flex items-center gap-2 text-xs text-violet-300 hover:text-violet-200 mt-1">
+    <a
+      href="/emotional"
+      class="inline-flex items-center gap-2 text-xs text-violet-300 hover:text-violet-200 mt-1"
+    >
       <span class="h-2 w-2 rounded-full bg-violet-400 animate-pulse"></span>
       Feeling low? Talk to a listener nearby →
     </a>
@@ -50,29 +59,35 @@
 
   <!-- RIGHT: LIVE-STYLE PANEL -->
   <div class="relative">
-    <div class="absolute -top-6 -left-4 h-24 w-24 rounded-full bg-emerald-500/10 blur-3xl"></div>
-    <div class="absolute -bottom-8 -right-6 h-24 w-24 rounded-full bg-sky-500/10 blur-3xl"></div>
+    <div
+      class="absolute -top-6 -left-4 h-24 w-24 rounded-full bg-emerald-500/10 blur-3xl"
+    ></div>
+    <div
+      class="absolute -bottom-8 -right-6 h-24 w-24 rounded-full bg-sky-500/10 blur-3xl"
+    ></div>
 
-    <div class="relative rounded-3xl border border-slate-800 bg-slate-900/60 backdrop-blur shadow-2xl p-5 space-y-4">
-
+    <div
+      class="relative rounded-3xl border border-slate-800 bg-slate-900/60 backdrop-blur shadow-2xl p-5 space-y-4"
+    >
       <div class="flex justify-between items-center">
         <div>
-          <p class="text-xs font-semibold text-slate-300">
-            Today in your area
-          </p>
+          <p class="text-xs font-semibold text-slate-300">Today in your area</p>
           <p class="text-[11px] text-slate-500">
             Demo data · will be live from Supabase later
           </p>
         </div>
-        <span class="text-[10px] px-2 py-1 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">
+        <span
+          class="text-[10px] px-2 py-1 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/30"
+        >
           Live preview
         </span>
       </div>
 
       <!-- DEMO REQUEST CARDS -->
       <div class="space-y-3 text-xs">
-
-        <div class="rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-3 flex items-start justify-between">
+        <div
+          class="rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-3 flex items-start justify-between"
+        >
           <div>
             <p class="font-semibold text-slate-100">Medicine pickup · Urgent</p>
             <p class="text-[11px] text-slate-400">
@@ -87,11 +102,14 @@
           </div>
         </div>
 
-        <div class="rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-3 flex items-start justify-between">
+        <div
+          class="rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-3 flex items-start justify-between"
+        >
           <div>
             <p class="font-semibold text-slate-100">Ride share to campus</p>
             <p class="text-[11px] text-slate-400">
-              Tanvir is driving to Dhanmondi, 2 seats available from Mohammadpur.
+              Tanvir is driving to Dhanmondi, 2 seats available from
+              Mohammadpur.
             </p>
           </div>
           <div class="text-right text-[10px] text-sky-300">
@@ -102,25 +120,33 @@
           </div>
         </div>
 
-        <div class="rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-3 flex items-start justify-between">
+        <div
+          class="rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-3 flex items-start justify-between"
+        >
           <div>
-            <p class="font-semibold text-slate-100">Emotional Ping · “Rough day…”</p>
+            <p class="font-semibold text-slate-100">
+              Emotional Ping · “Rough day…”
+            </p>
             <p class="text-[11px] text-slate-400">
               Someone nearby just wants to talk for a few minutes.
             </p>
           </div>
           <div class="text-right text-[10px] text-violet-300">
             Listener mode
-            <a href="/emotional" class="block mt-1 underline hover:no-underline">
+            <a
+              href="/emotional"
+              class="block mt-1 underline hover:no-underline"
+            >
               Check in
             </a>
           </div>
         </div>
-
       </div>
 
       <!-- KINDNESS + TRUST SNIPPET -->
-      <div class="mt-2 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 flex items-center justify-between text-[11px]">
+      <div
+        class="mt-2 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 flex items-center justify-between text-[11px]"
+      >
         <div>
           <p class="font-semibold text-emerald-200">Your kindness snapshot</p>
           <p class="text-[10px] text-emerald-200/70">
@@ -128,10 +154,13 @@
           </p>
         </div>
         <div class="text-right">
-          <p class="text-[11px] text-emerald-200 font-semibold">Silver Helper</p>
+          <p class="text-[11px] text-emerald-200 font-semibold">
+            Silver Helper
+          </p>
           <p class="text-[10px] text-emerald-200/70">7 neighbors helped</p>
         </div>
       </div>
+
       <!-- Resources widget (recent shared items) -->
       <div class="mt-4" id="resources-widget-container">
         {% include '_resources_widget.html' %}
@@ -140,112 +169,155 @@
   </div>
 </section>
 
-
 <!-- WHAT YOU CAN DO WITH LIFELINE -->
 <section class="border-t border-slate-800 bg-slate-950/60">
   <div class="w-full px-6 md:px-12 py-12 md:py-16">
-
     <h3 class="text-xl md:text-2xl font-semibold mb-3">
       What you can do with LifeLine
     </h3>
     <p class="text-sm text-slate-400 mb-8 max-w-3xl">
-      LifeLine is more than a chat app. It’s a set of tools to make your neighborhood
-      kinder, safer, and more connected – from daily help to emergency SOS.
+      LifeLine is more than a chat app. It’s a set of tools to make your
+      neighborhood kinder, safer, and more connected – from daily help to
+      emergency SOS.
     </p>
 
     <!-- ACTION GRID -->
     <div class="grid md:grid-cols-3 gap-6 text-sm">
-
       <!-- COLUMN 1 -->
       <div class="space-y-3">
-        <a href="/requests" class="block rounded-2xl border border-slate-800 bg-slate-900/70 px-4 py-3 hover:border-emerald-400 transition">
-          <p class="text-xs font-semibold text-emerald-300 mb-1">Ask for something</p>
+        <a
+          href="/requests"
+          class="block rounded-2xl border border-slate-800 bg-slate-900/70 px-4 py-3 hover:border-emerald-400 transition"
+        >
+          <p class="text-xs font-semibold text-emerald-300 mb-1">
+            Ask for something
+          </p>
           <p class="font-semibold mb-1">Request help</p>
           <p class="text-[11px] text-slate-400">
-            Need medicine, groceries, a quick repair, or tutoring? Post a “Need Help” card.
+            Need medicine, groceries, a quick repair, or tutoring? Post a “Need
+            Help” card.
           </p>
         </a>
 
-        <a href="/requests?mode=offer" class="block rounded-2xl border border-slate-800 bg-slate-900/70 px-4 py-3 hover:border-emerald-400 transition">
-          <p class="text-xs font-semibold text-emerald-300 mb-1">Give something</p>
+        <a
+          href="/requests?mode=offer"
+          class="block rounded-2xl border border-slate-800 bg-slate-900/70 px-4 py-3 hover:border-emerald-400 transition"
+        >
+          <p class="text-xs font-semibold text-emerald-300 mb-1">
+            Give something
+          </p>
           <p class="font-semibold mb-1">Offer help</p>
           <p class="text-[11px] text-slate-400">
-            Post what you can offer – rides, skills, or free time – and match with neighbors.
+            Post what you can offer – rides, skills, or free time – and match
+            with neighbors.
           </p>
         </a>
 
-        <a href="/resources" class="block rounded-2xl border border-slate-800 bg-slate-900/70 px-4 py-3 hover:border-emerald-400 transition">
+        <a
+          href="/resources"
+          class="block rounded-2xl border border-slate-800 bg-slate-900/70 px-4 py-3 hover:border-emerald-400 transition"
+        >
           <p class="text-xs font-semibold text-emerald-300 mb-1">Share items</p>
           <p class="font-semibold mb-1">Neighborhood resources</p>
           <p class="text-[11px] text-slate-400">
-            Share or donate items like rice, books, tools, or electronics in a shared stock list.
+            Share or donate items like rice, books, tools, or electronics in a
+            shared stock list.
           </p>
         </a>
       </div>
 
       <!-- COLUMN 2 -->
       <div class="space-y-3">
-        <a href="/map" class="block rounded-2xl border border-slate-800 bg-slate-900/70 px-4 py-3 hover:border-sky-400 transition">
-          <p class="text-xs font-semibold text-sky-300 mb-1">See what’s around</p>
+        <a
+          href="/map"
+          class="block rounded-2xl border border-slate-800 bg-slate-900/70 px-4 py-3 hover:border-sky-400 transition"
+        >
+          <p class="text-xs font-semibold text-sky-300 mb-1">
+            See what’s around
+          </p>
           <p class="font-semibold mb-1">Live neighborhood map</p>
           <p class="text-[11px] text-slate-400">
-            View help requests and helpers on a map with categories like medicine, food, and rides.
+            View help requests and helpers on a map with categories like
+            medicine, food, and rides.
           </p>
         </a>
 
-        <a href="/events" class="block rounded-2xl border border-slate-800 bg-slate-900/70 px-4 py-3 hover:border-sky-400 transition">
+        <a
+          href="/events"
+          class="block rounded-2xl border border-slate-800 bg-slate-900/70 px-4 py-3 hover:border-sky-400 transition"
+        >
           <p class="text-xs font-semibold text-sky-300 mb-1">Join together</p>
           <p class="font-semibold mb-1">Community events</p>
           <p class="text-[11px] text-slate-400">
-            Discover local donation drives, repair camps, and clean-up days near you.
+            Discover local donation drives, repair camps, and clean-up days near
+            you.
           </p>
         </a>
 
-        <a href="/chat" class="block rounded-2xl border border-slate-800 bg-slate-900/70 px-4 py-3 hover:border-sky-400 transition">
-          <p class="text-xs font-semibold text-sky-300 mb-1">Talk in real time</p>
+        <a
+          href="/chat"
+          class="block rounded-2xl border border-slate-800 bg-slate-900/70 px-4 py-3 hover:border-sky-400 transition"
+        >
+          <p class="text-xs font-semibold text-sky-300 mb-1">
+            Talk in real time
+          </p>
           <p class="font-semibold mb-1">One-to-one chat</p>
           <p class="text-[11px] text-slate-400">
-            Secure, real-time chat between helpers and requesters with typing indicators and translation.
+            Secure, real-time chat between helpers and requesters with typing
+            indicators and translation.
           </p>
         </a>
       </div>
 
       <!-- COLUMN 3 -->
       <div class="space-y-3">
-        <a href="/sos" class="block rounded-2xl border border-slate-800 bg-slate-900/70 px-4 py-3 hover:border-rose-400 transition">
+        <!-- ✅ CHANGED: card now triggers the same SOS form submit -->
+        <a
+          href="javascript:void(0)"
+          id="oneTapSosCard"
+          class="block rounded-2xl border border-slate-800 bg-slate-900/70 px-4 py-3 hover:border-rose-400 transition"
+        >
           <p class="text-xs font-semibold text-rose-300 mb-1">Emergency</p>
           <p class="font-semibold mb-1">One-tap SOS alert</p>
           <p class="text-[11px] text-slate-400">
-            In danger? Send a single-tap alert to trusted helpers nearby and auto-call contacts.
+            In danger? Send a single-tap alert to trusted helpers nearby and
+            auto-call contacts.
           </p>
         </a>
 
-        <a href="/emotional" class="block rounded-2xl border border-slate-800 bg-slate-900/70 px-4 py-3 hover:border-violet-400 transition">
-          <p class="text-xs font-semibold text-violet-300 mb-1">Emotional support</p>
+        <a
+          href="/emotional"
+          class="block rounded-2xl border border-slate-800 bg-slate-900/70 px-4 py-3 hover:border-violet-400 transition"
+        >
+          <p class="text-xs font-semibold text-violet-300 mb-1">
+            Emotional support
+          </p>
           <p class="font-semibold mb-1">Emotional Ping</p>
           <p class="text-[11px] text-slate-400">
-            Send a short “Feeling low” or “Need motivation” ping to kind listeners nearby.
+            Send a short “Feeling low” or “Need motivation” ping to kind
+            listeners nearby.
           </p>
         </a>
 
-        <a href="/dashboard" class="block rounded-2xl border border-slate-800 bg-slate-900/70 px-4 py-3 hover:border-amber-400 transition">
+        <a
+          href="/dashboard"
+          class="block rounded-2xl border border-slate-800 bg-slate-900/70 px-4 py-3 hover:border-amber-400 transition"
+        >
           <p class="text-xs font-semibold text-amber-300 mb-1">Your journey</p>
           <p class="font-semibold mb-1">Trust, badges & impact</p>
           <p class="text-[11px] text-slate-400">
-            See how many people you’ve helped, your kindness score, and progress toward badges.
+            See how many people you’ve helped, your kindness score, and progress
+            toward badges.
           </p>
         </a>
       </div>
-
     </div>
   </div>
 </section>
 
-
 <!-- IMPACT / STATS -->
 <section id="impact" class="border-t border-slate-800 bg-slate-950/80">
   <div class="w-full px-6 md:px-12 py-12 md:py-16">
-
     <h3 class="text-xl md:text-2xl font-semibold mb-3">
       Your kindness at a glance.
     </h3>
@@ -256,27 +328,34 @@
     </p>
 
     <div class="grid md:grid-cols-3 gap-6 text-sm">
-
       <div class="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
         <p class="text-xs text-slate-400 mb-1">Neighbors helped (demo)</p>
         <p class="text-3xl font-bold text-emerald-300 mb-1">0</p>
-        <p class="text-[11px] text-slate-500">This will update once the backend is connected.</p>
+        <p class="text-[11px] text-slate-500">
+          This will update once the backend is connected.
+        </p>
       </div>
 
       <div class="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
-        <p class="text-xs text-slate-400 mb-1">Volunteer time recorded (demo)</p>
+        <p class="text-xs text-slate-400 mb-1">
+          Volunteer time recorded (demo)
+        </p>
         <p class="text-3xl font-bold text-sky-300 mb-1">0 h</p>
-        <p class="text-[11px] text-slate-500">Track your hours and build a verified history.</p>
+        <p class="text-[11px] text-slate-500">
+          Track your hours and build a verified history.
+        </p>
       </div>
 
       <div class="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
-        <p class="text-xs text-slate-400 mb-1">Estimated CO₂ saved via shared rides (demo)</p>
+        <p class="text-xs text-slate-400 mb-1">
+          Estimated CO₂ saved via shared rides (demo)
+        </p>
         <p class="text-3xl font-bold text-violet-300 mb-1">0 kg</p>
-        <p class="text-[11px] text-slate-500">Shared rides reduce cost and climate impact.</p>
+        <p class="text-[11px] text-slate-500">
+          Shared rides reduce cost and climate impact.
+        </p>
       </div>
-
     </div>
-
   </div>
 </section>
 
@@ -284,19 +363,29 @@
   // Auto-refresh resources widget every 10 seconds
   function refreshResourcesWidget() {
     fetch('{{ url_for("resources.api_widget") }}')
-      .then(response => response.text())
-      .then(html => {
-        document.getElementById('resources-widget-container').innerHTML = html;
+      .then((response) => response.text())
+      .then((html) => {
+        document.getElementById("resources-widget-container").innerHTML = html;
       })
-      .catch(error => console.log('Widget refresh error:', error));
+      .catch((error) => console.log("Widget refresh error:", error));
   }
 
   // Refresh on page load and then every 10 seconds
-  document.addEventListener('DOMContentLoaded', function() {
+  document.addEventListener("DOMContentLoaded", function () {
     // Initial refresh
     refreshResourcesWidget();
     // Then refresh every 10 seconds
     setInterval(refreshResourcesWidget, 10000);
+
+    // ✅ One-tap SOS card triggers SAME SOS form as the red button
+    const card = document.getElementById("oneTapSosCard");
+    const sosForm = document.getElementById("sosForm");
+    if (card && sosForm) {
+      card.addEventListener("click", function (e) {
+        e.preventDefault();
+        sosForm.requestSubmit(); // triggers same confirm + POST
+      });
+    }
   });
 </script>
 

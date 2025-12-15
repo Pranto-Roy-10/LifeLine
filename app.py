@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 from datetime import datetime, timedelta
 import os
 import math
@@ -34,6 +36,23 @@ from flask_jwt_extended import (
 )
 from flask_socketio import SocketIO, emit, join_room, leave_room
 
+
+
+
+# ------------------ FCM INIT ------------------
+# Initialize Firebase Admin SDK ONCE
+try:
+    if not firebase_admin._apps:
+        cred = credentials.Certificate("firebase-service-account.json")
+        firebase_admin.initialize_app(cred)
+        print("[FCM] Firebase Admin initialized.")
+    else:
+        print("[FCM] Firebase Admin already initialized.")
+except Exception as e:
+    print(f"[FCM] Error initializing Firebase Admin SDK: {e}")
+    print("[FCM] Push notifications will be disabled on this machine.")
+
+
 # Translation libraries: try official Google Cloud first, fallback to googletrans
 USE_GOOGLE_CLOUD_TRANSLATE = os.getenv("USE_GOOGLE_CLOUD_TRANSLATE", "0") == "1"
 try:
@@ -57,58 +76,8 @@ otp_store = {}
 app = Flask(__name__)
 CORS(app, supports_credentials=True)
 
-# -------- Firebase Admin (for Google sign-in + FCM) --------
-FIREBASE_CRED_PATH = os.getenv(
-    "GOOGLE_APPLICATION_CREDENTIALS",
-    "firebase-service-account.json",  # default path
-)
-
-if not firebase_admin._apps:
-    try:
-        cred = credentials.Certificate(FIREBASE_CRED_PATH)
-        firebase_admin.initialize_app(cred)
-        print("[Firebase] Initialized with", FIREBASE_CRED_PATH)
-    except Exception as e:
-        # IMPORTANT: don't crash the app if Firebase isn't configured locally
-        print("[Firebase] WARNING: could not initialize Firebase Admin:", e)
-        print("[Firebase] Google login / push notifications will be disabled on this machine.")
-# ------------- FCM PUSH HELPERS -------------
-def send_push_notification(token, title, body, data=None):
-    """
-    Low-level helper: send a push to a single FCM token.
-    Safe to call even if Firebase Admin isn't configured.
-    """
-    if not token:
-        return
-
-    # If Firebase Admin didn't initialize (e.g. teammate doesn't have JSON),
-    # just skip sending silently.
-    if not firebase_admin._apps:
-        print("[FCM] Skipping push; Firebase Admin not initialized on this machine.")
-        return
-
-    try:
-        msg = messaging.Message(
-            token=token,
-            notification=messaging.Notification(
-                title=title,
-                body=body,
-            ),
-            data={k: str(v) for k, v in (data or {}).items()},
-        )
-        resp = messaging.send(msg)
-        print("[FCM] Sent push, id:", resp)
-    except Exception as e:
-        print("[FCM] Error sending push:", e)
 
 
-def send_push_to_user(user, title, body, data=None):
-    """
-    Convenience wrapper; reads user.fcm_token.
-    """
-    if not user or not getattr(user, "fcm_token", None):
-        return
-    send_push_notification(user.fcm_token, title, body, data=data)
 
 # ------------------ CONFIG ------------------
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-change-me")
@@ -116,7 +85,12 @@ app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "dev-jwt-secret")
 
 # SQLite for now (file lifeline.db in project root).
 # app.config["SQLALCHEMY_DATABASE_URI"] = "postgresql+psycopg2://postgres:error101@localhost:5432/lifeline_db"
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///lifeline.db"
+import os
+
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+DB_PATH = os.path.join(BASE_DIR, "lifeline.db")   # keep it in project root
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + DB_PATH
+
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["UPLOAD_FOLDER"] = os.path.join("static", "uploads", "profile_photos")
 app.config["ALLOWED_IMAGE_EXTENSIONS"] = {"png", "jpg", "jpeg", "gif"}
@@ -200,7 +174,7 @@ class User(db.Model):
     phone = db.Column(db.String(20))
     dob = db.Column(db.String(20))  # or Date type if you prefer
     
-    fcm_token = db.Column(db.String(512), nullable=True)
+    fcm_tokens = db.relationship('FCMToken', backref='user', lazy='dynamic')
 
     
 
@@ -315,7 +289,32 @@ class Request(db.Model):
             except Exception:
                 d["distance_km"] = None
         return d
-# ------------------ FCM HELPER FUNCTIONS ------------------
+    
+class EmotionalPing(db.Model):
+    __tablename__ = "emotional_pings"
+    id = db.Column(db.Integer, primary_key=True)
+
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    mood = db.Column(db.String(50), nullable=False)
+    message = db.Column(db.Text, nullable=True)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    is_active = db.Column(db.Boolean, default=True)
+    is_listened = db.Column(db.Boolean, default=False)
+    uplift_count = db.Column(db.Integer, default=0)
+    last_uplift_at = db.Column(db.DateTime, nullable=True)
+
+    user = db.relationship("User", backref="emotional_pings")
+
+
+
+
+def get_trusted_helpers_for_ping(sender_id):
+    return User.query.filter(
+        User.is_trusted_helper == True,
+        User.id != sender_id
+    ).all()
+
 
 # ------------------ FCM HELPER FUNCTIONS ------------------
 
@@ -347,56 +346,96 @@ def send_fcm_to_token(token, title, body, data=None):
 
 
 # --------- FCM HELPER ---------
-def send_fcm_to_user(user, title, body, data=None):
+def send_fcm_to_user(target_user, title, body, data=None):
     """
-    Send a push notification to a single user if they have an fcm_token.
-    Returns True on success, False otherwise.
+    Sends an FCM push notification to all devices registered for the target user.
+
+    Accepts:
+      - target_user as a User object OR an int user_id
     """
-    if not user or not getattr(user, "fcm_token", None):
-        print("[FCM] No token for user", getattr(user, "id", None))
+    if not firebase_admin._apps:
+        print("[FCM] Firebase not initialized, cannot send notification.")
         return False
 
+    # Allow caller to pass user_id (int) or User object
     try:
-        msg = messaging.Message(
-            token=user.fcm_token,
-            notification=messaging.Notification(
-                title=title,
-                body=body,
-            ),
-            data={k: str(v) for k, v in (data or {}).items()},
-        )
-        resp = messaging.send(msg)
-        print("[FCM] Sent push:", resp)
-        return True
+        if isinstance(target_user, int):
+            target_user = User.query.get(target_user)
+        elif isinstance(target_user, str) and target_user.isdigit():
+            target_user = User.query.get(int(target_user))
     except Exception as e:
-        print("[FCM] Error sending push:", e)
+        print("[FCM] Invalid target_user provided:", e)
         return False
-def send_fcm_for_emotional_chat(listener, from_user):
-    """
-    Notify listener AND save to DB for the bell icon.
-    """
+
+    if not target_user:
+        print("[FCM] Target user not found.")
+        return False
+
+    tokens = [t.token for t in target_user.fcm_tokens.all()]
+    if not tokens:
+        print(f"[FCM] User {target_user.id} has no FCM tokens registered.")
+        return False
+
+    # Ensure data is string:string
+    data_payload = {k: str(v) for k, v in (data or {}).items()}
+
+    message = messaging.MulticastMessage(
+        notification=messaging.Notification(title=title, body=body),
+        data=data_payload,
+        tokens=tokens,
+        android=messaging.AndroidConfig(priority="high"),
+        apns=messaging.APNSConfig(headers={"apns-priority": "10"}),
+    )
+
     try:
-        # 1. Send Mobile Push (Popup)
-        send_push_to_user(
+        response = messaging.send_multicast(message)
+
+        # Cleanup invalid tokens
+        if response.failure_count > 0:
+            bad_tokens = []
+            for idx, resp in enumerate(response.responses):
+                if not resp.success:
+                    # resp.exception can be None; guard it
+                    code = getattr(getattr(resp, "exception", None), "code", None)
+                    if code in ("INVALID_ARGUMENT", "UNREGISTERED"):
+                        bad_tokens.append(tokens[idx])
+
+            if bad_tokens:
+                FCMToken.query.filter(FCMToken.token.in_(bad_tokens)).delete(synchronize_session=False)
+                db.session.commit()
+                print(f"[FCM] Cleaned up {len(bad_tokens)} expired tokens for user {target_user.id}.")
+
+        print(f"[FCM] Multicast sent: Success={response.success_count}, Failures={response.failure_count}")
+        return response.success_count > 0
+
+    except Exception as e:
+        print(f"[FCM] Error sending multicast: {e}")
+        return False
+
+    
+# --- 1. NEARBY HELP REQUEST ---
+# --- UPDATE IN app.py ---
+
+# ----------------------------------------------------------------------
+# NEW HELPER: For Emotional Ping
+# ----------------------------------------------------------------------
+def send_fcm_for_emotional_chat(listener, from_user):
+    try:
+        send_fcm_to_user(
             listener,
             title="Emotional Support Request",
             body=f"{from_user.name} is feeling low and wants to chat.",
             data={"type": "EMOTIONAL_CHAT", "sender_id": str(from_user.id)}
         )
 
-        # 2. SAVE TO DB (This fixes the Bell Icon)
         push_notification(
             user_id=listener.id,
             type="chat",
             message=f"{from_user.name} is feeling low and wants to chat.",
             link=url_for('chat_with_user', other_user_id=from_user.id)
         )
-        print(f"[FCM] Emotional chat alert saved for listener {listener.id}")
-
     except Exception as e:
         print(f"[FCM] Error in send_fcm_for_emotional_chat: {e}")
-# --- 1. NEARBY HELP REQUEST ---
-# --- UPDATE IN app.py ---
 
 
 def send_fcm_for_need_request(req_obj):
@@ -430,7 +469,7 @@ def send_fcm_for_need_request(req_obj):
                 )
 
                 # 2. Send Mobile Push (Only if they have a token)
-                if u.fcm_token:
+                if u.fcm_tokens.count() > 0:
                     send_fcm_to_user(
                         u, 
                         title=title, 
@@ -447,41 +486,45 @@ def send_fcm_for_need_request(req_obj):
 
 
 def send_fcm_for_sos(from_user):
-    """
-    SOS Alert -> Notify Verified Helpers AND save to DB stack.
-    """
     try:
-        # FIX: Get ALL Trusted Helpers (removed fcm_token filter)
         helpers = User.query.filter(
             User.is_trusted_helper == True,
             User.id != from_user.id
         ).all()
 
-        alert_count = 0
         for h in helpers:
-            # 1. SAVE TO DB (Always do this for the Bell Icon)
             push_notification(
                 user_id=h.id,
                 type="sos",
                 message=f"🚨 SOS: {from_user.name} needs immediate help!",
-                link=url_for('chat_with_user', other_user_id=from_user.id)
+                link=url_for("chat_with_user", other_user_id=from_user.id)
             )
 
-            # 2. Send Mobile Push (Only if they have a token)
-            if h.fcm_token:
+            if h.fcm_tokens.count() > 0:
                 send_fcm_to_user(
                     h,
                     title="🚨 SOS ALERT!",
                     body=f"EMERGENCY: {from_user.name} needs help!",
                     data={"type": "SOS_ALERT", "from_user_id": str(from_user.id)}
                 )
-            
-            alert_count += 1
-            
-        print(f"[FCM] SOS alerts saved for {alert_count} trusted helpers.")
 
+        return True
     except Exception as e:
-        print(f"[FCM] Error in send_fcm_for_sos: {e}")
+        print("[SOS] Error:", e)
+        return False
+
+        
+# NEW MODEL FOR FCM TOKENS
+class FCMToken(db.Model):
+    __tablename__ = 'fcm_token'
+    id = db.Column(db.Integer, primary_key=True)
+    # This foreign key links the token back to the User who owns it
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    # The token string itself, must be unique across all tokens
+    token = db.Column(db.String(255), unique=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    
 class Offer(db.Model):
     __tablename__ = "offers"
     id = db.Column(db.Integer, primary_key=True)
@@ -727,36 +770,10 @@ def generate_otp_code():
     return "".join(random.choices(string.digits, k=6))
 
 def get_notification_count(user: User) -> int:
-    """
-    How many 'notifications' the user has.
-    - New offers on my requests (still pending)
-    - Active jobs where I'm the helper (requests in progress)
-    """
     if not user:
         return 0
-
-    # 1) Offers that other users made on *my* requests
-    pending_offers_for_me = (
-        Offer.query
-        .join(Request, Offer.request_id == Request.id)
-        .filter(
-            Request.user_id == user.id,
-            Offer.status == "pending"
-        )
-        .count()
-    )
-
-    # 2) Requests where I am the assigned helper and it's still in progress
-    my_active_jobs = (
-        Request.query
-        .filter(
-            Request.helper_id == user.id,
-            Request.status == "in_progress"
-        )
-        .count()
-    )
-
-    return pending_offers_for_me + my_active_jobs
+    return Notification.query.filter_by(user_id=user.id, is_read=False).count()
+    
 
 # Make current user available in all templates as `current_user`
 @app.context_processor
@@ -837,60 +854,30 @@ def update_user_scores(user):
     db.session.commit()
 
 def send_push_to_user(user: User, title: str, body: str, data: dict | None = None):
-    """
-    Best-effort push via FCM.
-    - Does nothing if Firebase isn't configured
-    - Does nothing if user has no fcm_token
-    - Never crashes a request; logs errors only
-    """
-    try:
-        # If Firebase wasn't initialised successfully at startup, skip
-        if not firebase_admin._apps:
-            return
+    """Send a push notification to the user (FCM)."""
+    return send_fcm_to_user(user, title=title, body=body, data=data)
 
-        if not user or not getattr(user, "fcm_token", None):
-            return
-
-        message = messaging.Message(
-            token=user.fcm_token,
-            notification=messaging.Notification(
-                title=title,
-                body=body,
-            ),
-            data={k: str(v) for k, v in (data or {}).items()},
-        )
-        resp = messaging.send(message)
-        print("[FCM] Sent push:", resp)
-    except Exception as e:
-        print("[FCM] ERROR sending push:", e)
         
 def send_fcm_notification(token, title, body, data=None):
-    """
-    Send a push notification to a single FCM device token.
-    We send a DATA-ONLY message so our JS/service worker controls display.
-    """
     if not token:
         print("[FCM] No token provided, skipping")
-        return
+        return False
 
     try:
-        payload_data = {
-            "title": title,
-            "body": body,
-        }
+        payload_data = {"title": title, "body": body}
         if data:
-            # merge any extra keys
             payload_data.update({str(k): str(v) for k, v in data.items()})
 
         message = messaging.Message(
             token=token,
-            data=payload_data,   # <--- DATA ONLY, no "notification" field
+            data=payload_data,  # data-only
         )
         response = messaging.send(message)
         print("[FCM] Successfully sent message:", response)
+        return True  # ✅
     except Exception as e:
         print("[FCM] Error sending message:", e)
-
+        return False  # ✅
 
 # ------------------ ROUTES: CORE PAGES ------------------
 @app.route("/")
@@ -1051,30 +1038,114 @@ OTP_MAX_PER_HOUR = 5           # no more than 5 OTPs per email per hour
 
 
 def build_otp_email_html(user, code):
-    """Return a simple HTML email body for the OTP email."""
-    return f"""
-    <html>
-      <body style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background-color:#020617; padding:16px;">
-        <div style="max-width:480px;margin:0 auto;background:#020617;border-radius:16px;border:1px solid #1e293b;padding:20px;">
-          <h2 style="color:#a7f3d0;margin-top:0;">LifeLine login code</h2>
-          <p style="color:#e5e7eb;font-size:14px;">Hi {user.name},</p>
-          <p style="color:#e5e7eb;font-size:14px;">
-            Your one-time code for logging into <strong>LifeLine</strong> is:
-          </p>
-          <div style="margin:16px 0;padding:12px 16px;border-radius:999px;background:#022c22;border:1px solid #22c55e;text-align:center;">
-            <span style="color:#bbf7d0;font-size:20px;letter-spacing:0.35em;font-weight:600;">{code}</span>
-          </div>
-          <p style="color:#9ca3af;font-size:12px;">
-            This code will expire in <strong>{OTP_TTL_SECONDS // 60} minutes</strong>.
-            If you did not request this, you can safely ignore this email.
-          </p>
-          <p style="color:#6b7280;font-size:11px;margin-top:24px;border-top:1px solid #1f2937;padding-top:12px;">
-            Sent by LifeLine · University project demo
-          </p>
-        </div>
-      </body>
-    </html>
-    """
+    return f'''<html>
+  <body style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background-color:#020617; padding:16px;">
+    <div style="max-width:480px;margin:0 auto;background:#020617;border-radius:16px;border:1px solid #1e293b;padding:20px;">
+      <h2 style="color:#a7f3d0;margin-top:0;">LifeLine login code</h2>
+      <p style="color:#e5e7eb;font-size:14px;">Hi {user.name},</p>
+
+      <p style="color:#e5e7eb;font-size:14px;">
+        Your one-time code for logging into <strong>LifeLine</strong> is:
+      </p>
+
+      <div style="margin:16px 0;padding:12px 16px;border-radius:999px;background:#022c22;border:1px solid #22c55e;text-align:center;">
+        <span style="color:#bbf7d0;font-size:20px;letter-spacing:0.35em;font-weight:600;">{code}</span>
+      </div>
+
+      <p style="color:#9ca3af;font-size:12px;">
+        This code will expire in <strong>{OTP_TTL_SECONDS // 60} minutes</strong>.
+        If you did not request this, you can safely ignore this email.
+      </p>
+
+      <p style="color:#6b7280;font-size:11px;margin-top:24px;border-top:1px solid #1f2937;padding-top:12px;">
+        Sent by LifeLine - University project demo
+      </p>
+    </div>
+  </body>
+</html>'''
+
+@app.route("/emotional_ping")
+@login_required
+def emotional_ping():
+    return render_template("emotional_ping.html")
+
+@app.route("/emotional")
+@login_required
+def emotional():
+    return redirect(url_for("emotional_ping"))
+
+
+
+from flask_jwt_extended import jwt_required, get_jwt_identity
+from datetime import datetime
+
+@app.route("/api/emotional_ping", methods=["POST"])
+@login_required
+def api_emotional_ping():
+    try:
+        user = current_user()
+        if not user:
+            return jsonify({"error": "Unauthorized"}), 401
+
+        data = request.get_json(silent=True) or {}
+        mood = data.get("mood")
+        message = data.get("message")
+
+        if not mood:
+            return jsonify({"error": "Mood is required"}), 400
+
+        # 1️⃣ Save ping
+        ping = EmotionalPing(
+            user_id=user.id,
+            mood=mood,
+            message=message
+        )
+        db.session.add(ping)
+        db.session.commit()
+
+        # 2️⃣ Notify trusted helpers (BELL)
+        helpers = get_trusted_helpers_for_ping(user.id)
+
+        for helper in helpers:
+            push_notification(
+                user_id=helper.id,
+                type="emotional_ping",
+                message=f"{user.name} is feeling {mood}",
+                link=url_for("emotional_ping")
+            )
+
+            # 3️⃣ Optional FCM push
+            if helper.fcm_tokens.count() > 0:
+                send_fcm_to_user(
+                    helper,
+                    title="New Emotional Ping 💙",
+                    body=f"{user.name} is feeling {mood}",
+                    data={
+                        "type": "EMOTIONAL_PING",
+                        "sender_id": str(user.id),
+                        "ping_id": str(ping.id)
+                    }
+                )
+
+        return jsonify({"message": "Ping sent"}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        print("EMOTIONAL_PING POST ERROR:", e)
+        return jsonify({"error": "Failed to send ping"}), 500
+    
+@app.route("/api/emotional_ping/<int:ping_id>/listen", methods=["POST"])
+@login_required
+def mark_ping_listened(ping_id):
+    try:
+        ping = EmotionalPing.query.get_or_404(ping_id)
+        ping.is_listened = True
+        db.session.commit()
+        return jsonify({"message": "Marked as listened"}), 200
+    except Exception as e:
+        db.session.rollback()
+        print("LISTEN ERROR:", e)
+        return jsonify({"error": "Failed"}), 500
 
 
 @app.route("/login/otp/request", methods=["POST"])
@@ -1168,6 +1239,80 @@ def login_otp_verify():
     flash("Logged in with OTP!", "success")
     return redirect(url_for("home"))
 
+@app.route("/api/emotional_pings", methods=["GET"])
+@login_required
+def api_emotional_pings():
+    pings = (
+    EmotionalPing.query
+    .filter_by(is_active=True)
+    .order_by(
+        EmotionalPing.last_uplift_at.is_(None),   # ✅ non-null first
+        EmotionalPing.last_uplift_at.desc(),      # ✅ newest uplift first
+        EmotionalPing.created_at.desc()           # ✅ fallback
+    )
+    .all()
+)
+
+
+
+
+    out = []
+    for p in pings:
+        u = User.query.get(p.user_id)
+        out.append({
+            "id": p.id,
+            "user_id": p.user_id,
+            "user_name": u.name if u else "Unknown",
+            "mood": p.mood,
+            "message": p.message,
+            "is_listened": p.is_listened,
+            "uplift_count": p.uplift_count or 0,
+
+            "created_at_human": p.created_at.strftime("%b %d, %I:%M %p"),
+        })
+
+    return jsonify({"pings": out})
+
+@app.route("/api/emotional_pings/<int:ping_id>/listen", methods=["POST"])
+@login_required
+def api_listen_emotional_ping(ping_id):
+    try:
+        ping = EmotionalPing.query.get_or_404(ping_id)
+
+        # mark as listened
+        ping.is_listened = True
+        db.session.commit()
+
+        return jsonify({"ok": True, "ping_id": ping.id, "is_listened": ping.is_listened}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        print("LISTEN PING ERROR:", e)
+        return jsonify({"ok": False, "error": "Failed"}), 500
+
+@app.route("/api/emotional_pings/<int:ping_id>/uplift", methods=["POST"])
+@login_required
+def api_uplift_ping(ping_id):
+    try:
+        ping = EmotionalPing.query.get_or_404(ping_id)
+
+        ping.uplift_count = (ping.uplift_count or 0) + 1
+        ping.last_uplift_at = datetime.utcnow()
+
+        db.session.commit()
+
+        return jsonify({
+            "ok": True,
+            "uplift_count": ping.uplift_count
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        print("UPLIFT ERROR:", e)
+        return jsonify({"ok": False}), 500
+
+
+
 # ---------- GOOGLE / FIREBASE AUTH ----------
 @app.route("/auth/google", methods=["POST"])
 def auth_google():
@@ -1226,7 +1371,7 @@ def auth_google():
 
 @app.route("/google-auth", methods=["POST"])
 def google_auth():
-    """Verify Google ID token from Firebase, log user in, return redirect URL."""
+    "Verify Google ID token from Firebase, log user in, return redirect URL."
     data = request.get_json() or {}
     id_token = data.get("id_token")
 
@@ -1320,10 +1465,11 @@ def trusted_helper():
         return redirect(url_for("trusted_helper"))
 
     return render_template("trusted_helper.html", user=user)
+
 @app.route("/profile")
 @login_required
 def profile():
-    """Show logged-in user's profile page."""
+    "Show logged-in users profile page."
     user = current_user()
     if not user:
         return redirect(url_for("login", next=url_for("profile")))
@@ -1373,6 +1519,23 @@ def update_profile():
     db.session.commit()
     flash("Profile updated successfully.", "success")
     return redirect(url_for("profile"))
+
+@app.route("/emotional_ping/<int:ping_id>/accept")
+@login_required
+def accept_ping(ping_id):
+    ping = EmotionalPing.query.get_or_404(ping_id)
+
+    conv = get_or_create_conversation(ping.user_id, current_user().id)
+
+
+    push_notification(
+        user_id=ping.user_id,
+        message=f"{current_user.name} replied to your emotional ping"
+    )
+
+    return redirect(url_for("chat_with_user", other_user_id=ping.user_id))
+
+
 
 # ---------- JWT-Protected API ----------
 @app.route("/api/me")
@@ -1920,12 +2083,13 @@ def debug_fcm_users():
     users = User.query.all()
     data = []
     for u in users:
+        tokens = [t.token for t in u.fcm_tokens.all()]  # relationship
         data.append({
             "id": u.id,
             "email": u.email,
             "is_trusted_helper": bool(u.is_trusted_helper),
-            "has_fcm_token": bool(u.fcm_token),
-            "fcm_token": u.fcm_token[:20] + "..." if u.fcm_token else None,
+            "token_count": len(tokens),
+            "tokens_preview": [tok[:20] + "..." for tok in tokens[:3]],  # show first 3 previews
         })
     return jsonify(data)
 
@@ -2309,7 +2473,7 @@ def dashboard():
 @login_required
 def update_user_location():
     """
-    Updates the logged-in user's live location.
+    Updates the logged-in users live location.
     Required for receiving 'nearby' help requests.
     """
     data = request.get_json() or {}
@@ -2326,41 +2490,6 @@ def update_user_location():
     except (TypeError, ValueError):
         return jsonify({"error": "Invalid location data"}), 400
     
-@app.route("/emotional")
-def emotional_ping():
-    user = current_user()
-    
-    # 1. Guest Handling: If not logged in, use the Emergency Guest account
-    if not user:
-        user = get_emergency_user()
-        login_user(user)
-
-    # 2. Find a Listener (Trusted Helper)
-    # Exclude the user themselves so they don't chat with themselves
-    listener = User.query.filter(User.is_trusted_helper == True, User.id != user.id).first()
-    
-    # Fallback: If no trusted helper is found, try to find ANY other user (for demo purposes)
-    if not listener:
-        listener = User.query.filter(User.id != user.id).first()
-
-    # If still no listener, we can't start a chat
-    if not listener:
-        flash("No listeners are currently available. Please try posting a request.", "info")
-        return redirect(url_for('home'))
-
-    print(f"[Emotional] Connecting user {user.id} with listener {listener.id}")
-
-    # 3. Create or Get Conversation
-    conv = get_or_create_conversation(user.id, listener.id)
-
-    # 4. Notify the Listener (Quiet Notification, not SOS)
-    try:
-        send_fcm_for_emotional_chat(listener, user)
-    except Exception as e:
-        print(f"[FCM] Error sending emotional chat push: {e}")
-
-    # 5. Redirect to the Chat Room
-    return redirect(url_for('chat_with_user', other_user_id=listener.id))
 
 # In app.py
 
@@ -2480,6 +2609,7 @@ def api_mark_notifications_read():
 
     return jsonify({"ok": True})
 
+
 @app.route("/api/translate", methods=["POST"])
 @login_required
 def api_translate():
@@ -2506,10 +2636,6 @@ def api_translate():
 @app.route("/api/fcm/register", methods=["POST"])
 @login_required
 def api_register_fcm():
-    """
-    Save/update the current logged-in user's FCM token.
-    Frontend should call this after it gets a token from Firebase Messaging.
-    """
     user = current_user()
     data = request.get_json() or {}
     token = (data.get("token") or "").strip()
@@ -2517,35 +2643,103 @@ def api_register_fcm():
     if not token:
         return jsonify({"error": "token required"}), 400
 
-    user.fcm_token = token
-    db.session.commit()
+    # If already exists for this user, do nothing
+    existing = FCMToken.query.filter_by(token=token).first()
+    if existing:
+        if existing.user_id != user.id:
+            existing.user_id = user.id  # token moved to another user
+            db.session.commit()
+        return jsonify({"ok": True, "message": "token already registered"})
 
+    db.session.add(FCMToken(user_id=user.id, token=token))
+    db.session.commit()
     return jsonify({"ok": True})
+
+
+@app.route("/api/trusted_helpers", methods=["GET"])
+@login_required
+def api_trusted_helpers():
+    user = current_user()
+    helpers = User.query.filter(
+        User.is_trusted_helper == True,
+        User.id != user.id
+    ).all()
+
+    # simple ordering: kindness desc, then trust desc
+    helpers.sort(key=lambda u: ((u.kindness_score or 0), (u.trust_score or 0)), reverse=True)
+
+    return jsonify({
+        "helpers": [
+            {
+                "id": h.id,
+                "name": h.name,
+                "trust_score": int(h.trust_score or 0),
+                "kindness_score": int(h.kindness_score or 0),
+            }
+            for h in helpers
+        ]
+    })
+
+
 
 @app.route('/firebase-messaging-sw.js')
 def firebase_sw():
     return app.send_static_file('firebase-messaging-sw.js')
 
 
-# ------------------ SOCKET.IO EVENTS ------------------
-@socketio.on("join")
-def on_join(data):
-    # data = {conversation_id}
-    conv_id = data.get("conversation_id")
-    user = current_user()
-    print(f"[JOIN] User {user.id if user else 'None'} joining conversation {conv_id}")
-    if not user or not conv_id:
-        print(f"[JOIN] Rejected: no user or conv_id")
-        return
-    conv = Conversation.query.get(conv_id)
-    if not conv or user.id not in conv.participants():
-        print(f"[JOIN] Rejected: conv not found or user not participant")
-        return
-    room = f"chat_{conv_id}"
-    join_room(room)
-    print(f"[JOIN] Successfully joined room {room}")
-    emit("user_joined", {"user_id": user.id}, room=room)
+# ------------------ SOCKET.IO EVENTS ------------------ 
+online_users = set()
+sid_to_user = {}
 
+# --- REPLACED/MODIFIED BLOCK (for Step 1) ---
+@socketio.on("join")
+@jwt_required()
+def on_join(data):
+    user_id = int(get_jwt_identity())
+
+    sid_to_user[request.sid] = user_id
+    online_users.add(user_id)
+
+    join_room(f"user_{user_id}")
+    print(f"[SOCKETIO] User {user_id} joined personal room user_{user_id}")
+
+
+@socketio.on("disconnect")
+def on_disconnect():
+    uid = sid_to_user.pop(request.sid, None)
+    if uid:
+        online_users.discard(uid)
+        print(f"[SOCKETIO] User {uid} disconnected")
+
+
+# --- NEW BLOCK (for Step 2) ---
+import random
+
+@socketio.on("emotional_ping")
+@jwt_required()
+def on_emotional_ping(data=None):
+    user_id = get_jwt_identity()
+    ping_user = User.query.get(int(user_id))
+    if not ping_user:
+        return
+
+    helpers = User.query.filter(
+        User.is_trusted_helper == True,
+        User.id != ping_user.id
+    ).all()
+
+    if not helpers:
+        emit("ping_failed", {"message": "No trusted helpers available right now."}, room=request.sid)
+        return
+
+    for h in helpers:
+        socketio.emit(
+            "emotional_alert",
+            {"sender_id": ping_user.id, "sender_name": ping_user.name},
+            room=f"user_{h.id}"
+        )
+
+    emit("ping_success", {"message": "Ping sent to all trusted helpers."}, room=request.sid)
 
 @socketio.on("leave")
 def on_leave(data):
@@ -2633,6 +2827,28 @@ def on_send_message(data):
     db.session.add(msg)
     db.session.commit()
     print(f"[SEND_MESSAGE] Saved message {msg.id} to DB")
+    
+        # ---- NEW: If this conversation is from an Emotional Ping, notify sender on first helper reply ----
+    try:
+        ping = EmotionalPing.query.filter_by(conversation_id=conv.id).order_by(EmotionalPing.created_at.desc()).first()
+        if ping:
+            # helper replying?
+            if user.id == ping.helper_id and not ping.helper_replied:
+                # mark once
+                ping.helper_replied = True
+                db.session.commit()
+
+                # create bell notification for sender
+                push_notification(
+                    user_id=ping.sender_id,
+                    type="emotional_reply",
+                    message=f"💬 {user.name} replied to your emotional ping.",
+                    link=url_for("chat_with_user", other_user_id=user.id)
+                )
+    except Exception as e:
+        print("[PING REPLY NOTIFY] error:", e)
+        db.session.rollback()
+
 
     # ---------- Build payload for Socket.IO ----------
     payload = serialize_message(msg)
@@ -2651,33 +2867,44 @@ def on_send_message(data):
     # ---------- Determine the other participant ----------
     other_id = conv.user_a if conv.user_b == user.id else conv.user_b
     other_user = User.query.get(other_id) if other_id else None
-    has_token = bool(other_user and getattr(other_user, "fcm_token", None))
+    has_token = bool(other_user and getattr(other_user, 'fcm_tokens', None) and other_user.fcm_tokens.count() > 0)
     print(f"[SEND_MESSAGE] Other participant user_id={other_id}, has_token={has_token}")
 
     # ---------- Send push to the other participant ----------
+
     try:
-        if other_user and other_user.fcm_token:
-            preview = text or "[Attachment]"
-            if len(preview) > 80:
-                preview = preview[:80] + "…"
+        # Check if the other user exists and is not the sender
+        if other_user and other_user.id != user.id:
+            # Check if the user has any registered FCM tokens using the new relationship
+            if other_user.fcm_tokens.count() > 0:
+                preview = text or "[Attachment]"
+                if len(preview) > 80:
+                    preview = preview[:80] + "…"
 
-            send_push_to_user(
-                other_user,
-                title=f"New message from {user.name}",
-                body=preview,
-                data={
-                    "type": "NEW_CHAT_MESSAGE",
-                    "conversation_id": str(conv.id),
-                    "sender_id": str(user.id),
-                },
-            )
-            print(f"[FCM] Chat push sent to user {other_user.id}")
-        else:
-            print("[FCM] Other user missing or has no fcm_token; skipping chat push")
+                # Use the new multi-token handler function
+                success = send_fcm_to_user(
+                    other_user,
+                    title=f"New message from {user.name}",
+                    body=preview,
+                    data={
+                        "type": "NEW_CHAT_MESSAGE",
+                        "conversation_id": str(conv.id),
+                        "sender_id": str(user.id),
+                    },
+                )
+                
+                if success:
+                    print(f"[FCM] Chat push sent to user {other_user.id}")
+                else:
+                    # This branch means the server received failure from Firebase
+                    print(f"[FCM] Chat push failed to send to user {other_user.id} (Firebase error)")
+            else:
+                # This branch means no tokens were registered for the user
+                print(f"[FCM] Other user {other_user.id} has no registered FCM tokens; skipping chat push")
+                
     except Exception as e:
+        # This will now catch other errors, not the persistent AttributeError
         print("[FCM] Error sending chat push:", e)
-
-    
 
 
 @socketio.on("message_delivered")
@@ -2748,16 +2975,24 @@ def delete_request(request_id):
     return redirect(url_for("list_requests"))
 
 @app.route("/debug/fcm-test")
-@login_required
 def debug_fcm_test():
-    user = current_user()
-    ok = send_fcm_to_user(
-        user,
-        "LifeLine test notification",
-        "If you see this, FCM end-to-end works.",
-        data={"type": "debug_test"},
-    )
-    return f"Sent: {ok}"
+    user = User.query.get(3)  # 🔥 FORCE user id 3
+
+    if not user:
+        return "User not found", 404
+
+    tokens = [t.token for t in user.fcm_tokens.all()]
+    if not tokens:
+        return "Sent: False (no tokens)"
+
+    sent_any = False
+    for tok in tokens:
+        ok = send_fcm_notification(tok, "FCM Test", "This is a test push from Lifeline")
+
+        sent_any = sent_any or bool(ok)
+
+    return f"Sent: {sent_any}"
+
 
 
 # ==================== SMART SUGGESTION AI ROUTES ====================

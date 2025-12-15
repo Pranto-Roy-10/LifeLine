@@ -89,7 +89,9 @@
           </span>
           {% endif %}
 
+          <!-- ✅ SOS FORM (added id="sosForm") -->
           <form
+            id="sosForm"
             action="{{ url_for('trigger_sos') }}"
             method="POST"
             onsubmit="return confirm('🚨 ARE YOU SURE? \n\nThis will broadcast an emergency SOS alert to all trusted helpers within 1km.');"
@@ -282,9 +284,6 @@
             const data = await response.json();
 
             renderStack(data);
-
-            // IMPORTANT FIX: Fetch the actual UNREAD COUNT separately
-            // We do NOT use data.length here because 'data' is the whole list (read + unread)
             fetchUnreadCount();
           } catch (error) {
             console.error("Notif Error:", error);
@@ -365,10 +364,7 @@
       // MARK ALL READ FUNCTION
       async function markAllRead() {
         try {
-          // 1. Tell backend to mark them read
           await fetch("/api/notifications/read", { method: "POST" });
-
-          // 2. Immediately hide badge on frontend
           const badge = document.getElementById("notif-badge");
           if (badge) badge.classList.add("hidden");
         } catch (e) {}
