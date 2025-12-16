@@ -244,39 +244,45 @@
   <div class="w-full px-6 md:px-12 py-12 md:py-16">
 
     <h3 class="text-xl md:text-2xl font-semibold mb-3">
-      Your kindness at a glance.
+      Community Impact Dashboard
     </h3>
 
     <p class="text-sm text-slate-400 mb-8 max-w-3xl">
-      This section will later connect to real analytics from Flask + Supabase:
-      hours volunteered, items shared, and carbon saved from shared rides.
+      Real-time visualization of our community's collective contributions: hours volunteered, items shared, and carbon savings from shared rides.
     </p>
 
-    <div class="grid md:grid-cols-3 gap-6 text-sm">
+    <div class="grid md:grid-cols-3 gap-6 text-sm mb-8">
 
       <div class="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
-        <p class="text-xs text-slate-400 mb-1">Neighbors helped (demo)</p>
-        <p class="text-3xl font-bold text-emerald-300 mb-1">0</p>
-        <p class="text-[11px] text-slate-500">This will update once the backend is connected.</p>
+        <p class="text-xs text-slate-400 mb-1">Neighbors Helped</p>
+        <p class="text-3xl font-bold text-emerald-300 mb-1" id="total-helped">0</p>
+        <p class="text-[11px] text-slate-500">People who received help from our community.</p>
       </div>
 
       <div class="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
-        <p class="text-xs text-slate-400 mb-1">Volunteer time recorded (demo)</p>
-        <p class="text-3xl font-bold text-sky-300 mb-1">0 h</p>
-        <p class="text-[11px] text-slate-500">Track your hours and build a verified history.</p>
+        <p class="text-xs text-slate-400 mb-1">Volunteer Hours</p>
+        <p class="text-3xl font-bold text-sky-300 mb-1" id="total-hours">0 h</p>
+        <p class="text-[11px] text-slate-500">Total time contributed by volunteers.</p>
       </div>
 
       <div class="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
-        <p class="text-xs text-slate-400 mb-1">Estimated CO₂ saved via shared rides (demo)</p>
-        <p class="text-3xl font-bold text-violet-300 mb-1">0 kg</p>
-        <p class="text-[11px] text-slate-500">Shared rides reduce cost and climate impact.</p>
+        <p class="text-xs text-slate-400 mb-1">CO₂ Saved</p>
+        <p class="text-3xl font-bold text-violet-300 mb-1" id="total-carbon">0 kg</p>
+        <p class="text-[11px] text-slate-500">Carbon emissions reduced through shared rides.</p>
       </div>
 
+    </div>
+
+    <!-- Impact Graphs -->
+    <div class="bg-slate-900/70 border border-slate-800 rounded-2xl p-6">
+      <h4 class="text-lg font-semibold mb-4">Community Impact Over Time</h4>
+      <canvas id="impactChart" width="400" height="200"></canvas>
     </div>
 
   </div>
 </section>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
   // Auto-refresh resources widget every 10 seconds
   function refreshResourcesWidget() {
@@ -288,12 +294,76 @@
       .catch(error => console.log('Widget refresh error:', error));
   }
 
-  // Refresh on page load and then every 10 seconds
+  // Refresh community impact data
+  function refreshCommunityImpact() {
+    fetch('/api/community/impact')
+      .then(response => response.json())
+      .then(data => {
+        document.getElementById('total-helped').textContent = data.total_helped;
+        document.getElementById('total-hours').textContent = data.total_hours + ' h';
+        document.getElementById('total-carbon').textContent = data.total_carbon + ' kg';
+      })
+      .catch(error => console.log('Impact data error:', error));
+  }
+
+  // Load and display impact chart
+  function loadImpactChart() {
+    fetch('/api/community/impact-over-time')
+      .then(response => response.json())
+      .then(data => {
+        const ctx = document.getElementById('impactChart');
+        if (window.impactChartInstance) {
+          window.impactChartInstance.destroy();
+        }
+        window.impactChartInstance = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: data.labels,
+            datasets: [{
+              label: 'Volunteer Hours',
+              data: data.hours,
+              borderColor: '#0ea5e9',
+              backgroundColor: 'rgba(14, 165, 233, 0.1)',
+              fill: true,
+              tension: 0.4
+            }]
+          },
+          options: {
+            responsive: true,
+            plugins: {
+              legend: {
+                labels: { color: '#94a3b8' }
+              }
+            },
+            scales: {
+              x: {
+                ticks: { color: '#94a3b8' },
+                grid: { color: '#1e293b' }
+              },
+              y: {
+                ticks: { color: '#94a3b8' },
+                grid: { color: '#1e293b' }
+              }
+            }
+          }
+        });
+      })
+      .catch(error => console.log('Chart data error:', error));
+  }
+
+  // Refresh on page load and then every 30 seconds
   document.addEventListener('DOMContentLoaded', function() {
     // Initial refresh
     refreshResourcesWidget();
-    // Then refresh every 10 seconds
+    refreshCommunityImpact();
+    loadImpactChart();
+
+    // Refresh resources widget every 10 seconds
     setInterval(refreshResourcesWidget, 10000);
+
+    // Refresh impact data every 30 seconds
+    setInterval(refreshCommunityImpact, 30000);
+    setInterval(loadImpactChart, 30000);
   });
 </script>
 
