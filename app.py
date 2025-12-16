@@ -176,7 +176,9 @@ class User(db.Model):
     dob = db.Column(db.String(20))  # or Date type if you prefer
     
     fcm_tokens = db.relationship('FCMToken', backref='user', lazy='dynamic')
-
+    is_premium = db.Column(db.Boolean, default=False)
+    premium_expiry = db.Column(db.DateTime, nullable=True)
+    is_admin = db.Column(db.Boolean, default=False)
     
 
     def set_password(self, password: str):
@@ -208,7 +210,19 @@ class User(db.Model):
             return "Bronze Helper", "text-amber-300"
         else:
             return "Newbie", "text-slate-400"
+class Payment(db.Model):
+    __tablename__ = "payments"
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     
+    amount = db.Column(db.Float, nullable=False)
+    bkash_number = db.Column(db.String(20), nullable=False) # User's phone number
+    trx_id = db.Column(db.String(50), unique=True, nullable=False) # The ID they enter
+    
+    status = db.Column(db.String(20), default="pending") # pending, approved, rejected
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    user = db.relationship("User", backref="payments")    
 
 class Request(db.Model):
     __tablename__ = "requests"
@@ -927,7 +941,32 @@ def update_user_scores(user):
 def send_push_to_user(user: User, title: str, body: str, data: dict | None = None):
     """Send a push notification to the user (FCM)."""
     return send_fcm_to_user(user, title=title, body=body, data=data)
+def check_post_limit(user):
+    """
+    Returns True if user can post, False if limit reached.
+    Rules: Premium = Unlimited. Free = 2 posts per 21 days.
+    """
+    if not user: return True # Guests handled separately or allowed
+    
+    # 1. Premium Check
+    if user.is_premium:
+        if user.premium_expiry and user.premium_expiry > datetime.utcnow():
+            return True
+        else:
+            # Expired? Downgrade automatically
+            user.is_premium = False
+            db.session.commit()
 
+    # 2. Free User Logic
+    three_weeks_ago = datetime.utcnow() - timedelta(days=21)
+    
+    # Count posts in last 21 days
+    recent_posts = Request.query.filter(
+        Request.user_id == user.id,
+        Request.created_at >= three_weeks_ago
+    ).count()
+
+    return recent_posts < 2
         
 def send_fcm_notification(token, title, body, data=None):
     if not token:
@@ -1879,8 +1918,12 @@ def need_help():
     - If not logged in     -> use Emergency Guest user (quick help)
     """
     user = current_user()
-
+    if user:
+        can_post = check_post_limit(user)
     if request.method == "POST":
+        if user and not can_post:
+            flash("Free limit reached (2 posts/3 weeks). Please go Premium!", "error")
+            return redirect(url_for('plans'))
         title = request.form.get("title", "").strip()
         category = request.form.get("category", "").strip()
 
@@ -2004,6 +2047,7 @@ def need_help():
         total_need=total_need,
         total_offer=total_offer,
         categories=categories,
+        can_post=can_post,
         google_maps_key=GOOGLE_MAPS_API_KEY,
     )
 
@@ -2601,7 +2645,205 @@ def update_user_location():
     
 
 # In app.py
+# --- PLANS PAGE ---
+@app.route("/plans")
+def plans():
+    user = current_user()
 
+    latest_payment = None
+    if user is not None:
+        latest_payment = (
+            Payment.query.filter_by(user_id=user.id)
+            .order_by(Payment.created_at.desc())
+            .first()
+        )
+
+    return render_template("plans.html", latest_payment=latest_payment)
+
+# --- MANUAL PAYMENT SUBMISSION ---
+@app.route("/pay/manual/submit", methods=["POST"])
+@login_required
+def submit_manual_payment():
+    user = current_user()
+    bkash_number = request.form.get("bkash_number", "").strip()
+    trx_id = request.form.get("trx_id", "").strip()
+    amount_raw = request.form.get("amount", "").strip()
+    plan_name = request.form.get("plan_name", "").strip()
+    
+    if not bkash_number or not trx_id:
+        flash("Please provide both bKash number and Transaction ID.", "error")
+        return redirect(url_for('plans'))
+        
+    # Check for duplicate Trx ID
+    existing = Payment.query.filter_by(trx_id=trx_id).first()
+    if existing:
+        flash("This Transaction ID has already been used.", "error")
+        return redirect(url_for('plans'))
+
+    # Prevent spamming multiple pending submissions.
+    existing_pending = Payment.query.filter_by(user_id=user.id, status="pending").first()
+    if existing_pending:
+        flash("Your previous payment is still under review. Please wait for admin approval/rejection.", "error")
+        return redirect(url_for("plans"))
+
+    allowed_amounts = {500.0, 1000.0, 2000.0, 5000.0}
+    try:
+        amount = float(amount_raw)
+    except (TypeError, ValueError):
+        amount = None
+
+    if amount not in allowed_amounts:
+        flash("Invalid plan amount selected. Please try again.", "error")
+        return redirect(url_for("plans"))
+
+    # Create Payment Request
+    pay = Payment(
+        user_id=user.id,
+        amount=amount,
+        bkash_number=bkash_number,
+        trx_id=trx_id,
+        status="pending"
+    )
+    db.session.add(pay)
+    db.session.commit()
+    
+    if plan_name:
+        flash(f"Payment submitted for {plan_name} (৳{int(amount)}). Wait for Admin approval to activate Premium.", "success")
+    else:
+        flash(f"Payment submitted (৳{int(amount)}). Wait for Admin approval to activate Premium.", "success")
+    return redirect(url_for('dashboard'))
+
+# --- ADMIN DASHBOARD ---
+@app.route("/admin/dashboard")
+@login_required
+def admin_dashboard():
+    user = current_user()
+    # Simple security: Check is_admin flag OR hardcoded email
+    if not user.is_admin and user.email != "admin@lifeline.com":
+        flash("Access Denied: Admins Only.", "error")
+        return redirect(url_for('home'))
+
+    # --- Monitoring KPIs ---
+    total_users = User.query.count()
+    premium_users = User.query.filter_by(is_premium=True).count()
+    trusted_helpers = User.query.filter_by(is_trusted_helper=True).count()
+    pending_helper_verifications = User.query.filter_by(id_verification_status="pending").count()
+
+    open_requests = Request.query.filter_by(status="open").count()
+    claimed_requests = Request.query.filter_by(status="claimed").count()
+    closed_requests = Request.query.filter_by(status="closed").count()
+
+    active_pings = EmotionalPing.query.filter_by(is_active=True).count()
+        
+    # Get all pending payments
+    pending_payments = Payment.query.filter_by(status="pending").order_by(Payment.created_at.desc()).all()
+    
+    # Get recent approved payments (for history)
+    history = Payment.query.filter(Payment.status != "pending").order_by(Payment.created_at.desc()).limit(20).all()
+
+    # --- Recent activity ---
+    latest_users = User.query.order_by(User.id.desc()).limit(10).all()
+    latest_requests = Request.query.order_by(Request.created_at.desc()).limit(10).all()
+    latest_sos = SOSResponse.query.order_by(SOSResponse.created_at.desc()).limit(10).all()
+
+    # --- Charts (last N days) ---
+    days = 14
+    start_dt = datetime.utcnow() - timedelta(days=days - 1)
+    start_date = start_dt.date()
+    date_labels = [(start_date + timedelta(days=i)).isoformat() for i in range(days)]
+
+    req_counts_rows = (
+        db.session.query(func.date(Request.created_at), func.count(Request.id))
+        .filter(Request.created_at >= start_dt)
+        .group_by(func.date(Request.created_at))
+        .all()
+    )
+    req_counts = {str(d): int(c) for d, c in req_counts_rows if d is not None}
+    chart_requests_created = [req_counts.get(lbl, 0) for lbl in date_labels]
+
+    sos_counts_rows = (
+        db.session.query(func.date(SOSResponse.created_at), func.count(SOSResponse.id))
+        .filter(SOSResponse.created_at >= start_dt)
+        .group_by(func.date(SOSResponse.created_at))
+        .all()
+    )
+    sos_counts = {str(d): int(c) for d, c in sos_counts_rows if d is not None}
+    chart_sos_responses = [sos_counts.get(lbl, 0) for lbl in date_labels]
+
+    pay_counts_rows = (
+        db.session.query(func.date(Payment.created_at), Payment.status, func.count(Payment.id))
+        .filter(Payment.created_at >= start_dt)
+        .group_by(func.date(Payment.created_at), Payment.status)
+        .all()
+    )
+    pay_counts = {}
+    for d, status, c in pay_counts_rows:
+        if d is None:
+            continue
+        pay_counts[(str(d), status)] = int(c)
+    chart_payments_pending = [pay_counts.get((lbl, "pending"), 0) for lbl in date_labels]
+    chart_payments_approved = [pay_counts.get((lbl, "approved"), 0) for lbl in date_labels]
+    chart_payments_rejected = [pay_counts.get((lbl, "rejected"), 0) for lbl in date_labels]
+
+    stats = {
+        "total_users": total_users,
+        "premium_users": premium_users,
+        "trusted_helpers": trusted_helpers,
+        "pending_helper_verifications": pending_helper_verifications,
+        "open_requests": open_requests,
+        "claimed_requests": claimed_requests,
+        "closed_requests": closed_requests,
+        "active_pings": active_pings,
+        "pending_payments": len(pending_payments),
+    }
+
+    charts = {
+        "labels": date_labels,
+        "requests_created": chart_requests_created,
+        "sos_responses": chart_sos_responses,
+        "payments_pending": chart_payments_pending,
+        "payments_approved": chart_payments_approved,
+        "payments_rejected": chart_payments_rejected,
+    }
+
+    return render_template(
+        "admin_dashboard.html",
+        pending=pending_payments,
+        history=history,
+        stats=stats,
+        charts=charts,
+        latest_users=latest_users,
+        latest_requests=latest_requests,
+        latest_sos=latest_sos,
+    )
+
+# --- ADMIN ACTION (APPROVE/REJECT) ---
+@app.route("/admin/payment/<int:payment_id>/<action>", methods=["POST"])
+@login_required
+def admin_payment_action(payment_id, action):
+    user = current_user()
+    if not user.is_admin and user.email != "admin@lifeline.com":
+        return jsonify({"error": "Unauthorized"}), 403
+        
+    payment = Payment.query.get_or_404(payment_id)
+    
+    if action == "approve":
+        payment.status = "approved"
+        # Grant Premium
+        payment.user.is_premium = True
+        payment.user.premium_expiry = datetime.utcnow() + timedelta(days=30)
+        flash(f"Approved payment for {payment.user.name}", "success")
+        
+        # Notify User
+        push_notification(payment.user.id, "system", "🎉 Premium Activated! Your payment was approved.")
+        
+    elif action == "reject":
+        payment.status = "rejected"
+        flash(f"Rejected payment for {payment.user.name}", "error")
+        push_notification(payment.user.id, "system", "❌ Payment Rejected. Please check Trx ID.")
+        
+    db.session.commit()
+    return redirect(url_for('admin_dashboard'))
 
 @app.route("/sos/trigger", methods=["POST"])
 @login_required
@@ -3619,6 +3861,29 @@ if __name__ == "__main__":
                 print("✓ Added image_url column to resource_wanted_items")
         except Exception as e:
             print(f"Migration note: {e}")
-    
+        try:
+            inspector = inspect(db.engine)
+            cols = [c['name'] for c in inspector.get_columns('user')]
+            with db.engine.connect() as conn:
+                if 'is_premium' not in cols:
+                    conn.execute(db.text('ALTER TABLE user ADD COLUMN is_premium BOOLEAN DEFAULT 0'))
+                if 'premium_expiry' not in cols:
+                    conn.execute(db.text('ALTER TABLE user ADD COLUMN premium_expiry DATETIME'))
+                if 'is_admin' not in cols:
+                    conn.execute(db.text('ALTER TABLE user ADD COLUMN is_admin BOOLEAN DEFAULT 0'))
+                conn.commit()
+            print("✓ Added premium/admin columns")
+            
+            # --- CREATE DEFAULT ADMIN ---
+            admin = User.query.filter_by(email="admin@lifeline.com").first()
+            if not admin:
+                admin = User(email="admin@lifeline.com", name="Super Admin", is_admin=True, is_trusted_helper=True)
+                admin.set_password("admin123") # Change this!
+                db.session.add(admin)
+                db.session.commit()
+                print("✓ Created default admin: admin@lifeline.com / admin123")
+                
+        except Exception as e:
+            print(f"Migration error: {e}")    
     debug_mode = os.getenv("FLASK_DEBUG", "0") == "1"
     socketio.run(app, debug=debug_mode, use_reloader=False)
