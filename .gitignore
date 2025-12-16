@@ -1,22 +1,21 @@
 # ===============================
-# Flask / Python
+# Python / Flask
 # ===============================
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+
+# environment files
 .env
 .env.*
 venv/
+.venv/
 
 # ===============================
-# Flask instance folder (CRITICAL)
+# Flask instance & DB
 # ===============================
 instance/
-
-# ===============================
-# Databases
-# ===============================
 *.db
 
 # ===============================
@@ -38,7 +37,7 @@ node_modules/
 package-lock.json
 
 # ===============================
-# VS Code
+# IDE / Editor
 # ===============================
 .vscode/
 
@@ -47,3 +46,14 @@ package-lock.json
 # ===============================
 .DS_Store
 Thumbs.db
+
+# ===============================
+# Tooling caches
+# ===============================
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+compiled_templates_cache/
+compiled_templates_cache2/
+compiled_templates_cache*/
+

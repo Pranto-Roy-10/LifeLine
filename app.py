@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 from datetime import datetime, timedelta
 import os
 import math
@@ -7,6 +9,9 @@ import string
 import requests
 
 from reputation_service import analyze_review_quality, calculate_reputation_points
+from smart_suggestion_service import (
+    SmartSuggestionService, WeatherService, LocationMatcher, DemandAnalyzer
+)
 from sqlalchemy import func
 from flask_cors import CORS
 
@@ -29,6 +34,23 @@ from flask_jwt_extended import (
     JWTManager, create_access_token, jwt_required, get_jwt_identity
 )
 from flask_socketio import SocketIO, emit, join_room, leave_room
+
+
+
+
+# ------------------ FCM INIT ------------------
+# Initialize Firebase Admin SDK ONCE
+try:
+    if not firebase_admin._apps:
+        cred = credentials.Certificate("firebase-service-account.json")
+        firebase_admin.initialize_app(cred)
+        print("[FCM] Firebase Admin initialized.")
+    else:
+        print("[FCM] Firebase Admin already initialized.")
+except Exception as e:
+    print(f"[FCM] Error initializing Firebase Admin SDK: {e}")
+    print("[FCM] Push notifications will be disabled on this machine.")
+
 
 # Translation libraries: try official Google Cloud first, fallback to googletrans
 USE_GOOGLE_CLOUD_TRANSLATE = os.getenv("USE_GOOGLE_CLOUD_TRANSLATE", "0") == "1"
@@ -53,58 +75,8 @@ otp_store = {}
 app = Flask(__name__)
 CORS(app, supports_credentials=True)
 
-# -------- Firebase Admin (for Google sign-in + FCM) --------
-FIREBASE_CRED_PATH = os.getenv(
-    "GOOGLE_APPLICATION_CREDENTIALS",
-    "firebase-service-account.json",  # default path
-)
-
-if not firebase_admin._apps:
-    try:
-        cred = credentials.Certificate(FIREBASE_CRED_PATH)
-        firebase_admin.initialize_app(cred)
-        print("[Firebase] Initialized with", FIREBASE_CRED_PATH)
-    except Exception as e:
-        # IMPORTANT: don't crash the app if Firebase isn't configured locally
-        print("[Firebase] WARNING: could not initialize Firebase Admin:", e)
-        print("[Firebase] Google login / push notifications will be disabled on this machine.")
-# ------------- FCM PUSH HELPERS -------------
-def send_push_notification(token, title, body, data=None):
-    """
-    Low-level helper: send a push to a single FCM token.
-    Safe to call even if Firebase Admin isn't configured.
-    """
-    if not token:
-        return
-
-    # If Firebase Admin didn't initialize (e.g. teammate doesn't have JSON),
-    # just skip sending silently.
-    if not firebase_admin._apps:
-        print("[FCM] Skipping push; Firebase Admin not initialized on this machine.")
-        return
-
-    try:
-        msg = messaging.Message(
-            token=token,
-            notification=messaging.Notification(
-                title=title,
-                body=body,
-            ),
-            data={k: str(v) for k, v in (data or {}).items()},
-        )
-        resp = messaging.send(msg)
-        print("[FCM] Sent push, id:", resp)
-    except Exception as e:
-        print("[FCM] Error sending push:", e)
 
 
-def send_push_to_user(user, title, body, data=None):
-    """
-    Convenience wrapper; reads user.fcm_token.
-    """
-    if not user or not getattr(user, "fcm_token", None):
-        return
-    send_push_notification(user.fcm_token, title, body, data=data)
 
 # ------------------ CONFIG ------------------
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-change-me")
@@ -112,7 +84,12 @@ app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "dev-jwt-secret")
 
 # SQLite for now (file lifeline.db in project root).
 # app.config["SQLALCHEMY_DATABASE_URI"] = "postgresql+psycopg2://postgres:error101@localhost:5432/lifeline_db"
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///lifeline.db"
+import os
+
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+DB_PATH = os.path.join(BASE_DIR, "lifeline.db")   # keep it in project root
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + DB_PATH
+
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["UPLOAD_FOLDER"] = os.path.join("static", "uploads", "profile_photos")
 app.config["ALLOWED_IMAGE_EXTENSIONS"] = {"png", "jpg", "jpeg", "gif"}
@@ -196,9 +173,10 @@ class User(db.Model):
     # profile photo, phone and dob
     profile_photo = db.Column(db.String(255), default="default.png")
     phone = db.Column(db.String(20))
+    emergency_number = db.Column(db.String(30), nullable=True)
     dob = db.Column(db.String(20))  # or Date type if you prefer
     
-    fcm_token = db.Column(db.String(512), nullable=True)
+    fcm_tokens = db.relationship('FCMToken', backref='user', lazy='dynamic')
 
 
 
@@ -317,6 +295,7 @@ class Request(db.Model):
 # ------------------ MODEL: Impact Story ------------------
 class ImpactStory(db.Model):
     __tablename__ = "impact_stories"
+
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     title = db.Column(db.String(255))
@@ -324,6 +303,329 @@ class ImpactStory(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     user = db.relationship("User", backref="impact_stories")
+
+
+# ------------------ MODEL: Emotional Ping ------------------
+class EmotionalPing(db.Model):
+    __tablename__ = "emotional_pings"
+    id = db.Column(db.Integer, primary_key=True)
+
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    mood = db.Column(db.String(50), nullable=False)
+    message = db.Column(db.Text, nullable=True)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    is_active = db.Column(db.Boolean, default=True)
+    is_listened = db.Column(db.Boolean, default=False)
+    uplift_count = db.Column(db.Integer, default=0)
+    last_uplift_at = db.Column(db.DateTime, nullable=True)
+
+    user = db.relationship("User", backref="emotional_pings")
+
+
+
+
+def get_trusted_helpers_for_ping(sender_id):
+    return User.query.filter(
+        User.is_trusted_helper == True,
+        User.id != sender_id
+    ).all()
+
+
+# ------------------ FCM HELPER FUNCTIONS ------------------
+
+def send_fcm_to_token(token, title, body, data=None):
+    """
+    Low-level helper: send a push to a single FCM token.
+    Safe: will not crash the app if Firebase isn't configured.
+    """
+    if not token:
+        return False
+
+    # If Firebase Admin failed to initialize on this machine, skip
+    if not firebase_admin._apps:
+        print("[FCM] Skipping send_fcm_to_token: Firebase not initialized")
+        return False
+
+    try:
+        msg = messaging.Message(
+            notification=messaging.Notification(title=title, body=body),
+            data={k: str(v) for k, v in (data or {}).items()},
+            token=token,
+        )
+        resp = messaging.send(msg)
+        print("[FCM] Sent message:", resp)
+        return True
+    except Exception as e:
+        print("[FCM] ERROR sending FCM:", e)
+        return False
+
+
+# --------- FCM HELPER ---------
+def send_fcm_to_user(target_user, title, body, data=None):
+    """
+    Sends an FCM push notification to all devices registered for the target user.
+
+    Accepts:
+      - target_user as a User object OR an int user_id
+    """
+    if not firebase_admin._apps:
+        print("[FCM] Firebase not initialized, cannot send notification.")
+        return False
+
+    # Allow caller to pass user_id (int) or User object
+    try:
+        if isinstance(target_user, int):
+            target_user = User.query.get(target_user)
+        elif isinstance(target_user, str) and target_user.isdigit():
+            target_user = User.query.get(int(target_user))
+    except Exception as e:
+        print("[FCM] Invalid target_user provided:", e)
+        return False
+
+    if not target_user:
+        print("[FCM] Target user not found.")
+        return False
+
+    tokens = [t.token for t in target_user.fcm_tokens.all()]
+    if not tokens:
+        print(f"[FCM] User {target_user.id} has no FCM tokens registered.")
+        return False
+
+    # Ensure data is string:string
+    data_payload = {k: str(v) for k, v in (data or {}).items()}
+
+    message = messaging.MulticastMessage(
+        notification=messaging.Notification(title=title, body=body),
+        data=data_payload,
+        tokens=tokens,
+        android=messaging.AndroidConfig(priority="high"),
+        apns=messaging.APNSConfig(headers={"apns-priority": "10"}),
+    )
+
+    try:
+        response = messaging.send_multicast(message)
+
+        # Cleanup invalid tokens
+        if response.failure_count > 0:
+            bad_tokens = []
+            for idx, resp in enumerate(response.responses):
+                if not resp.success:
+                    # resp.exception can be None; guard it
+                    code = getattr(getattr(resp, "exception", None), "code", None)
+                    if code in ("INVALID_ARGUMENT", "UNREGISTERED"):
+                        bad_tokens.append(tokens[idx])
+
+            if bad_tokens:
+                FCMToken.query.filter(FCMToken.token.in_(bad_tokens)).delete(synchronize_session=False)
+                db.session.commit()
+                print(f"[FCM] Cleaned up {len(bad_tokens)} expired tokens for user {target_user.id}.")
+
+        print(f"[FCM] Multicast sent: Success={response.success_count}, Failures={response.failure_count}")
+        return response.success_count > 0
+
+    except Exception as e:
+        print(f"[FCM] Error sending multicast: {e}")
+        return False
+
+
+def send_fcm_to_trusted_helpers(title, body, data=None, exclude_user_id=None):
+    """Best-effort broadcast to all trusted helpers that have FCM tokens."""
+    try:
+        q = User.query.filter(User.is_trusted_helper == True)  # noqa: E712
+        if exclude_user_id is not None:
+            q = q.filter(User.id != exclude_user_id)
+
+        sent = 0
+        for helper in q.all():
+            try:
+                if helper.fcm_tokens.count() > 0:
+                    if send_fcm_to_user(helper, title=title, body=body, data=data):
+                        sent += 1
+            except Exception:
+                continue
+
+        return sent
+    except Exception as e:
+        print("[FCM] Error in send_fcm_to_trusted_helpers:", e)
+        return 0
+
+    
+# --- 1. NEARBY HELP REQUEST ---
+# --- UPDATE IN app.py ---
+
+# ----------------------------------------------------------------------
+# NEW HELPER: For Emotional Ping
+# ----------------------------------------------------------------------
+def send_fcm_for_emotional_chat(listener, from_user):
+    try:
+        send_fcm_to_user(
+            listener,
+            title="Emotional Support Request",
+            body=f"{from_user.name} is feeling low and wants to chat.",
+            data={"type": "EMOTIONAL_CHAT", "sender_id": str(from_user.id)}
+        )
+
+        push_notification(
+            user_id=listener.id,
+            type="chat",
+            message=f"{from_user.name} is feeling low and wants to chat.",
+            link=url_for('chat_with_user', other_user_id=from_user.id)
+        )
+    except Exception as e:
+        print(f"[FCM] Error in send_fcm_for_emotional_chat: {e}")
+
+
+def send_fcm_for_need_request(req_obj):
+    """
+    Notify users nearby AND save to database for the bell icon stack.
+    """
+    try:
+        # FIX: Get ALL users with location (removed fcm_token filter)
+        candidates = User.query.filter(
+            User.lat.isnot(None),
+            User.lng.isnot(None),
+            User.id != req_obj.user_id 
+        ).all()
+
+        count = 0
+        radius_km = 5.0 
+
+        for u in candidates:
+            dist = haversine_distance_km(req_obj.lat, req_obj.lng, u.lat, u.lng)
+            
+            if dist <= radius_km:
+                title = f"Help needed nearby ({round(dist, 1)}km)"
+                body = f"{req_obj.user.name} needs help with {req_obj.category}: {req_obj.title}"
+                
+                # 1. SAVE TO DB (Always do this for the Bell Icon)
+                push_notification(
+                    user_id=u.id,
+                    type="nearby",
+                    message=body,
+                    link=url_for('list_requests') 
+                )
+
+                # 2. Send Mobile Push (Only if they have a token)
+                if u.fcm_tokens.count() > 0:
+                    send_fcm_to_user(
+                        u, 
+                        title=title, 
+                        body=body,
+                        data={"type": "NEARBY_REQUEST", "request_id": str(req_obj.id)}
+                    )
+                
+                count += 1
+        
+        print(f"[FCM] Saved nearby alerts for {count} users.")
+
+    except Exception as e:
+        print(f"[FCM] Error in send_fcm_for_need_request: {e}")
+
+
+def send_fcm_for_sos(from_user):
+    try:
+        helpers = User.query.filter(
+            User.is_trusted_helper == True,
+            User.id != from_user.id
+        ).all()
+
+        for h in helpers:
+            push_notification(
+                user_id=h.id,
+                type="sos",
+                message=f"🚨 SOS: {from_user.name} needs immediate help!",
+                link=url_for("chat_with_user", other_user_id=from_user.id)
+            )
+
+            if h.fcm_tokens.count() > 0:
+                send_fcm_to_user(
+                    h,
+                    title="🚨 SOS ALERT!",
+                    body=f"EMERGENCY: {from_user.name} needs help!",
+                    data={"type": "SOS_ALERT", "from_user_id": str(from_user.id)}
+                )
+
+        return True
+    except Exception as e:
+        print("[SOS] Error:", e)
+        return False
+
+
+def get_trusted_helpers_within_radius_km(center_lat, center_lng, radius_km, exclude_user_id=None):
+    q = User.query.filter(User.is_trusted_helper == True)  # noqa: E712
+    if exclude_user_id is not None:
+        q = q.filter(User.id != exclude_user_id)
+
+    q = q.filter(User.lat.isnot(None), User.lng.isnot(None))
+
+    results = []
+    for h in q.all():
+        try:
+            dist = haversine_distance_km(center_lat, center_lng, h.lat, h.lng)
+        except Exception:
+            continue
+        if dist <= radius_km:
+            results.append((h, dist))
+
+    results.sort(key=lambda t: t[1])
+    return [h for h, _ in results]
+
+        
+# NEW MODEL FOR FCM TOKENS
+class FCMToken(db.Model):
+    __tablename__ = 'fcm_token'
+    id = db.Column(db.Integer, primary_key=True)
+    # This foreign key links the token back to the User who owns it
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    # The token string itself, must be unique across all tokens
+    token = db.Column(db.String(255), unique=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    
+class Offer(db.Model):
+    __tablename__ = "offers"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    title = db.Column(db.String(255))
+    body = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship("User", backref="impact_stories")
+
+    # Relationships
+    request = db.relationship("Request", backref=db.backref("offers", cascade="all, delete-orphan"))
+    helper = db.relationship("User", backref="sent_offers")   
+
+
+class SOSResponse(db.Model):
+    __tablename__ = "sos_responses"
+    id = db.Column(db.Integer, primary_key=True)
+    request_id = db.Column(db.Integer, db.ForeignKey("requests.id"), nullable=False)
+    helper_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    responder_lat = db.Column(db.Float, nullable=True)
+    responder_lng = db.Column(db.Float, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    request = db.relationship(
+        "Request", backref=db.backref("sos_responses", cascade="all, delete-orphan")
+    )
+    helper = db.relationship("User", backref="sos_responses")
+# In app.py
+class Review(db.Model):
+    __tablename__ = "reviews"
+    id = db.Column(db.Integer, primary_key=True)
+    request_id = db.Column(db.Integer, db.ForeignKey("requests.id"), nullable=False)
+    reviewer_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    helper_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    
+    rating = db.Column(db.Integer, nullable=False)
+    comment = db.Column(db.Text, nullable=True)
+    
+    # NEW FIELD: Store the actual hours worked
+    duration_hours = db.Column(db.Float, default=1.0) 
+
 
 
 # ------------------ MODELS: Chat ------------------
@@ -559,9 +861,21 @@ def logout_user():
 
 
 def current_user():
-    if "user_id" in session:
-        return db.session.get(User, session["user_id"])
-    return None
+    uid = session.get("user_id")
+    if not uid:
+        return None
+
+    try:
+        user = db.session.get(User, uid)
+    except Exception:
+        user = None
+
+    # If the DB was reset or user deleted, avoid hard-crashing downstream.
+    if user is None:
+        logout_user()
+        return None
+
+    return user
 
 
 def login_required(view_func):
@@ -569,7 +883,8 @@ def login_required(view_func):
 
     @wraps(view_func)
     def wrapper(*args, **kwargs):
-        if "user_id" not in session:
+        # Require both a session user_id and a resolvable User row.
+        if current_user() is None:
             next_url = request.path
             return redirect(url_for("login", next=next_url))
         return view_func(*args, **kwargs)
@@ -608,6 +923,13 @@ def create_jwt_for_user(user: User):
 def generate_otp_code():
     """Generate a 6-digit numeric OTP."""
     return "".join(random.choices(string.digits, k=6))
+
+
+def get_notification_count(user: User) -> int:
+    if not user:
+        return 0
+    return Notification.query.filter_by(user_id=user.id, is_read=False).count()
+    
 
 
 # Make current user available in all templates as `current_user`
@@ -738,6 +1060,33 @@ def update_user_scores(user):
     db.session.commit()
 
 
+def send_push_to_user(user: User, title: str, body: str, data: dict | None = None):
+    """Send a push notification to the user (FCM)."""
+    return send_fcm_to_user(user, title=title, body=body, data=data)
+
+        
+def send_fcm_notification(token, title, body, data=None):
+    if not token:
+        print("[FCM] No token provided, skipping")
+        return False
+
+    try:
+        payload_data = {"title": title, "body": body}
+        if data:
+            payload_data.update({str(k): str(v) for k, v in data.items()})
+
+        message = messaging.Message(
+            token=token,
+            data=payload_data,  # data-only
+        )
+        response = messaging.send(message)
+        print("[FCM] Successfully sent message:", response)
+        return True  # ✅
+    except Exception as e:
+        print("[FCM] Error sending message:", e)
+        return False  # ✅
+
+
 # ------------------ ROUTES: CORE PAGES ------------------
 @app.route("/")
 def home():
@@ -764,7 +1113,11 @@ def debug_session():
 @app.route("/map")
 @login_required
 def map_page():
-    return render_template("map.html", google_maps_key=GOOGLE_MAPS_API_KEY)
+    return render_template(
+        "map.html",
+        google_maps_key=GOOGLE_MAPS_API_KEY,
+        user=current_user(),
+    )
 
 # ------------------ ROUTES: AUTH ------------------
 @app.route("/signup", methods=["GET", "POST"])
@@ -938,30 +1291,114 @@ OTP_MAX_PER_HOUR = 5           # no more than 5 OTPs per email per hour
 
 
 def build_otp_email_html(user, code):
-    """Return a simple HTML email body for the OTP email."""
-    return f"""
-    <html>
-      <body style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background-color:#020617; padding:16px;">
-        <div style="max-width:480px;margin:0 auto;background:#020617;border-radius:16px;border:1px solid #1e293b;padding:20px;">
-          <h2 style="color:#a7f3d0;margin-top:0;">LifeLine login code</h2>
-          <p style="color:#e5e7eb;font-size:14px;">Hi {user.name},</p>
-          <p style="color:#e5e7eb;font-size:14px;">
-            Your one-time code for logging into <strong>LifeLine</strong> is:
-          </p>
-          <div style="margin:16px 0;padding:12px 16px;border-radius:999px;background:#022c22;border:1px solid #22c55e;text-align:center;">
-            <span style="color:#bbf7d0;font-size:20px;letter-spacing:0.35em;font-weight:600;">{code}</span>
-          </div>
-          <p style="color:#9ca3af;font-size:12px;">
-            This code will expire in <strong>{OTP_TTL_SECONDS // 60} minutes</strong>.
-            If you did not request this, you can safely ignore this email.
-          </p>
-          <p style="color:#6b7280;font-size:11px;margin-top:24px;border-top:1px solid #1f2937;padding-top:12px;">
-            Sent by LifeLine · University project demo
-          </p>
-        </div>
-      </body>
-    </html>
-    """
+    return f'''<html>
+  <body style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background-color:#020617; padding:16px;">
+    <div style="max-width:480px;margin:0 auto;background:#020617;border-radius:16px;border:1px solid #1e293b;padding:20px;">
+      <h2 style="color:#a7f3d0;margin-top:0;">LifeLine login code</h2>
+      <p style="color:#e5e7eb;font-size:14px;">Hi {user.name},</p>
+
+      <p style="color:#e5e7eb;font-size:14px;">
+        Your one-time code for logging into <strong>LifeLine</strong> is:
+      </p>
+
+      <div style="margin:16px 0;padding:12px 16px;border-radius:999px;background:#022c22;border:1px solid #22c55e;text-align:center;">
+        <span style="color:#bbf7d0;font-size:20px;letter-spacing:0.35em;font-weight:600;">{code}</span>
+      </div>
+
+      <p style="color:#9ca3af;font-size:12px;">
+        This code will expire in <strong>{OTP_TTL_SECONDS // 60} minutes</strong>.
+        If you did not request this, you can safely ignore this email.
+      </p>
+
+      <p style="color:#6b7280;font-size:11px;margin-top:24px;border-top:1px solid #1f2937;padding-top:12px;">
+        Sent by LifeLine - University project demo
+      </p>
+    </div>
+  </body>
+</html>'''
+
+@app.route("/emotional_ping")
+@login_required
+def emotional_ping():
+    return render_template("emotional_ping.html")
+
+@app.route("/emotional")
+@login_required
+def emotional():
+    return redirect(url_for("emotional_ping"))
+
+
+
+from flask_jwt_extended import jwt_required, get_jwt_identity
+from datetime import datetime
+
+@app.route("/api/emotional_ping", methods=["POST"])
+@login_required
+def api_emotional_ping():
+    try:
+        user = current_user()
+        if not user:
+            return jsonify({"error": "Unauthorized"}), 401
+
+        data = request.get_json(silent=True) or {}
+        mood = data.get("mood")
+        message = data.get("message")
+
+        if not mood:
+            return jsonify({"error": "Mood is required"}), 400
+
+        # 1️⃣ Save ping
+        ping = EmotionalPing(
+            user_id=user.id,
+            mood=mood,
+            message=message
+        )
+        db.session.add(ping)
+        db.session.commit()
+
+        # 2️⃣ Notify trusted helpers (BELL)
+        helpers = get_trusted_helpers_for_ping(user.id)
+
+        for helper in helpers:
+            push_notification(
+                user_id=helper.id,
+                type="emotional_ping",
+                message=f"{user.name} is feeling {mood}",
+                link=url_for("emotional_ping")
+            )
+
+            # 3️⃣ Optional FCM push
+            if helper.fcm_tokens.count() > 0:
+                send_fcm_to_user(
+                    helper,
+                    title="New Emotional Ping 💙",
+                    body=f"{user.name} is feeling {mood}",
+                    data={
+                        "type": "EMOTIONAL_PING",
+                        "sender_id": str(user.id),
+                        "ping_id": str(ping.id)
+                    }
+                )
+
+        return jsonify({"message": "Ping sent"}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        print("EMOTIONAL_PING POST ERROR:", e)
+        return jsonify({"error": "Failed to send ping"}), 500
+    
+@app.route("/api/emotional_ping/<int:ping_id>/listen", methods=["POST"])
+@login_required
+def mark_ping_listened(ping_id):
+    try:
+        ping = EmotionalPing.query.get_or_404(ping_id)
+        ping.is_listened = True
+        db.session.commit()
+        return jsonify({"message": "Marked as listened"}), 200
+    except Exception as e:
+        db.session.rollback()
+        print("LISTEN ERROR:", e)
+        return jsonify({"error": "Failed"}), 500
 
 
 @app.route("/login/otp/request", methods=["POST"])
@@ -1055,6 +1492,80 @@ def login_otp_verify():
     flash("Logged in with OTP!", "success")
     return redirect(url_for("home"))
 
+@app.route("/api/emotional_pings", methods=["GET"])
+@login_required
+def api_emotional_pings():
+    pings = (
+    EmotionalPing.query
+    .filter_by(is_active=True)
+    .order_by(
+        EmotionalPing.last_uplift_at.is_(None),   # ✅ non-null first
+        EmotionalPing.last_uplift_at.desc(),      # ✅ newest uplift first
+        EmotionalPing.created_at.desc()           # ✅ fallback
+    )
+    .all()
+)
+
+
+
+
+    out = []
+    for p in pings:
+        u = User.query.get(p.user_id)
+        out.append({
+            "id": p.id,
+            "user_id": p.user_id,
+            "user_name": u.name if u else "Unknown",
+            "mood": p.mood,
+            "message": p.message,
+            "is_listened": p.is_listened,
+            "uplift_count": p.uplift_count or 0,
+
+            "created_at_human": p.created_at.strftime("%b %d, %I:%M %p"),
+        })
+
+    return jsonify({"pings": out})
+
+@app.route("/api/emotional_pings/<int:ping_id>/listen", methods=["POST"])
+@login_required
+def api_listen_emotional_ping(ping_id):
+    try:
+        ping = EmotionalPing.query.get_or_404(ping_id)
+
+        # mark as listened
+        ping.is_listened = True
+        db.session.commit()
+
+        return jsonify({"ok": True, "ping_id": ping.id, "is_listened": ping.is_listened}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        print("LISTEN PING ERROR:", e)
+        return jsonify({"ok": False, "error": "Failed"}), 500
+
+@app.route("/api/emotional_pings/<int:ping_id>/uplift", methods=["POST"])
+@login_required
+def api_uplift_ping(ping_id):
+    try:
+        ping = EmotionalPing.query.get_or_404(ping_id)
+
+        ping.uplift_count = (ping.uplift_count or 0) + 1
+        ping.last_uplift_at = datetime.utcnow()
+
+        db.session.commit()
+
+        return jsonify({
+            "ok": True,
+            "uplift_count": ping.uplift_count
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        print("UPLIFT ERROR:", e)
+        return jsonify({"ok": False}), 500
+
+
+
 # ---------- GOOGLE / FIREBASE AUTH ----------
 @app.route("/auth/google", methods=["POST"])
 def auth_google():
@@ -1113,7 +1624,7 @@ def auth_google():
 
 @app.route("/google-auth", methods=["POST"])
 def google_auth():
-    """Verify Google ID token from Firebase, log user in, return redirect URL."""
+    "Verify Google ID token from Firebase, log user in, return redirect URL."
     data = request.get_json() or {}
     id_token = data.get("id_token")
 
@@ -1201,7 +1712,7 @@ def trusted_helper():
 @app.route("/profile")
 @login_required
 def profile():
-    """Show logged-in user's profile page."""
+    "Show logged-in users profile page."
     user = current_user()
     if not user:
         return redirect(url_for("login", next=url_for("profile")))
@@ -1222,6 +1733,7 @@ def update_profile():
     # ---- basic fields ----
     name = request.form.get("name", "").strip()
     phone = request.form.get("phone", "").strip()
+    emergency_number = request.form.get("emergency_number", "").strip()
     dob   = request.form.get("dob", "").strip()
 
     if name:
@@ -1230,6 +1742,16 @@ def update_profile():
         session["user_name"] = name
 
     user.phone = phone or None
+    if emergency_number:
+        # allow digits/spaces and common prefixes; keep minimal validation for MVP
+        cleaned = "".join(ch for ch in emergency_number if ch.isdigit() or ch in "+- ()")
+        cleaned = cleaned.strip()
+        if len(cleaned) < 6:
+            flash("Emergency number looks too short.", "error")
+            return redirect(url_for("profile"))
+        user.emergency_number = cleaned
+    else:
+        user.emergency_number = None
     user.dob   = dob or None
 
     # ---- profile photo upload ----
@@ -1251,6 +1773,23 @@ def update_profile():
     db.session.commit()
     flash("Profile updated successfully.", "success")
     return redirect(url_for("profile"))
+
+@app.route("/emotional_ping/<int:ping_id>/accept")
+@login_required
+def accept_ping(ping_id):
+    ping = EmotionalPing.query.get_or_404(ping_id)
+
+    conv = get_or_create_conversation(ping.user_id, current_user().id)
+
+
+    push_notification(
+        user_id=ping.user_id,
+        message=f"{current_user.name} replied to your emotional ping"
+    )
+
+    return redirect(url_for("chat_with_user", other_user_id=ping.user_id))
+
+
 
 # ---------- JWT-Protected API ----------
 @app.route("/api/me")
@@ -1305,7 +1844,9 @@ def api_requests_nearby():
         Request.lng.isnot(None),
     )
 
+    viewer = current_user()
     nearby = []
+    sos_ids = []
 
     for r in q.all():
         dist = haversine_distance_km(user_lat, user_lng, r.lat, r.lng)
@@ -1325,7 +1866,34 @@ def api_requests_nearby():
         item["type"] = t
         item["distance_km"] = round(dist, 2)
 
+        is_sos = cat == "sos"
+        item["is_sos"] = is_sos
+        if is_sos:
+            sos_ids.append(int(r.id))
+
         nearby.append(item)
+
+    responded_ids = set()
+    try:
+        if viewer and sos_ids:
+            rows = (
+                db.session.query(SOSResponse.request_id)
+                .filter(SOSResponse.helper_id == viewer.id)
+                .filter(SOSResponse.request_id.in_(sos_ids))
+                .all()
+            )
+            responded_ids = {int(rid) for (rid,) in rows}
+    except Exception:
+        responded_ids = set()
+
+    if responded_ids:
+        for item in nearby:
+            if (item.get("category") or "").lower() == "sos":
+                item["viewer_sos_responded"] = int(item.get("id")) in responded_ids
+    else:
+        for item in nearby:
+            if (item.get("category") or "").lower() == "sos":
+                item["viewer_sos_responded"] = False
 
     return jsonify({"requests": nearby})
 
@@ -1535,6 +2103,31 @@ def need_help():
         db.session.add(req)
         db.session.commit()
 
+
+        # ---- Push notifications to helpers ----
+        try:
+            print(f"[FCM] Trigger nearby helpers for req {req.id}")
+            send_fcm_for_need_request(req)
+
+        except Exception as e:
+            print("[FCM] nearby help push error:", e)
+
+        # Fallback / additional broadcast: notify all trusted helpers with FCM tokens
+        try:
+            send_fcm_to_trusted_helpers(
+                title="Someone nearby needs help",
+                body=f"{user.name} posted: “{title}” (category: {category})",
+                data={
+                    "type": "NEED_HELP",
+                    "request_id": req.id,
+                    "category": category,
+                },
+            )
+        except Exception as e:
+            print("[FCM] Failed to broadcast need_help notification:", e)
+
+        # ---- Flash + redirect as before ----
+
         if current_user():
             flash("Your need request has been posted.", "success")
         else:
@@ -1688,6 +2281,192 @@ def can_help():
     )
 
 
+    # Cannot offer help to your own post
+    if req_obj.user_id == user.id:
+        flash("You cannot reply to your own post.", "error")
+        return redirect(url_for("list_requests", mode="offer" if req_obj.is_offer else "need"))
+
+    # Request must be open
+    if req_obj.status != "open":
+        flash("This post is no longer active.", "error")
+        return redirect(url_for("list_requests", mode="offer" if req_obj.is_offer else "need"))
+
+    # Already contacted?
+    existing_offer = Offer.query.filter_by(request_id=req_obj.id, helper_id=user.id).first()
+    if existing_offer:
+        flash("You have already contacted this person.", "info")
+        return redirect(url_for("list_requests", mode="offer" if req_obj.is_offer else "need"))
+
+    # --- FIX: Force new offers to always be 'pending' ---
+    new_offer = Offer(
+        request_id=req_obj.id,
+        helper_id=user.id,
+        status="pending"
+    )
+    db.session.add(new_offer)
+    db.session.commit()
+        # Push: notify the owner of this request
+    try:
+        title = "New response on your LifeLine post"
+        if req_obj.is_offer:
+            body = f"{user.name} is interested in your offer: “{req_obj.title}”"
+        else:
+            body = f"{user.name} offered help on: “{req_obj.title}”"
+
+        send_fcm_to_user(
+            req_obj.user_id,
+            title=title,
+            body=body,
+            data={
+                "type": "REQUEST_REPLY",
+                "request_id": req_obj.id,
+                "from_user_id": user.id,
+            },
+        )
+    except Exception as e:
+        print("[FCM] Failed to send offer notification:", e)
+
+    # Auto-start chat
+    get_or_create_conversation(req_obj.user_id, user.id)
+
+    flash("Your offer has been sent!", "success")
+
+    return redirect(url_for("list_requests", mode="offer" if req_obj.is_offer else "need"))
+
+@app.route("/debug/fcm-users")
+def debug_fcm_users():
+    users = User.query.all()
+    data = []
+    for u in users:
+        tokens = [t.token for t in u.fcm_tokens.all()]  # relationship
+        data.append({
+            "id": u.id,
+            "email": u.email,
+            "is_trusted_helper": bool(u.is_trusted_helper),
+            "token_count": len(tokens),
+            "tokens_preview": [tok[:20] + "..." for tok in tokens[:3]],  # show first 3 previews
+        })
+    return jsonify(data)
+
+
+@app.route("/requests/offers/<int:offer_id>/accept", methods=["POST"])
+@login_required
+def accept_offer(offer_id):
+    """
+    Requester accepts a specific offer. 
+    Assigns helper, changes status to 'in_progress'.
+    Redirects back to wherever the user clicked the button.
+    """
+    offer = Offer.query.get_or_404(offer_id)
+    req_obj = offer.request
+    user = current_user()
+
+    # Security: Only the owner of the request can accept offers
+    if req_obj.user_id != user.id:
+        flash("Unauthorized action.", "error")
+        return redirect(url_for("dashboard"))
+
+    # 1. Update the Request
+    req_obj.helper_id = offer.helper_id
+    req_obj.status = "in_progress"  # Now it is officially active
+
+    # 2. Update the Offer statuses
+    offer.status = "accepted"
+    
+    # Reject all other pending offers for this request
+    other_offers = Offer.query.filter(
+        Offer.request_id == req_obj.id, 
+        Offer.id != offer_id
+    ).all()
+    for o in other_offers:
+        o.status = "rejected"
+
+    db.session.commit()
+
+    flash(f"You accepted {offer.helper.name}'s help! Check your Dashboard to manage it.", "success")
+        #  Push: notify helper that their offer was accepted
+    try:
+        send_fcm_to_user(
+            offer.helper_id,
+            title="Your help has been accepted 🎉",
+            body=f"{user.name} accepted your offer on: “{req_obj.title}”",
+            data={
+                "type": "OFFER_ACCEPTED",
+                "request_id": req_obj.id,
+                "owner_id": user.id,
+            },
+        )
+    except Exception as e:
+        print("[FCM] Failed to send offer-accepted notification:", e)
+
+    # SMART REDIRECT: Go back to where the user came from (List or Dashboard)
+    return redirect(request.referrer or url_for("dashboard"))
+
+
+
+@app.route("/requests/<int:request_id>/complete", methods=["POST"])
+@login_required
+def complete_request(request_id):
+    req_obj = Request.query.get_or_404(request_id)
+    user = current_user()
+
+    # 1. PERMISSION CHECK
+    is_authorized = False
+    if req_obj.is_offer:
+        if req_obj.helper_id == user.id: is_authorized = True
+    else:
+        if req_obj.user_id == user.id: is_authorized = True
+
+    if not is_authorized:
+        flash("Unauthorized.", "error")
+        return redirect(url_for("dashboard"))
+
+    giver_id = req_obj.user_id if req_obj.is_offer else req_obj.helper_id
+
+    # 2. GET DATA FROM FORM
+    rating = int(request.form.get("rating", 5))
+    comment = request.form.get("comment", "")
+    
+    # NEW: Get the actual duration from the user input
+    try:
+        duration_input = float(request.form.get("hours", 1.0))
+    except ValueError:
+        duration_input = 1.0
+    
+    # Ensure realistic limits (e.g., minimum 0.5 hours)
+    actual_hours = max(0.1, duration_input)
+
+    # 3. UPDATE REQUEST
+    req_obj.status = "completed"
+    req_obj.completed_at = datetime.utcnow()
+
+    # 4. AI ANALYSIS
+    from reputation_service import analyze_review_quality
+    ai_result = analyze_review_quality(comment, rating)
+
+    # 5. CREATE REVIEW (With Duration)
+    review = Review(
+        request_id=req_obj.id,
+        reviewer_id=user.id,
+        helper_id=giver_id,
+        rating=rating,
+        comment=comment,
+        duration_hours=actual_hours,  # <--- Saving the real world hours
+        sentiment_score=ai_result["sentiment_score"],
+        is_flagged_fake=ai_result["is_suspicious"],
+        flag_reason=ai_result["flag_reason"]
+    )
+    db.session.add(review)
+    db.session.commit()
+
+    # 6. UPDATE SCORES
+    giver_user = User.query.get(giver_id)
+    update_user_scores(giver_user)
+
+    flash(f"Verified! {actual_hours} hours added to {giver_user.name}'s profile.", "success")
+    return redirect(url_for("dashboard"))
+
+
 @app.route("/requests")
 @login_required
 def list_requests():
@@ -1716,11 +2495,33 @@ def list_requests():
     user = current_user()
     offered_ids = {r.id for r in Request.query.filter(Request.helper_id == user.id).all()}
 
+    sos_responded_ids = set()
+    if user:
+        my_sos = SOSResponse.query.filter_by(helper_id=user.id).all()
+        sos_responded_ids = {r.request_id for r in my_sos}
+
+    sos_response_counts = {}
+    try:
+        rows = (
+            db.session.query(SOSResponse.request_id, func.count(SOSResponse.id))
+            .group_by(SOSResponse.request_id)
+            .all()
+        )
+        sos_response_counts = {int(rid): int(cnt) for rid, cnt in rows}
+    except Exception:
+        sos_response_counts = {}
+
     return render_template(
         "list_requests.html",
         requests=requests_list,
         mode=mode,
+
         offered_ids=offered_ids,
+
+        offered_ids=offered_ids,  # <--- Pass this to the HTML
+        sos_responded_ids=sos_responded_ids,
+        sos_response_counts=sos_response_counts,
+
     )
 
 
@@ -2043,6 +2844,50 @@ def chat_index():
     # also show some nearby helpers to start a new chat (trusted helpers)
     helpers = User.query.filter(User.is_trusted_helper == True, User.id != user.id).limit(10).all()
     return render_template("chat_index.html", conversations=conversations, helpers=helpers)
+
+@app.route("/suggestions")
+@login_required
+def suggestions_dashboard():
+    """Smart Suggestion AI Dashboard"""
+    user = current_user()
+    # Note: User location is optional; API will use defaults if not set
+    return render_template("suggestions_dashboard.html")
+
+
+@app.route("/api/nearby-requests", methods=["GET"])
+def api_nearby_requests():
+    """Get nearby requests using user or fallback location"""
+    try:
+        user = current_user()
+        limit = request.args.get("limit", type=int, default=10)
+
+        fallback_lat = float(os.getenv("DEFAULT_LAT", "23.8103"))
+        fallback_lng = float(os.getenv("DEFAULT_LNG", "90.4125"))
+
+        user_lat = request.args.get("lat", type=float)
+        user_lng = request.args.get("lng", type=float)
+
+        if user_lat is None:
+            user_lat = getattr(user, "lat", None) or fallback_lat
+        if user_lng is None:
+            user_lng = getattr(user, "lng", None) or fallback_lng
+
+        exclude_user_id = getattr(user, "id", None)
+
+        nearby = LocationMatcher.get_nearby_requests(
+            db=db,
+            Request=Request,
+            user_lat=user_lat,
+            user_lng=user_lng,
+            exclude_user_id=exclude_user_id,
+            limit=limit
+        )
+
+        return jsonify({"requests": nearby}), 200
+    except Exception as e:
+        print(f"[API] Error in api_nearby_requests: {e}")
+        return jsonify({"error": str(e)}), 500
+
 
 @app.route("/dashboard")
 @login_required
@@ -2397,7 +3242,6 @@ def impact():
     )
 
 
-
 @app.route("/emotional")
 def emotional_ping():
     user = current_user()
@@ -2420,6 +3264,310 @@ def emotional_ping():
 
     conv = get_or_create_conversation(user.id, listener.id)
     return redirect(url_for('chat_with_user', other_user_id=listener.id))
+
+
+@app.route("/api/user/location", methods=["POST"])
+@login_required
+def update_user_location():
+    """
+    Updates the logged-in users live location.
+    Required for receiving 'nearby' help requests.
+    """
+    data = request.get_json() or {}
+    try:
+        lat = float(data.get("lat"))
+        lng = float(data.get("lng"))
+        
+        user = current_user()
+        user.lat = lat
+        user.lng = lng
+        db.session.commit()
+        
+        return jsonify({"ok": True})
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid location data"}), 400
+    
+
+# In app.py
+
+
+@app.route("/sos/trigger", methods=["POST"])
+@login_required
+def trigger_sos():
+    user = current_user()
+
+    if not user:
+        flash("Please log in again to send SOS.", "error")
+        return redirect(url_for("login", next=request.path))
+
+    # Prefer client-provided GPS for accuracy; fallback to user's last-known location
+    sos_lat = None
+    sos_lng = None
+    try:
+        lat_raw = request.form.get("lat")
+        lng_raw = request.form.get("lng")
+        if lat_raw is not None and lng_raw is not None:
+            sos_lat = float(lat_raw)
+            sos_lng = float(lng_raw)
+    except (TypeError, ValueError):
+        sos_lat = None
+        sos_lng = None
+
+    used_fallback_location = False
+    if sos_lat is None or sos_lng is None:
+        # Fallback to last-known location (or configured defaults) so SOS can still be sent.
+        try:
+            if getattr(user, "lat", None) is not None and getattr(user, "lng", None) is not None:
+                sos_lat = float(user.lat)
+                sos_lng = float(user.lng)
+            else:
+                sos_lat = float(os.getenv("DEFAULT_LAT", "23.8103"))
+                sos_lng = float(os.getenv("DEFAULT_LNG", "90.4125"))
+            used_fallback_location = True
+        except Exception:
+            flash(
+                "Could not determine your location. Please enable location permission and try again.",
+                "error",
+            )
+            return redirect(request.referrer or url_for("map_page"))
+
+    created_at = datetime.utcnow()
+    expires_at = created_at + timedelta(minutes=15)
+
+    sos_req = Request(
+        user_id=user.id,
+        title="🚨 SOS Alert",
+        category="sos",
+        description=f"Emergency SOS from {user.name}.",
+        lat=sos_lat,
+        lng=sos_lng,
+        urgency="emergency",
+        is_offer=False,
+        created_at=created_at,
+        expires_at=expires_at,
+        status="open",
+    )
+    db.session.add(sos_req)
+    db.session.commit()
+
+    # Update last-known location if GPS was provided
+    if sos_lat is not None and sos_lng is not None:
+        try:
+            user.lat = sos_lat
+            user.lng = sos_lng
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+    # Broadcast to all trusted helpers (verified helpers). Location filtering can be
+    # added later; for now "all trusted helpers" matches the SOS broadcast intent.
+    helpers = User.query.filter(User.is_trusted_helper == True, User.id != user.id).all()  # noqa: E712
+
+    for h in helpers:
+        try:
+            push_notification(
+                user_id=h.id,
+                type="sos",
+                message=f"🚨 SOS: {user.name} needs immediate help nearby!",
+                link=url_for("map_page", focus_request_id=sos_req.id),
+            )
+        except Exception:
+            pass
+
+        try:
+            if h.fcm_tokens.count() > 0:
+                send_fcm_to_user(
+                    h,
+                    title="🚨 SOS ALERT!",
+                    body=f"EMERGENCY: {user.name} needs help nearby!",
+                    data={"type": "SOS_ALERT", "request_id": str(sos_req.id)},
+                )
+        except Exception:
+            pass
+
+    # Persist active SOS id so the UI can keep the fallback timer across pages.
+    try:
+        session["active_sos_request_id"] = sos_req.id
+    except Exception:
+        pass
+
+    if used_fallback_location:
+        flash(
+            "SOS SENT using your last saved/default location. Enable Precise location for accuracy.",
+            "error",
+        )
+    else:
+        flash("SOS SENT! Trusted helpers have been alerted.", "error")
+    return redirect(url_for("map_page", focus_request_id=sos_req.id, sos_caller=1))
+
+
+@app.route("/sos/<int:request_id>/accept/<int:helper_id>", methods=["POST"])
+@login_required
+def accept_sos_responder(request_id, helper_id):
+    """SOS owner selects a responder to connect with (enables chat/call + completion review flow)."""
+    user = current_user()
+    req_obj = Request.query.get_or_404(request_id)
+
+    if req_obj.user_id != user.id:
+        flash("Unauthorized.", "error")
+        return redirect(url_for("dashboard"))
+
+    if (req_obj.category or "").lower() != "sos":
+        flash("Not an SOS request.", "error")
+        return redirect(url_for("dashboard"))
+
+    if req_obj.status != "open":
+        flash("This SOS is no longer open.", "error")
+        return redirect(url_for("dashboard"))
+
+    existing = SOSResponse.query.filter_by(request_id=req_obj.id, helper_id=helper_id).first()
+    if not existing:
+        flash("That user has not responded to this SOS.", "error")
+        return redirect(url_for("dashboard"))
+
+    helper_user = User.query.get(helper_id)
+    if not helper_user:
+        flash("Responder not found.", "error")
+        return redirect(url_for("dashboard"))
+
+    req_obj.helper_id = helper_id
+    req_obj.status = "in_progress"
+    db.session.commit()
+
+    try:
+        push_notification(
+            user_id=helper_id,
+            type="sos_connected",
+            message=f"✅ {user.name} accepted your SOS response. Please coordinate in chat.",
+            link=url_for("map_page", focus_request_id=req_obj.id),
+        )
+    except Exception:
+        pass
+
+    flash("Connected with the responder. You can chat/call and mark complete.", "success")
+    return redirect(url_for("dashboard"))
+
+
+@app.route("/api/sos/<int:request_id>/respond", methods=["POST"])
+@login_required
+def api_sos_respond(request_id):
+    user = current_user()
+    if not user or not user.is_trusted_helper:
+        return jsonify({"error": "Only verified helpers can respond"}), 403
+
+    req_obj = Request.query.get_or_404(request_id)
+    if (req_obj.category or "").lower() != "sos":
+        return jsonify({"error": "Not an SOS request"}), 400
+    if req_obj.status != "open":
+        return jsonify({"error": "SOS is not open"}), 400
+    if req_obj.user_id == user.id:
+        return jsonify({"error": "Cannot respond to your own SOS"}), 400
+
+    existing = SOSResponse.query.filter_by(request_id=req_obj.id, helper_id=user.id).first()
+    if existing:
+        return jsonify({"ok": True, "already": True})
+
+    data = request.get_json(silent=True) or {}
+    responder_lat = None
+    responder_lng = None
+    try:
+        if data.get("lat") is not None and data.get("lng") is not None:
+            responder_lat = float(data.get("lat"))
+            responder_lng = float(data.get("lng"))
+    except (TypeError, ValueError):
+        responder_lat = None
+        responder_lng = None
+
+    # Fallback to helper's last known location if available
+    if responder_lat is None or responder_lng is None:
+        responder_lat = getattr(user, "lat", None)
+        responder_lng = getattr(user, "lng", None)
+
+    resp = SOSResponse(
+        request_id=req_obj.id,
+        helper_id=user.id,
+        responder_lat=responder_lat,
+        responder_lng=responder_lng,
+    )
+    db.session.add(resp)
+    db.session.commit()
+
+    try:
+        push_notification(
+            user_id=req_obj.user_id,
+            type="sos_response",
+            message=f"✅ {user.name} is responding to your SOS.",
+            link=url_for("map_page", focus_request_id=req_obj.id),
+        )
+    except Exception:
+        pass
+
+    return jsonify({"ok": True})
+
+
+@app.route("/api/sos/<int:request_id>/status", methods=["GET"])
+@login_required
+def api_sos_status(request_id):
+    req_obj = Request.query.get_or_404(request_id)
+    if (req_obj.category or "").lower() != "sos":
+        return jsonify({"error": "Not an SOS request"}), 400
+
+    viewer = current_user()
+
+    responders = (
+        SOSResponse.query.filter_by(request_id=req_obj.id)
+        .order_by(SOSResponse.created_at.asc())
+        .all()
+    )
+
+    names = []
+    responder_locations = []
+    for r in responders:
+        u = User.query.get(r.helper_id)
+        if u:
+            names.append(u.name)
+            if viewer and viewer.id == req_obj.user_id:
+                responder_locations.append(
+                    {
+                        "helper_id": u.id,
+                        "name": u.name,
+                        "lat": r.responder_lat,
+                        "lng": r.responder_lng,
+                    }
+                )
+
+    # Caller fallback: if no helpers respond within 60 seconds, the UI can prompt
+    # the SOS caller to call their saved emergency number (simulated via tel: link).
+    # We only expose this flag to the SOS owner.
+    should_call = False
+    seconds_remaining = None
+    try:
+        if viewer and viewer.id == req_obj.user_id:
+            now = datetime.utcnow()
+            elapsed_s = (now - req_obj.created_at).total_seconds() if req_obj.created_at else 0
+            seconds_remaining = max(0, int(60 - elapsed_s))
+            should_call = (elapsed_s >= 60) and (len(responders) == 0)
+
+            if len(responders) > 0:
+                try:
+                    session.pop("active_sos_request_id", None)
+                except Exception:
+                    pass
+    except Exception:
+        should_call = False
+        seconds_remaining = None
+
+    return jsonify(
+        {
+            "request_id": req_obj.id,
+            "responded": len(responders) > 0,
+            "responders_count": len(responders),
+            "responders": names[:10],
+            "responder_locations": responder_locations,
+            "should_call": should_call,
+            "seconds_remaining": seconds_remaining,
+        }
+    )
 
 
 @app.route("/api/conversations/<int:conv_id>/messages")
@@ -2462,6 +3610,7 @@ def api_mark_conversation_read(conv_id):
         return jsonify({"error": "failed"}), 500
 
 
+
 @app.route("/api/translate", methods=["POST"])
 @login_required
 def api_translate():
@@ -2486,25 +3635,114 @@ def api_translate():
     return jsonify({"translated": translated})
 
 
-# ------------------ SOCKET.IO EVENTS ------------------
-@socketio.on("join")
-def on_join(data):
-    # data = {conversation_id}
-    conv_id = data.get("conversation_id")
+@app.route("/api/fcm/register", methods=["POST"])
+@login_required
+def api_register_fcm():
     user = current_user()
-    print(f"[JOIN] User {user.id if user else 'None'} joining conversation {conv_id}")
-    if not user or not conv_id:
-        print(f"[JOIN] Rejected: no user or conv_id")
-        return
-    conv = Conversation.query.get(conv_id)
-    if not conv or user.id not in conv.participants():
-        print(f"[JOIN] Rejected: conv not found or user not participant")
-        return
-    room = f"chat_{conv_id}"
-    join_room(room)
-    print(f"[JOIN] Successfully joined room {room}")
-    emit("user_joined", {"user_id": user.id}, room=room)
+    data = request.get_json() or {}
+    token = (data.get("token") or "").strip()
 
+    if not token:
+        return jsonify({"error": "token required"}), 400
+
+    # If already exists for this user, do nothing
+    existing = FCMToken.query.filter_by(token=token).first()
+    if existing:
+        if existing.user_id != user.id:
+            existing.user_id = user.id  # token moved to another user
+            db.session.commit()
+        return jsonify({"ok": True, "message": "token already registered"})
+
+    db.session.add(FCMToken(user_id=user.id, token=token))
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/trusted_helpers", methods=["GET"])
+@login_required
+def api_trusted_helpers():
+    user = current_user()
+    helpers = User.query.filter(
+        User.is_trusted_helper == True,
+        User.id != user.id
+    ).all()
+
+    # simple ordering: kindness desc, then trust desc
+    helpers.sort(key=lambda u: ((u.kindness_score or 0), (u.trust_score or 0)), reverse=True)
+
+    return jsonify({
+        "helpers": [
+            {
+                "id": h.id,
+                "name": h.name,
+                "trust_score": int(h.trust_score or 0),
+                "kindness_score": int(h.kindness_score or 0),
+            }
+            for h in helpers
+        ]
+    })
+
+
+
+@app.route('/firebase-messaging-sw.js')
+def firebase_sw():
+    return app.send_static_file('firebase-messaging-sw.js')
+
+
+
+# ------------------ SOCKET.IO EVENTS ------------------ 
+online_users = set()
+sid_to_user = {}
+
+# --- REPLACED/MODIFIED BLOCK (for Step 1) ---
+@socketio.on("join")
+@jwt_required()
+def on_join(data):
+    user_id = int(get_jwt_identity())
+
+    sid_to_user[request.sid] = user_id
+    online_users.add(user_id)
+
+    join_room(f"user_{user_id}")
+    print(f"[SOCKETIO] User {user_id} joined personal room user_{user_id}")
+
+
+@socketio.on("disconnect")
+def on_disconnect():
+    uid = sid_to_user.pop(request.sid, None)
+    if uid:
+        online_users.discard(uid)
+        print(f"[SOCKETIO] User {uid} disconnected")
+
+
+# --- NEW BLOCK (for Step 2) ---
+import random
+
+@socketio.on("emotional_ping")
+@jwt_required()
+def on_emotional_ping(data=None):
+    user_id = get_jwt_identity()
+    ping_user = User.query.get(int(user_id))
+    if not ping_user:
+        return
+
+    helpers = User.query.filter(
+        User.is_trusted_helper == True,
+        User.id != ping_user.id
+    ).all()
+
+    if not helpers:
+        emit("ping_failed", {"message": "No trusted helpers available right now."}, room=request.sid)
+        return
+
+    for h in helpers:
+        socketio.emit(
+            "emotional_alert",
+            {"sender_id": ping_user.id, "sender_name": ping_user.name},
+            room=f"user_{h.id}"
+        )
+
+    emit("ping_success", {"message": "Ping sent to all trusted helpers."}, room=request.sid)
 
 @socketio.on("leave")
 def on_leave(data):
@@ -2572,8 +3810,31 @@ def on_send_message(data):
     db.session.add(msg)
     db.session.commit()
     print(f"[SEND_MESSAGE] Saved message {msg.id} to DB")
+    
+        # ---- NEW: If this conversation is from an Emotional Ping, notify sender on first helper reply ----
+    try:
+        ping = EmotionalPing.query.filter_by(conversation_id=conv.id).order_by(EmotionalPing.created_at.desc()).first()
+        if ping:
+            # helper replying?
+            if user.id == ping.helper_id and not ping.helper_replied:
+                # mark once
+                ping.helper_replied = True
+                db.session.commit()
+
+                # create bell notification for sender
+                push_notification(
+                    user_id=ping.sender_id,
+                    type="emotional_reply",
+                    message=f"💬 {user.name} replied to your emotional ping.",
+                    link=url_for("chat_with_user", other_user_id=user.id)
+                )
+    except Exception as e:
+        print("[PING REPLY NOTIFY] error:", e)
+        db.session.rollback()
+
 
     payload = serialize_message(msg)
+
     
     # Include file data in payload if present
     if file_data:
@@ -2592,6 +3853,61 @@ def on_send_message(data):
     emit("new_message", payload, room=room)
     # return payload as acknowledgement to sender (Socket.IO ack)
     return payload
+
+    payload["temp_id"] = temp_id
+
+    if file_data:
+        payload["has_file"] = True
+        payload["file_name"] = file_name
+        payload["file_size"] = file_size
+        payload["is_image"] = is_image
+
+    room = f"chat_{conv.id}"
+    print(f"[SEND_MESSAGE] Emitting 'new_message' to room {room}")
+    emit("new_message", payload, room=room)
+
+    # ---------- Determine the other participant ----------
+    other_id = conv.user_a if conv.user_b == user.id else conv.user_b
+    other_user = User.query.get(other_id) if other_id else None
+    has_token = bool(other_user and getattr(other_user, 'fcm_tokens', None) and other_user.fcm_tokens.count() > 0)
+    print(f"[SEND_MESSAGE] Other participant user_id={other_id}, has_token={has_token}")
+
+    # ---------- Send push to the other participant ----------
+
+    try:
+        # Check if the other user exists and is not the sender
+        if other_user and other_user.id != user.id:
+            # Check if the user has any registered FCM tokens using the new relationship
+            if other_user.fcm_tokens.count() > 0:
+                preview = text or "[Attachment]"
+                if len(preview) > 80:
+                    preview = preview[:80] + "…"
+
+                # Use the new multi-token handler function
+                success = send_fcm_to_user(
+                    other_user,
+                    title=f"New message from {user.name}",
+                    body=preview,
+                    data={
+                        "type": "NEW_CHAT_MESSAGE",
+                        "conversation_id": str(conv.id),
+                        "sender_id": str(user.id),
+                    },
+                )
+                
+                if success:
+                    print(f"[FCM] Chat push sent to user {other_user.id}")
+                else:
+                    # This branch means the server received failure from Firebase
+                    print(f"[FCM] Chat push failed to send to user {other_user.id} (Firebase error)")
+            else:
+                # This branch means no tokens were registered for the user
+                print(f"[FCM] Other user {other_user.id} has no registered FCM tokens; skipping chat push")
+                
+    except Exception as e:
+        # This will now catch other errors, not the persistent AttributeError
+        print("[FCM] Error sending chat push:", e)
+
 
 
 @socketio.on("message_delivered")
@@ -2661,10 +3977,259 @@ def delete_request(request_id):
     flash("Request removed.", "success")
     return redirect(url_for("list_requests"))
 
+
+@app.route("/debug/fcm-test")
+def debug_fcm_test():
+    user = User.query.get(3)  # 🔥 FORCE user id 3
+
+    if not user:
+        return "User not found", 404
+
+    tokens = [t.token for t in user.fcm_tokens.all()]
+    if not tokens:
+        return "Sent: False (no tokens)"
+
+    sent_any = False
+    for tok in tokens:
+        ok = send_fcm_notification(tok, "FCM Test", "This is a test push from Lifeline")
+
+        sent_any = sent_any or bool(ok)
+
+    return f"Sent: {sent_any}"
+
+
+
+# ==================== SMART SUGGESTION AI ROUTES ====================
+
+@app.route("/api/suggestions", methods=["POST"])
+def get_smart_suggestions():
+    """
+    Get AI-powered smart suggestions based on:
+    - User location (lat/lng)
+    - Weather conditions
+    - Current time
+    - Local demand patterns
+    
+    Request body:
+    {
+        "lat": float,
+        "lng": float,
+        "max_suggestions": int (optional, default 5)
+    }
+    """
+    try:
+        data = request.get_json() or {}
+        user = current_user()
+
+        # Get user location
+        fallback_lat = float(os.getenv("DEFAULT_LAT", "23.8103"))
+        fallback_lng = float(os.getenv("DEFAULT_LNG", "90.4125"))
+
+        # Explicitly check if lat/lng are in payload
+        # If coords are NOT in payload, skip user profile and go straight to defaults
+        # This allows the widget to intentionally use demo data
+        has_payload_coords = "lat" in data and "lng" in data and data["lat"] is not None and data["lng"] is not None
+        
+        if has_payload_coords:
+            user_lat = data["lat"]
+            user_lng = data["lng"]
+            location_source = "payload"
+        else:
+            # No payload coords = skip user profile, use defaults (for demo/testing)
+            user_lat = fallback_lat
+            user_lng = fallback_lng
+            location_source = "fallback_default"
+        
+        max_suggestions = min(int(data.get("max_suggestions", 5)), 10)
+        
+        # Generate suggestions
+        suggestions = SmartSuggestionService.get_suggestions(
+            db=db,
+            Request=Request,
+            user_id=getattr(user, "id", 0),
+            user_lat=user_lat,
+            user_lng=user_lng,
+            max_suggestions=max_suggestions,
+            include_explanation=True
+        )
+        
+        return jsonify({
+            "success": True,
+            "suggestions": suggestions,
+            "generated_at": datetime.utcnow().isoformat(),
+            "location_source": location_source,
+            "location_used": {"lat": user_lat, "lng": user_lng}
+        }), 200
+        
+    except Exception as e:
+        print(f"[API] Error in get_smart_suggestions: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/weather", methods=["GET"])
+def get_weather():
+    """
+    Get current weather for user's location
+    Query params:
+    - lat: latitude
+    - lng: longitude
+    """
+    try:
+        user = current_user()
+        fallback_lat = float(os.getenv("DEFAULT_LAT", "23.8103"))
+        fallback_lng = float(os.getenv("DEFAULT_LNG", "90.4125"))
+
+        lat = request.args.get("lat", type=float)
+        lng = request.args.get("lng", type=float)
+
+        if lat is None:
+            lat = getattr(user, "lat", None) or fallback_lat
+        if lng is None:
+            lng = getattr(user, "lng", None) or fallback_lng
+        
+        weather_data = WeatherService.get_weather(lat, lng)
+        conditions = WeatherService.extract_conditions(weather_data)
+        
+        if not conditions:
+            # Graceful fallback for UI when weather fails
+            demo = {
+                "condition": "Unknown",
+                "description": "Weather unavailable",
+                "temp": None,
+                "humidity": None,
+                "wind_speed": None,
+            }
+            return jsonify({"success": False, "weather": demo}), 200
+        
+        return jsonify({
+            "success": True,
+            "weather": conditions,
+            "raw_data": weather_data
+        }), 200
+        
+    except Exception as e:
+        print(f"[API] Error in get_weather: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/trending-categories", methods=["GET"])
+def get_trending_categories():
+    """
+    Get trending help categories across the platform
+    Query params:
+    - hours: lookback period in hours (default 24)
+    - limit: number of categories (default 5)
+    """
+    try:
+        hours = request.args.get("hours", type=int, default=24)
+        limit = request.args.get("limit", type=int, default=5)
+        
+        trending = SmartSuggestionService.get_trending_categories(
+            db=db,
+            Request=Request,
+            hours=max(1, min(hours, 720)),  # Between 1 hour and 30 days
+            limit=max(1, min(limit, 20))
+        )
+        
+        return jsonify({
+            "success": True,
+            "trending_categories": trending,
+            "period_hours": hours
+        }), 200
+        
+    except Exception as e:
+        print(f"[API] Error in get_trending_categories: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/suggestion-insights", methods=["GET"])
+@login_required
+def get_suggestion_insights():
+    """
+    Get insights about suggestions and user opportunities
+    """
+    try:
+        user = current_user()
+        
+        if not user.lat or not user.lng:
+            return jsonify({"error": "User location required"}), 400
+        
+        # Get all nearby open requests
+        nearby_requests = LocationMatcher.get_nearby_requests(
+            db=db,
+            Request=Request,
+            user_lat=user.lat,
+            user_lng=user.lng,
+            exclude_user_id=user.id,
+            limit=50
+        )
+        
+        # Get weather
+        weather_data = WeatherService.get_weather(user.lat, user.lng)
+        weather_conditions = WeatherService.extract_conditions(weather_data)
+        
+        # Get time period
+        time_period = DemandAnalyzer.get_time_period()
+        
+        # Get trending categories
+        trending = SmartSuggestionService.get_trending_categories(
+            db=db, Request=Request, hours=24, limit=5
+        )
+        
+        # Analyze suggestions
+        insights = {
+            "total_nearby_requests": len(nearby_requests),
+            "weather_summary": {
+                "condition": weather_conditions.get("condition"),
+                "temperature": weather_conditions.get("temp"),
+                "humidity": weather_conditions.get("humidity"),
+            },
+            "current_time_period": time_period,
+            "trending_categories": trending,
+            "user_score": {
+                "trust_score": user.trust_score or 0,
+                "kindness_score": user.kindness_score or 0,
+                "badge": user.calculate_badge()[0]
+            },
+            "recommendations": {
+                "weather_opportunities": DemandAnalyzer.get_weather_suggestions(
+                    weather_conditions.get("condition", "")
+                ),
+                "time_opportunities": DemandAnalyzer.get_time_suggestions(time_period),
+                "temperature_opportunities": DemandAnalyzer.get_temp_suggestions(
+                    DemandAnalyzer.categorize_temperature(weather_conditions.get("temp"))
+                )
+            }
+        }
+        
+        return jsonify({
+            "success": True,
+            "insights": insights
+        }), 200
+        
+    except Exception as e:
+        print(f"[API] Error in get_suggestion_insights: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ==================== END SMART SUGGESTION AI ROUTES ====================
+
+
 # ------------------ REGISTER BLUEPRINTS ------------------
 # Register resource pooling blueprint (must be after all models are defined)
 from resources import resources_bp
 app.register_blueprint(resources_bp)
+
+# ------------------ SUGGESTIONS DASHBOARD PAGE ------------------
+@app.route("/suggestions", endpoint="suggestions")
+def suggestions_page():
+    """Render the Smart Suggestions dashboard page."""
+    try:
+        return render_template("suggestions_dashboard.html")
+    except Exception as e:
+        print(f"[UI] Error rendering suggestions_dashboard: {e}")
+        # Fallback to home if template missing
+        return redirect(url_for("home"))
 
 # ------------------ MAIN ------------------
 if __name__ == "__main__":
@@ -2684,6 +4249,10 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Migration note: {e}")
     
+
     socketio.run(app, debug=True)
 
     
+    debug_mode = os.getenv("FLASK_DEBUG", "0") == "1"
+    socketio.run(app, debug=debug_mode, use_reloader=False)
+
