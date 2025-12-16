@@ -172,6 +172,7 @@ class User(db.Model):
     # profile photo, phone and dob
     profile_photo = db.Column(db.String(255), default="default.png")
     phone = db.Column(db.String(20))
+    emergency_number = db.Column(db.String(30), nullable=True)
     dob = db.Column(db.String(20))  # or Date type if you prefer
     
     fcm_tokens = db.relationship('FCMToken', backref='user', lazy='dynamic')
@@ -412,6 +413,28 @@ def send_fcm_to_user(target_user, title, body, data=None):
         print(f"[FCM] Error sending multicast: {e}")
         return False
 
+
+def send_fcm_to_trusted_helpers(title, body, data=None, exclude_user_id=None):
+    """Best-effort broadcast to all trusted helpers that have FCM tokens."""
+    try:
+        q = User.query.filter(User.is_trusted_helper == True)  # noqa: E712
+        if exclude_user_id is not None:
+            q = q.filter(User.id != exclude_user_id)
+
+        sent = 0
+        for helper in q.all():
+            try:
+                if helper.fcm_tokens.count() > 0:
+                    if send_fcm_to_user(helper, title=title, body=body, data=data):
+                        sent += 1
+            except Exception:
+                continue
+
+        return sent
+    except Exception as e:
+        print("[FCM] Error in send_fcm_to_trusted_helpers:", e)
+        return 0
+
     
 # --- 1. NEARBY HELP REQUEST ---
 # --- UPDATE IN app.py ---
@@ -513,6 +536,26 @@ def send_fcm_for_sos(from_user):
         print("[SOS] Error:", e)
         return False
 
+
+def get_trusted_helpers_within_radius_km(center_lat, center_lng, radius_km, exclude_user_id=None):
+    q = User.query.filter(User.is_trusted_helper == True)  # noqa: E712
+    if exclude_user_id is not None:
+        q = q.filter(User.id != exclude_user_id)
+
+    q = q.filter(User.lat.isnot(None), User.lng.isnot(None))
+
+    results = []
+    for h in q.all():
+        try:
+            dist = haversine_distance_km(center_lat, center_lng, h.lat, h.lng)
+        except Exception:
+            continue
+        if dist <= radius_km:
+            results.append((h, dist))
+
+    results.sort(key=lambda t: t[1])
+    return [h for h, _ in results]
+
         
 # NEW MODEL FOR FCM TOKENS
 class FCMToken(db.Model):
@@ -536,6 +579,21 @@ class Offer(db.Model):
     # Relationships
     request = db.relationship("Request", backref=db.backref("offers", cascade="all, delete-orphan"))
     helper = db.relationship("User", backref="sent_offers")   
+
+
+class SOSResponse(db.Model):
+    __tablename__ = "sos_responses"
+    id = db.Column(db.Integer, primary_key=True)
+    request_id = db.Column(db.Integer, db.ForeignKey("requests.id"), nullable=False)
+    helper_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    responder_lat = db.Column(db.Float, nullable=True)
+    responder_lng = db.Column(db.Float, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    request = db.relationship(
+        "Request", backref=db.backref("sos_responses", cascade="all, delete-orphan")
+    )
+    helper = db.relationship("User", backref="sos_responses")
 # In app.py
 class Review(db.Model):
     __tablename__ = "reviews"
@@ -905,7 +963,11 @@ def debug_session():
 @app.route("/map")
 @login_required
 def map_page():
-    return render_template("map.html", google_maps_key=GOOGLE_MAPS_API_KEY)
+    return render_template(
+        "map.html",
+        google_maps_key=GOOGLE_MAPS_API_KEY,
+        user=current_user(),
+    )
 
 # ------------------ ROUTES: AUTH ------------------
 @app.route("/signup", methods=["GET", "POST"])
@@ -1490,6 +1552,7 @@ def update_profile():
     # ---- basic fields ----
     name = request.form.get("name", "").strip()
     phone = request.form.get("phone", "").strip()
+    emergency_number = request.form.get("emergency_number", "").strip()
     dob   = request.form.get("dob", "").strip()
 
     if name:
@@ -1498,6 +1561,16 @@ def update_profile():
         session["user_name"] = name
 
     user.phone = phone or None
+    if emergency_number:
+        # allow digits/spaces and common prefixes; keep minimal validation for MVP
+        cleaned = "".join(ch for ch in emergency_number if ch.isdigit() or ch in "+- ()")
+        cleaned = cleaned.strip()
+        if len(cleaned) < 6:
+            flash("Emergency number looks too short.", "error")
+            return redirect(url_for("profile"))
+        user.emergency_number = cleaned
+    else:
+        user.emergency_number = None
     user.dob   = dob or None
 
     # ---- profile photo upload ----
@@ -1592,7 +1665,9 @@ def api_requests_nearby():
         Request.lng.isnot(None),
     )
 
+    viewer = current_user()
     nearby = []
+    sos_ids = []
 
     for r in q.all():
         dist = haversine_distance_km(user_lat, user_lng, r.lat, r.lng)
@@ -1612,7 +1687,34 @@ def api_requests_nearby():
         item["type"] = t
         item["distance_km"] = round(dist, 2)
 
+        is_sos = cat == "sos"
+        item["is_sos"] = is_sos
+        if is_sos:
+            sos_ids.append(int(r.id))
+
         nearby.append(item)
+
+    responded_ids = set()
+    try:
+        if viewer and sos_ids:
+            rows = (
+                db.session.query(SOSResponse.request_id)
+                .filter(SOSResponse.helper_id == viewer.id)
+                .filter(SOSResponse.request_id.in_(sos_ids))
+                .all()
+            )
+            responded_ids = {int(rid) for (rid,) in rows}
+    except Exception:
+        responded_ids = set()
+
+    if responded_ids:
+        for item in nearby:
+            if (item.get("category") or "").lower() == "sos":
+                item["viewer_sos_responded"] = int(item.get("id")) in responded_ids
+    else:
+        for item in nearby:
+            if (item.get("category") or "").lower() == "sos":
+                item["viewer_sos_responded"] = False
 
     return jsonify({"requests": nearby})
 
@@ -1804,24 +1906,21 @@ def need_help():
         expires_at = datetime.utcnow() + timedelta(minutes=expiry_minutes)
 
         req = Request(
-        user_id=user.id,
-        title=title,
-        category=category,
-        description=description_main,
-        is_offer=False,
-        area=area or None,
-        landmark=landmark or None,
-        urgency=urgency or None,
-        time_window=time_window or None,
-        contact_method=contact_method or None,
-        contact_info=contact_info or None,
-        lat=lat,
-        lng=lng,
-        expires_at=expires_at,
+            user_id=user.id,
+            title=title,
+            category=category,
+            description=description_main,
+            is_offer=False,
+            area=area or None,
+            landmark=landmark or None,
+            urgency=urgency or None,
+            time_window=time_window or None,
+            contact_method=contact_method or None,
+            contact_info=contact_info or None,
+            lat=lat,
+            lng=lng,
+            expires_at=expires_at,
         )
-        db.session.add(req)
-        db.session.commit()
-
         db.session.add(req)
         db.session.commit()
 
@@ -1848,27 +1947,6 @@ def need_help():
             print("[FCM] Failed to broadcast need_help notification:", e)
 
         # ---- Flash + redirect as before ----
-        if current_user():
-            flash("Your need request has been posted.", "success")
-        else:
-            flash("Your quick help request has been posted (as guest).", "success")
-
-        return redirect(url_for("need_help"))
-
-        #  Push: notify trusted helpers
-        try:
-            send_fcm_to_trusted_helpers(
-                title="Someone nearby needs help",
-                body=f"{user.name} posted: “{title}” (category: {category})",
-                data={
-                    "type": "NEED_HELP",
-                    "request_id": req.id,
-                    "category": category,
-                },
-            )
-        except Exception as e:
-            print("[FCM] Failed to broadcast need_help notification:", e)
-
         if current_user():
             flash("Your need request has been posted.", "success")
         else:
@@ -2247,11 +2325,29 @@ def list_requests():
         offered_ids = {o.request_id for o in my_offers}
     # --- NEW LOGIC END ---
 
+    sos_responded_ids = set()
+    if user:
+        my_sos = SOSResponse.query.filter_by(helper_id=user.id).all()
+        sos_responded_ids = {r.request_id for r in my_sos}
+
+    sos_response_counts = {}
+    try:
+        rows = (
+            db.session.query(SOSResponse.request_id, func.count(SOSResponse.id))
+            .group_by(SOSResponse.request_id)
+            .all()
+        )
+        sos_response_counts = {int(rid): int(cnt) for rid, cnt in rows}
+    except Exception:
+        sos_response_counts = {}
+
     return render_template(
         "list_requests.html",
         requests=requests_list,
         mode=mode,
         offered_ids=offered_ids,  # <--- Pass this to the HTML
+        sos_responded_ids=sos_responded_ids,
+        sos_response_counts=sos_response_counts,
     )
 
 # ------------------ CHAT PAGES & API ------------------
@@ -2498,13 +2594,260 @@ def update_user_location():
 @login_required
 def trigger_sos():
     user = current_user()
-    
-    # 1. Broadcast the alert
-    send_fcm_for_sos(user) 
-    
-    # 2. Feedback to the user
-    flash("SOS BROADCAST SENT! Nearby Trusted Helpers have been alerted.", "error")
-    return redirect(request.referrer or url_for("home"))
+
+    # Prefer client-provided GPS for accuracy; fallback to user's last-known location
+    sos_lat = None
+    sos_lng = None
+    try:
+        lat_raw = request.form.get("lat")
+        lng_raw = request.form.get("lng")
+        if lat_raw is not None and lng_raw is not None:
+            sos_lat = float(lat_raw)
+            sos_lng = float(lng_raw)
+    except (TypeError, ValueError):
+        sos_lat = None
+        sos_lng = None
+
+    # Require live GPS for SOS so the pin is accurate.
+    # (Avoid falling back to stale/unknown last-known location.)
+    if sos_lat is None or sos_lng is None:
+        flash(
+            "Location permission is required to send SOS (so helpers can find you). Please enable Precise location and try again.",
+            "error",
+        )
+        return redirect(request.referrer or url_for("map_page"))
+
+    created_at = datetime.utcnow()
+    expires_at = created_at + timedelta(minutes=15)
+
+    sos_req = Request(
+        user_id=user.id,
+        title="🚨 SOS Alert",
+        category="sos",
+        description=f"Emergency SOS from {user.name}.",
+        lat=sos_lat,
+        lng=sos_lng,
+        urgency="emergency",
+        is_offer=False,
+        created_at=created_at,
+        expires_at=expires_at,
+        status="open",
+    )
+    db.session.add(sos_req)
+    db.session.commit()
+
+    # Update last-known location if GPS was provided
+    if sos_lat is not None and sos_lng is not None:
+        try:
+            user.lat = sos_lat
+            user.lng = sos_lng
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+    # Broadcast to all trusted helpers (verified helpers). Location filtering can be
+    # added later; for now "all trusted helpers" matches the SOS broadcast intent.
+    helpers = User.query.filter(User.is_trusted_helper == True, User.id != user.id).all()  # noqa: E712
+
+    for h in helpers:
+        try:
+            push_notification(
+                user_id=h.id,
+                type="sos",
+                message=f"🚨 SOS: {user.name} needs immediate help nearby!",
+                link=url_for("map_page", focus_request_id=sos_req.id),
+            )
+        except Exception:
+            pass
+
+        try:
+            if h.fcm_tokens.count() > 0:
+                send_fcm_to_user(
+                    h,
+                    title="🚨 SOS ALERT!",
+                    body=f"EMERGENCY: {user.name} needs help nearby!",
+                    data={"type": "SOS_ALERT", "request_id": str(sos_req.id)},
+                )
+        except Exception:
+            pass
+
+    # Persist active SOS id so the UI can keep the fallback timer across pages.
+    try:
+        session["active_sos_request_id"] = sos_req.id
+    except Exception:
+        pass
+
+    flash("SOS SENT! Trusted helpers have been alerted.", "error")
+    return redirect(url_for("map_page", focus_request_id=sos_req.id, sos_caller=1))
+
+
+@app.route("/sos/<int:request_id>/accept/<int:helper_id>", methods=["POST"])
+@login_required
+def accept_sos_responder(request_id, helper_id):
+    """SOS owner selects a responder to connect with (enables chat/call + completion review flow)."""
+    user = current_user()
+    req_obj = Request.query.get_or_404(request_id)
+
+    if req_obj.user_id != user.id:
+        flash("Unauthorized.", "error")
+        return redirect(url_for("dashboard"))
+
+    if (req_obj.category or "").lower() != "sos":
+        flash("Not an SOS request.", "error")
+        return redirect(url_for("dashboard"))
+
+    if req_obj.status != "open":
+        flash("This SOS is no longer open.", "error")
+        return redirect(url_for("dashboard"))
+
+    existing = SOSResponse.query.filter_by(request_id=req_obj.id, helper_id=helper_id).first()
+    if not existing:
+        flash("That user has not responded to this SOS.", "error")
+        return redirect(url_for("dashboard"))
+
+    helper_user = User.query.get(helper_id)
+    if not helper_user:
+        flash("Responder not found.", "error")
+        return redirect(url_for("dashboard"))
+
+    req_obj.helper_id = helper_id
+    req_obj.status = "in_progress"
+    db.session.commit()
+
+    try:
+        push_notification(
+            user_id=helper_id,
+            type="sos_connected",
+            message=f"✅ {user.name} accepted your SOS response. Please coordinate in chat.",
+            link=url_for("map_page", focus_request_id=req_obj.id),
+        )
+    except Exception:
+        pass
+
+    flash("Connected with the responder. You can chat/call and mark complete.", "success")
+    return redirect(url_for("dashboard"))
+
+
+@app.route("/api/sos/<int:request_id>/respond", methods=["POST"])
+@login_required
+def api_sos_respond(request_id):
+    user = current_user()
+    if not user or not user.is_trusted_helper:
+        return jsonify({"error": "Only verified helpers can respond"}), 403
+
+    req_obj = Request.query.get_or_404(request_id)
+    if (req_obj.category or "").lower() != "sos":
+        return jsonify({"error": "Not an SOS request"}), 400
+    if req_obj.status != "open":
+        return jsonify({"error": "SOS is not open"}), 400
+    if req_obj.user_id == user.id:
+        return jsonify({"error": "Cannot respond to your own SOS"}), 400
+
+    existing = SOSResponse.query.filter_by(request_id=req_obj.id, helper_id=user.id).first()
+    if existing:
+        return jsonify({"ok": True, "already": True})
+
+    data = request.get_json(silent=True) or {}
+    responder_lat = None
+    responder_lng = None
+    try:
+        if data.get("lat") is not None and data.get("lng") is not None:
+            responder_lat = float(data.get("lat"))
+            responder_lng = float(data.get("lng"))
+    except (TypeError, ValueError):
+        responder_lat = None
+        responder_lng = None
+
+    # Fallback to helper's last known location if available
+    if responder_lat is None or responder_lng is None:
+        responder_lat = getattr(user, "lat", None)
+        responder_lng = getattr(user, "lng", None)
+
+    resp = SOSResponse(
+        request_id=req_obj.id,
+        helper_id=user.id,
+        responder_lat=responder_lat,
+        responder_lng=responder_lng,
+    )
+    db.session.add(resp)
+    db.session.commit()
+
+    try:
+        push_notification(
+            user_id=req_obj.user_id,
+            type="sos_response",
+            message=f"✅ {user.name} is responding to your SOS.",
+            link=url_for("map_page", focus_request_id=req_obj.id),
+        )
+    except Exception:
+        pass
+
+    return jsonify({"ok": True})
+
+
+@app.route("/api/sos/<int:request_id>/status", methods=["GET"])
+@login_required
+def api_sos_status(request_id):
+    req_obj = Request.query.get_or_404(request_id)
+    if (req_obj.category or "").lower() != "sos":
+        return jsonify({"error": "Not an SOS request"}), 400
+
+    viewer = current_user()
+
+    responders = (
+        SOSResponse.query.filter_by(request_id=req_obj.id)
+        .order_by(SOSResponse.created_at.asc())
+        .all()
+    )
+
+    names = []
+    responder_locations = []
+    for r in responders:
+        u = User.query.get(r.helper_id)
+        if u:
+            names.append(u.name)
+            if viewer and viewer.id == req_obj.user_id:
+                responder_locations.append(
+                    {
+                        "helper_id": u.id,
+                        "name": u.name,
+                        "lat": r.responder_lat,
+                        "lng": r.responder_lng,
+                    }
+                )
+
+    # Caller fallback: if no helpers respond within 60 seconds, the UI can prompt
+    # the SOS caller to call their saved emergency number (simulated via tel: link).
+    # We only expose this flag to the SOS owner.
+    should_call = False
+    seconds_remaining = None
+    try:
+        if viewer and viewer.id == req_obj.user_id:
+            now = datetime.utcnow()
+            elapsed_s = (now - req_obj.created_at).total_seconds() if req_obj.created_at else 0
+            seconds_remaining = max(0, int(60 - elapsed_s))
+            should_call = (elapsed_s >= 60) and (len(responders) == 0)
+
+            if len(responders) > 0:
+                try:
+                    session.pop("active_sos_request_id", None)
+                except Exception:
+                    pass
+    except Exception:
+        should_call = False
+        seconds_remaining = None
+
+    return jsonify(
+        {
+            "request_id": req_obj.id,
+            "responded": len(responders) > 0,
+            "responders_count": len(responders),
+            "responders": names[:10],
+            "responder_locations": responder_locations,
+            "should_call": should_call,
+            "seconds_remaining": seconds_remaining,
+        }
+    )
 
 @app.route("/api/conversations/<int:conv_id>/messages")
 @login_required

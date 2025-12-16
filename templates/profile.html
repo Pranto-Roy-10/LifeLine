@@ -125,6 +125,20 @@
         </div>
 
         <div class="space-y-1">
+          <label class="text-sm text-slate-400 block">Emergency Number</label>
+          <input
+            type="text"
+            name="emergency_number"
+            value="{{ user.emergency_number or '' }}"
+            placeholder="e.g., +8801XXXXXXXXX"
+            class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-slate-200 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-400 focus:border-emerald-400"
+          />
+          <p class="text-[11px] text-slate-500">
+            Used for auto-calling if no helper responds within 1 minute.
+          </p>
+        </div>
+
+        <div class="space-y-1">
           <label class="text-sm text-slate-400 block">Date of Birth</label>
           <input
             type="date"
@@ -224,7 +238,7 @@
             <div class="w-full h-2.5 rounded-full bg-slate-800 overflow-hidden">
               <div
                 class="h-full bg-emerald-400 rounded-full"
-                style="width: {{ trust if trust <= 100 else 100 }}%"
+                data-bar-width="{{ trust if trust <= 100 else 100 }}"
               ></div>
             </div>
           </div>
@@ -239,12 +253,24 @@
               %}
               <div
                 class="h-full bg-gradient-to-r from-emerald-400 via-cyan-400 to-sky-400 rounded-full"
-                style="width: {{ k_pct }}%"
+                data-bar-width="{{ k_pct }}"
               ></div>
             </div>
           </div>
         </div>
       </div>
+
+      <script>
+        document.addEventListener("DOMContentLoaded", () => {
+          document.querySelectorAll("[data-bar-width]").forEach((el) => {
+            const v = parseFloat(el.getAttribute("data-bar-width") || "0");
+            const clamped = Number.isFinite(v)
+              ? Math.max(0, Math.min(100, v))
+              : 0;
+            el.style.width = `${clamped}%`;
+          });
+        });
+      </script>
 
       <div
         class="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-3"
