@@ -775,21 +775,9 @@ def logout_user():
 
 
 def current_user():
-    uid = session.get("user_id")
-    if not uid:
-        return None
-
-    try:
-        user = db.session.get(User, uid)
-    except Exception:
-        user = None
-
-    # If the DB was reset or user deleted, avoid hard-crashing downstream.
-    if user is None:
-        logout_user()
-        return None
-
-    return user
+    if "user_id" in session:
+        return db.session.get(User, session["user_id"])
+    return None
 
 
 def login_required(view_func):
@@ -797,8 +785,7 @@ def login_required(view_func):
 
     @wraps(view_func)
     def wrapper(*args, **kwargs):
-        # Require both a session user_id and a resolvable User row.
-        if current_user() is None:
+        if "user_id" not in session:
             next_url = request.path
             return redirect(url_for("login", next=next_url))
         return view_func(*args, **kwargs)
@@ -2762,10 +2749,6 @@ def api_dashboard_kindness():
 def api_dashboard_impact_over_time():
     user = current_user()
 
-    if not user:
-        flash("Please log in again to send SOS.", "error")
-        return redirect(url_for("login", next=request.path))
-
     # Prefer client-provided GPS for accuracy; fallback to user's last-known location
     sos_lat = None
     sos_lng = None
@@ -2779,23 +2762,14 @@ def api_dashboard_impact_over_time():
         sos_lat = None
         sos_lng = None
 
-    used_fallback_location = False
+    # Require live GPS for SOS so the pin is accurate.
+    # (Avoid falling back to stale/unknown last-known location.)
     if sos_lat is None or sos_lng is None:
-        # Fallback to last-known location (or configured defaults) so SOS can still be sent.
-        try:
-            if getattr(user, "lat", None) is not None and getattr(user, "lng", None) is not None:
-                sos_lat = float(user.lat)
-                sos_lng = float(user.lng)
-            else:
-                sos_lat = float(os.getenv("DEFAULT_LAT", "23.8103"))
-                sos_lng = float(os.getenv("DEFAULT_LNG", "90.4125"))
-            used_fallback_location = True
-        except Exception:
-            flash(
-                "Could not determine your location. Please enable location permission and try again.",
-                "error",
-            )
-            return redirect(request.referrer or url_for("map_page"))
+        flash(
+            "Location permission is required to send SOS (so helpers can find you). Please enable Precise location and try again.",
+            "error",
+        )
+        return redirect(request.referrer or url_for("map_page"))
 
     created_at = datetime.utcnow()
     expires_at = created_at + timedelta(minutes=15)
@@ -2857,13 +2831,7 @@ def api_dashboard_impact_over_time():
     except Exception:
         pass
 
-    if used_fallback_location:
-        flash(
-            "SOS SENT using your last saved/default location. Enable Precise location for accuracy.",
-            "error",
-        )
-    else:
-        flash("SOS SENT! Trusted helpers have been alerted.", "error")
+    flash("SOS SENT! Trusted helpers have been alerted.", "error")
     return redirect(url_for("map_page", focus_request_id=sos_req.id, sos_caller=1))
 
 

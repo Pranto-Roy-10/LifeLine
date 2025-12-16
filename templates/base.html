@@ -427,21 +427,11 @@
             return false;
           }
 
-          if (!window.isSecureContext) {
-            const sendAnyway = confirm(
-              "Your browser is blocking GPS because this page is not a secure context.\n\nOpen the app using http://localhost:5000 (on this computer) or HTTPS to allow GPS.\n\nSend SOS anyway using your last saved/default location?"
-            );
-            if (!sendAnyway) return false;
-            submitNow();
-            return false;
-          }
-
           // Collect a more accurate fix by sampling watchPosition briefly.
           // This reduces the chance of sending an approximate/wrong SOS location.
           let best = null; // { lat, lng, acc }
           let finished = false;
           let watchId = null;
-          let lastGeoError = null;
           const targetAccuracyM = 30;
           const sampleWindowMs = 4500;
 
@@ -453,13 +443,9 @@
             } catch (e) {}
 
             if (!best) {
-              const sendAnyway = confirm(
-                "Could not get your precise location.\n\nSend SOS anyway using your last saved/default location?"
+              alert(
+                "Could not get your precise location. Please allow location permission (Precise) and try again."
               );
-              if (!sendAnyway) return;
-              if (latInput) latInput.value = "";
-              if (lngInput) lngInput.value = "";
-              submitNow();
               return;
             }
             if (latInput) latInput.value = String(best.lat);
@@ -481,44 +467,9 @@
                 finalize();
               }
             },
-            (err) => {
-              lastGeoError = err || null;
-
-              // If permission denied, give a clear message and stop.
-              if (err && err.code === 1) {
-                try {
-                  if (watchId != null) navigator.geolocation.clearWatch(watchId);
-                } catch (e) {}
-                const sendAnyway = confirm(
-                  "Location permission was denied.\n\nEnable location permission (Precise) for accuracy.\n\nSend SOS anyway using your last saved/default location?"
-                );
-                if (!sendAnyway) return;
-                if (latInput) latInput.value = "";
-                if (lngInput) lngInput.value = "";
-                submitNow();
-                return;
-              }
-
-              // Fallback: try a single fix (some devices fail watchPosition but allow getCurrentPosition)
-              try {
-                navigator.geolocation.getCurrentPosition(
-                  (pos) => {
-                    const acc = Number(pos.coords.accuracy);
-                    best = {
-                      lat: pos.coords.latitude,
-                      lng: pos.coords.longitude,
-                      acc: Number.isFinite(acc) ? acc : 999999,
-                    };
-                    finalize();
-                  },
-                  () => {
-                    finalize();
-                  },
-                  { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
-                );
-              } catch (e) {
-                finalize();
-              }
+            () => {
+              // If permission denied / error, stop and do not send SOS.
+              finalize();
             },
             { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
           );
