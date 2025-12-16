@@ -1,0 +1,376 @@
+<!-- Smart Suggestion AI Widget -->
+<div id="smart-suggestions-widget" class="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg shadow-md p-6 mb-6">
+    <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-2">
+            <span class="text-2xl">💡</span>
+            <h3 class="text-xl font-bold text-gray-800">AI Suggestions</h3>
+        </div>
+        <button id="refresh-suggestions" class="bg-indigo-600 text-white px-3 py-1 rounded-md text-sm hover:bg-indigo-700 transition">
+            Refresh
+        </button>
+    </div>
+    
+    <!-- Loading State -->
+    <div id="suggestions-loading" class="text-center py-8">
+        <div class="inline-block">
+            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+        </div>
+        <p class="text-gray-600 mt-2">Analyzing opportunities...</p>
+    </div>
+    
+    <!-- Suggestions List -->
+    <div id="suggestions-container" class="hidden space-y-3">
+        <div id="no-suggestions" class="text-center py-6 text-gray-600 hidden">
+            <p>No suggestions available at the moment. Check back soon!</p>
+        </div>
+    </div>
+    
+    <!-- Weather Info -->
+    <div id="weather-info" class="hidden mt-4 pt-4 border-t border-gray-200">
+        <div class="text-sm text-gray-600">
+            <p id="weather-display" class="font-semibold"></p>
+        </div>
+    </div>
+    
+    <!-- Error Message -->
+    <div id="suggestions-error" class="hidden bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded text-sm">
+        <span id="error-message"></span>
+    </div>
+</div>
+
+<style>
+    .suggestion-card {
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 0.5rem;
+        padding: 1rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: start;
+        transition: all 0.3s ease;
+    }
+    
+    .suggestion-card:hover {
+        border-color: #4f46e5;
+        box-shadow: 0 4px 6px rgba(79, 70, 229, 0.1);
+        transform: translateY(-2px);
+    }
+    
+    .suggestion-badge {
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        margin-right: 0.5rem;
+    }
+    
+    .badge-emergency {
+        background-color: #fee2e2;
+        color: #991b1b;
+    }
+    
+    .badge-high {
+        background-color: #fef3c7;
+        color: #92400e;
+    }
+    
+    .badge-normal {
+        background-color: #dbeafe;
+        color: #0c2340;
+    }
+    
+    .relevance-score {
+        font-size: 0.875rem;
+        font-weight: 600;
+        padding: 0.5rem 1rem;
+        border-radius: 0.5rem;
+    }
+    
+    .score-high {
+        background-color: #dcfce7;
+        color: #166534;
+    }
+    
+    .score-medium {
+        background-color: #fef3c7;
+        color: #92400e;
+    }
+    
+    .score-low {
+        background-color: #f3f4f6;
+        color: #4b5563;
+    }
+</style>
+
+<script>
+    // Smart Suggestions JS Module
+    const SmartSuggestions = {
+        isLoading: false,
+        userLat: null,
+        userLng: null,
+        aiRendered: false,
+        
+        init: function() {
+            // Load AI suggestions immediately with defaults (don't send coords to use server defaults)
+            console.log('[SmartSuggestions] Loading with server default location for demo');
+            this.loadSuggestions(null, null);  // Use server defaults where dummy data exists
+
+            // Optionally attempt geolocation in background (commented out for demo consistency)
+            // Uncomment below to use actual user location instead of defaults
+            /*
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                        this.userLat = pos.coords.latitude;
+                        this.userLng = pos.coords.longitude;
+                        console.log('[SmartSuggestions] Got geolocation, refreshing with precise location');
+                        this.loadSuggestions(this.userLat, this.userLng);
+                    },
+                    (err) => {
+                        console.warn('[SmartSuggestions] Geolocation denied or failed:', err.message);
+                    },
+                    { timeout: 5000 }
+                );
+            }
+            */
+            
+            // Setup refresh button
+            document.getElementById('refresh-suggestions').addEventListener('click', () => {
+                this.loadSuggestions(this.userLat, this.userLng);
+            });
+        },
+        
+        loadSuggestions: function(lat, lng) {
+            if (this.isLoading) return;
+            this.isLoading = true;
+            
+            // Use provided coordinates or instance variables
+            const latitude = lat !== undefined && lat !== null ? lat : this.userLat;
+            const longitude = lng !== undefined && lng !== null ? lng : this.userLng;
+            
+            // Show loading state
+            // Keep container visible to avoid flicker when permission prompts appear
+            document.getElementById('suggestions-loading').classList.remove('hidden');
+            document.getElementById('suggestions-container').classList.remove('hidden');
+            document.getElementById('suggestions-error').classList.add('hidden');
+            
+            // Only include coordinates if both are valid
+            const payload = { max_suggestions: 5 };
+            if (latitude !== null && latitude !== undefined && 
+                longitude !== null && longitude !== undefined) {
+                payload.lat = latitude;
+                payload.lng = longitude;
+                console.log('[SmartSuggestions] Using coordinates:', latitude, longitude);
+            } else {
+                console.log('[SmartSuggestions] No coordinates - server will use defaults');
+            }
+            
+            fetch('/api/suggestions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                credentials: 'include',
+                body: JSON.stringify(payload)
+            })
+            .then(response => {
+                console.log('[SmartSuggestions] API Response status:', response.status);
+                return response.json();
+            })
+            .then(data => {
+                this.isLoading = false;
+                console.log('[SmartSuggestions] Full API response:', JSON.stringify(data, null, 2));
+                const suggestions = data && data.suggestions ? data.suggestions : [];
+                console.log('[SmartSuggestions] Extracted', suggestions.length, 'AI suggestions');
+                this.displaySuggestions(suggestions);
+                if (data && data.error) {
+                    console.warn('[SmartSuggestions] API warning:', data.error);
+                }
+            })
+            .catch(error => {
+                this.isLoading = false;
+                console.error('[SmartSuggestions] Error loading suggestions:', error);
+                this.displaySuggestions([]);
+            });
+            
+            // Also load weather and insights
+            this.loadWeather(latitude, longitude);
+        },
+        
+        loadWeather: function(lat, lng) {
+            // If location is missing, let backend choose fallback coordinates
+            const weatherUrl = (!lat || !lng)
+                ? '/api/weather'
+                : `/api/weather?lat=${lat}&lng=${lng}`;
+            
+            fetch(weatherUrl, { credentials: 'include' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.weather) {
+                    this.displayWeather(data.weather);
+                }
+            })
+            .catch(error => console.error('Error loading weather:', error));
+        },
+        
+        displaySuggestions: function(suggestions) {
+            console.log('[SmartSuggestions] displaySuggestions called with', suggestions ? suggestions.length : 0, 'items');
+            console.log('[SmartSuggestions] Suggestions array:', JSON.stringify(suggestions, null, 2));
+            
+            document.getElementById('suggestions-loading').classList.add('hidden');
+            document.getElementById('suggestions-container').classList.remove('hidden');
+            document.getElementById('suggestions-error').classList.add('hidden');
+            
+            const container = document.getElementById('suggestions-container');
+            container.innerHTML = '';
+            
+            if (!suggestions || suggestions.length === 0) {
+                console.log('[SmartSuggestions] No AI suggestions, falling back to nearby');
+                this.renderFromNearby();
+                return;
+            }
+
+            console.log('[SmartSuggestions] Rendering', suggestions.length, 'AI suggestion cards');
+            document.getElementById('no-suggestions').classList.add('hidden');
+            this.aiRendered = true;
+            
+            suggestions.forEach((suggestion, index) => {
+                console.log('[SmartSuggestions] Creating card', index + 1, 'for:', suggestion.title);
+                const card = this.createSuggestionCard(suggestion);
+                container.appendChild(card);
+            });
+        },
+        
+        createSuggestionCard: function(suggestion) {
+            try {
+                const card = document.createElement('div');
+                card.className = 'suggestion-card';
+                
+                const urgencyClass = this.getUrgencyClass(suggestion.urgency);
+                const scoreClass = this.getScoreClass(suggestion.relevance_score);
+                
+                console.log('[SmartSuggestions] Card details:', {
+                    title: suggestion.title,
+                    explanation: suggestion.explanation,
+                    score: suggestion.relevance_score,
+                    urgency: suggestion.urgency
+                });
+                
+                const content = `
+                    <div class="flex-1">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="suggestion-badge ${urgencyClass}">
+                                ${(suggestion.urgency || 'normal').toUpperCase()}
+                            </span>
+                            <span class="text-xs text-gray-500">${suggestion.distance_km || 0}km away</span>
+                        </div>
+                        <h4 class="font-bold text-gray-800 mb-1">${this.escapeHtml(suggestion.title)}</h4>
+                        <p class="text-sm text-gray-600 mb-2">${this.escapeHtml(suggestion.description || '')}</p>
+                        <p class="text-xs text-indigo-600 font-semibold">Suggestion: ${this.escapeHtml(suggestion.explanation || 'N/A')}</p>
+                    </div>
+                    <div class="ml-4 text-right">
+                        <div class="relevance-score ${scoreClass}">
+                            ${suggestion.relevance_score}%
+                        </div>
+                        <button class="mt-2 bg-indigo-600 text-white px-3 py-1 rounded text-sm hover:bg-indigo-700 transition suggestion-action" data-request-id="${suggestion.id}">
+                            View Details
+                        </button>
+                    </div>
+                `;
+                
+                card.innerHTML = content;
+                
+                // Add click handler to view details button
+                card.querySelector('.suggestion-action').addEventListener('click', () => {
+                    window.location.href = `/list_requests#request-${suggestion.id}`;
+                });
+                
+                console.log('[SmartSuggestions] Card created successfully');
+                return card;
+            } catch (err) {
+                console.error('[SmartSuggestions] Error creating card:', err, 'Suggestion:', suggestion);
+                throw err;
+            }
+        },
+
+        renderFromNearby: function() {
+            const container = document.getElementById('suggestions-container');
+            // Ensure container is visible when mirroring nearby requests
+            container.classList.remove('hidden');
+            fetch('/api/nearby-requests?limit=5', { credentials: 'include' })
+              .then(r => r.json())
+              .then(n => {
+                  const nearby = (n && n.requests) ? n.requests : [];
+                  if (!nearby.length) {
+                      document.getElementById('no-suggestions').classList.remove('hidden');
+                      return;
+                  }
+                  // Clear existing content before adding nearby
+                  container.innerHTML = '';
+                  document.getElementById('no-suggestions').classList.add('hidden');
+                  console.log('[SmartSuggestions] Rendering', nearby.length, 'nearby requests as fallback');
+                  nearby.forEach(req => {
+                      const mapped = {
+                          id: req.id,
+                          title: req.title,
+                          category: req.category,
+                          description: req.description,
+                          urgency: req.urgency,
+                          distance_km: req.distance_km,
+                          relevance_score: 52,
+                          explanation: 'Nearby request shown as fallback'
+                      };
+                      const card = SmartSuggestions.createSuggestionCard(mapped);
+                      container.appendChild(card);
+                  });
+              })
+              .catch(() => {
+                  document.getElementById('no-suggestions').classList.remove('hidden');
+              });
+        },
+        
+        displayWeather: function(weather) {
+            const weatherInfo = document.getElementById('weather-info');
+            const weatherDisplay = document.getElementById('weather-display');
+            
+            if (weather.condition) {
+                const temp = weather.temp ? `${weather.temp}°C` : '';
+                const condition = weather.condition || '';
+                weatherDisplay.textContent = `🌤️ ${condition} ${temp}`;
+                weatherInfo.classList.remove('hidden');
+            }
+        },
+        
+        showError: function(message) {
+            document.getElementById('suggestions-loading').classList.add('hidden');
+            document.getElementById('suggestions-container').classList.add('hidden');
+            document.getElementById('suggestions-error').classList.remove('hidden');
+            document.getElementById('error-message').textContent = message;
+        },
+        
+        getUrgencyClass: function(urgency) {
+            const urgencyLower = (urgency || 'normal').toLowerCase();
+            if (urgencyLower === 'emergency') return 'badge-emergency';
+            if (urgencyLower === 'high') return 'badge-high';
+            return 'badge-normal';
+        },
+        
+        getScoreClass: function(score) {
+            if (score >= 80) return 'score-high';
+            if (score >= 50) return 'score-medium';
+            return 'score-low';
+        },
+        
+        escapeHtml: function(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    };
+    
+    // Initialize when DOM is ready
+    document.addEventListener('DOMContentLoaded', () => {
+        SmartSuggestions.init();
+    });
+</script>

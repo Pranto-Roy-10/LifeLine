@@ -1,0 +1,455 @@
+{% extends "base.html" %} {% block title %} {% if mode == 'offer' %} Help Offers
+{% elif mode == 'all' %} All Requests {% else %} Help Needed {% endif %} {%
+endblock %} {% block content %}
+<div class="w-full max-w-6xl mx-auto px-6 py-10">
+  <div
+    class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6"
+  >
+    <div>
+      <h2 class="text-2xl font-bold text-slate-100">
+        {% if mode == 'offer' %} People offering help nearby {% elif mode ==
+        'all' %} All open requests {% else %} People who need help {% endif %}
+      </h2>
+      <p class="text-xs text-slate-400 mt-1">
+        Tap a card to see more details like location, urgency and contact
+        preference.
+      </p>
+    </div>
+
+    <div
+      class="inline-flex rounded-full bg-slate-900 border border-slate-700 p-1 text-xs"
+    >
+      <a
+        href="{{ url_for('list_requests', mode='need') }}"
+        class="px-4 py-1.5 rounded-full transition {% if mode == 'need' %}bg-emerald-500 text-slate-950 font-semibold{% else %}text-slate-300 hover:bg-slate-800{% endif %}"
+      >
+        Need help
+      </a>
+      <a
+        href="{{ url_for('list_requests', mode='offer') }}"
+        class="px-4 py-1.5 rounded-full transition {% if mode == 'offer' %}bg-sky-500 text-slate-950 font-semibold{% else %}text-slate-300 hover:bg-slate-800{% endif %}"
+      >
+        Offer help
+      </a>
+      <a
+        href="{{ url_for('list_requests', mode='all') }}"
+        class="px-4 py-1.5 rounded-full transition {% if mode == 'all' %}bg-slate-200 text-slate-900 font-semibold{% else %}text-slate-300 hover:bg-slate-800{% endif %}"
+      >
+        All
+      </a>
+    </div>
+  </div>
+
+  {% if requests %}
+  <div class="space-y-3">
+    {% for r in requests %} {% set is_sos = (r.category|lower == 'sos') %}
+    <div
+      class="rounded-2xl border border-slate-800 bg-slate-900/70 overflow-hidden"
+    >
+      <button
+        type="button"
+        class="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-slate-900/90 transition"
+        onclick="toggleDetails('{{ r.id }}')"
+      >
+        <div class="flex-1 min-w-0">
+          <div class="flex flex-wrap items-center gap-2">
+            <p class="font-semibold text-sm text-slate-100 truncate">
+              {{ r.title }}
+            </p>
+
+            <span
+              class="text-[11px] px-2 py-0.5 rounded-full border border-slate-600 text-slate-200 bg-slate-800/80"
+            >
+              {{ r.category|capitalize }}
+            </span>
+
+            {% if is_sos %}
+            <span
+              class="text-[11px] px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-300 border border-rose-500/40 font-bold"
+            >
+              🚨 SOS
+            </span>
+            {% endif %} {% if r.is_offer %}
+            <span
+              class="text-[11px] px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-300 border border-sky-500/40"
+            >
+              Offer help
+            </span>
+            {% else %}
+            <span
+              class="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/40"
+            >
+              Needs help
+            </span>
+            {% endif %} {% if current_user and r.user_id == current_user.id %}
+            <span
+              class="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 font-bold"
+            >
+              My Post
+            </span>
+            {% endif %} {% if r.id in offered_ids and not is_sos %}
+            <span
+              class="text-[10px] px-2 py-0.5 rounded-full bg-slate-700 text-emerald-400 border border-slate-600 font-bold"
+            >
+              ✓ {% if r.is_offer %} Request Sent {% else %} Offer Sent {% endif
+              %}
+            </span>
+            {% endif %}
+          </div>
+
+          <div
+            class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-400"
+          >
+            {% if r.area %}<span>📍 {{ r.area }}</span>{% endif %} {% if
+            r.urgency %}
+            <span>
+              ⏱️ Urgency:
+              <span
+                class="{% if r.urgency == 'emergency' %}text-rose-400 {% elif r.urgency == 'high' %}text-amber-300 {% elif r.urgency == 'normal' %}text-sky-300 {% else %}text-emerald-300{% endif %}"
+              >
+                {{ r.urgency|capitalize }}
+              </span>
+            </span>
+            {% endif %}
+            <span class="text-slate-500"
+              >Created: {{ r.created_at|default('now', true) }}</span
+            >
+          </div>
+        </div>
+
+        <div class="ml-3">
+          <span
+            id="icon-{{ r.id }}"
+            data-icon
+            class="inline-block transition-transform duration-150 text-slate-400"
+          >
+            ▼
+          </span>
+        </div>
+      </button>
+
+      <div
+        id="details-{{ r.id }}"
+        data-details
+        class="hidden border-t border-slate-800 bg-slate-950/80 px-4 py-3 text-xs text-slate-200"
+      >
+        <div class="grid md:grid-cols-3 gap-4">
+          <div class="md:col-span-2 space-y-2">
+            <p class="font-semibold text-slate-100 text-sm">Details</p>
+            <p class="text-[12px] text-slate-300 whitespace-pre-line">
+              {{ r.description or "No details provided." }}
+            </p>
+
+            {% if r.landmark %}
+            <p class="text-[11px] text-slate-400">
+              <span class="font-semibold">Landmark:</span> {{ r.landmark }}
+            </p>
+            {% endif %} {% if r.time_window %}
+            <p class="text-[11px] text-slate-400">
+              <span class="font-semibold">When:</span> {{ r.time_window }}
+            </p>
+            {% endif %}
+          </div>
+
+          <div class="space-y-2 border-l border-slate-800 pl-3">
+            <p class="font-semibold text-slate-100 text-sm">Contact & Meta</p>
+
+            {% if r.contact_method %}
+            <p class="text-[11px] text-slate-300">
+              <span class="font-semibold">Contact via:</span> {{
+              r.contact_method }}
+            </p>
+            {% endif %} {% if r.contact_info %}
+            <p class="text-[11px] text-slate-300">
+              <span class="font-semibold">Contact info:</span> {{ r.contact_info
+              }}
+            </p>
+            {% endif %}
+
+            <p class="text-[11px] text-slate-400">
+              <span class="font-semibold">Status:</span> {{ r.status|capitalize
+              }}
+            </p>
+
+            <p class="text-[11px] text-slate-400">
+              <span class="font-semibold">Posted by:</span> {{ r.user_name or
+              r.user.name }}
+            </p>
+
+            <div class="mt-3 flex flex-col gap-2">
+              {% if r.helper_id %}
+              <p class="text-[11px] text-slate-400">
+                Assigned to: {{ r.helper.name }}
+              </p>
+              {% endif %} {% if current_user and not r.helper_id and r.user_id
+              != current_user.id and not is_sos %} {% if r.id in offered_ids %}
+              <div
+                class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-emerald-400 text-sm font-semibold text-center flex justify-center items-center gap-2"
+              >
+                <span>✓</span> {% if r.is_offer %} Request Sent {% else %} Offer
+                Sent {% endif %}
+              </div>
+              {% else %}
+              <form
+                method="POST"
+                action="{{ url_for('make_offer', request_id=r.id) }}"
+              >
+                {% if r.is_offer %}
+                <button
+                  class="w-full px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold transition shadow-lg shadow-blue-900/20"
+                >
+                  👋 Request Help
+                </button>
+                {% else %}
+                <button
+                  class="w-full px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold transition shadow-lg shadow-emerald-900/20"
+                >
+                  ✋ Offer to help
+                </button>
+                {% endif %}
+              </form>
+              {% endif %} {% endif %} {% if current_user and r.user_id !=
+              current_user.id and is_sos %} {% if
+              session.get('is_trusted_helper') %} {% if r.id in
+              sos_responded_ids %}
+              <div
+                class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-emerald-400 text-sm font-semibold text-center flex justify-center items-center gap-2"
+              >
+                <span>✓</span> Responded to SOS
+              </div>
+              {% else %}
+              <button
+                type="button"
+                class="w-full px-3 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-sm font-semibold transition shadow-lg shadow-rose-900/20 js-sos-respond"
+                data-request-id="{{ r.id }}"
+              >
+                🚨 Respond to SOS
+              </button>
+              {% endif %} {% else %}
+              <div
+                class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 text-sm font-semibold text-center"
+              >
+                SOS is visible to verified helpers
+              </div>
+              {% endif %}
+
+              <a
+                href="{{ url_for('map_page', focus_request_id=r.id) }}"
+                class="w-full text-center bg-slate-800 text-slate-300 text-[11px] py-2 rounded-lg hover:bg-slate-700 border border-slate-600"
+              >
+                View on map
+              </a>
+              {% endif %} {% if current_user and r.user_id == current_user.id %}
+              {% if is_sos %}
+              <div
+                class="w-full px-3 py-2 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-bold text-center"
+              >
+                SOS responders: {{ sos_response_counts.get(r.id, 0) }}
+              </div>
+              <a
+                href="{{ url_for('map_page', focus_request_id=r.id, sos_caller=1) }}"
+                class="w-full text-center bg-slate-800 text-slate-300 text-[11px] py-2 rounded-lg hover:bg-slate-700 border border-slate-600"
+              >
+                Track SOS on map
+              </a>
+              {% endif %} {% if not is_sos %} {% set offer_count =
+              r.offers|length %}
+              <button
+                onclick="toggleCardOffers('{{ r.id }}', event)"
+                class="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 hover:bg-slate-700 transition text-left"
+              >
+                <div class="flex items-center gap-2">
+                  <span
+                    class="flex items-center justify-center w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-300 text-[10px] font-bold"
+                  >
+                    {{ offer_count }}
+                  </span>
+                  <span class="text-xs text-slate-300 font-semibold"
+                    >Responses</span
+                  >
+                </div>
+                <span class="text-[10px] text-slate-500">▼</span>
+              </button>
+
+              <div
+                id="card-offers-{{ r.id }}"
+                class="hidden mt-2 space-y-2 pl-1"
+              >
+                {% if offer_count == 0 %}
+                <p class="text-[10px] text-slate-500 italic">
+                  No responses yet.
+                </p>
+                {% else %} {% for offer in r.offers %} {% if offer.status ==
+                'pending' %}
+                <div class="bg-slate-900 p-2 rounded border border-slate-700">
+                  <div class="flex justify-between items-start">
+                    <div class="flex items-center gap-2">
+                      <div
+                        class="w-6 h-6 rounded-full bg-slate-700 overflow-hidden"
+                      >
+                        <img
+                          src="{{ offer.helper.profile_photo or url_for('static', filename='uploads/profile_photos/default.png') }}"
+                          class="w-full h-full object-cover"
+                        />
+                      </div>
+                      <div>
+                        <p class="text-[11px] font-bold text-slate-200">
+                          {{ offer.helper.name }}
+                        </p>
+                        <p class="text-[9px] text-slate-500">
+                          Trust: {{ offer.helper.trust_score }}%
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="mt-2 flex gap-2">
+                    <a
+                      href="{{ url_for('chat_with_user', other_user_id=offer.helper_id) }}"
+                      class="flex-1 text-center bg-slate-800 text-slate-300 text-[10px] py-1 rounded hover:bg-slate-700 border border-slate-600"
+                    >
+                      Chat
+                    </a>
+                    <form
+                      action="{{ url_for('accept_offer', offer_id=offer.id) }}"
+                      method="POST"
+                      class="flex-1"
+                    >
+                      <button
+                        class="w-full bg-emerald-600 text-white text-[10px] py-1 rounded hover:bg-emerald-500 font-semibold"
+                      >
+                        Accept
+                      </button>
+                    </form>
+                  </div>
+                </div>
+                {% endif %} {% endfor %} {% endif %}
+              </div>
+              {% endif %}
+
+              <form
+                method="POST"
+                action="{{ url_for('delete_request', request_id=r.id) }}"
+                class="mt-2"
+              >
+                <button
+                  onclick="return confirm('Are you sure you want to remove this?')"
+                  class="w-full text-center text-[10px] text-rose-400 hover:text-rose-300 hover:underline"
+                >
+                  Remove Post
+                </button>
+              </form>
+
+              {% endif %}
+            </div>
+
+            <p class="text-[11px] text-slate-500 mt-2">
+              Expires: {{ r.expires_at.strftime('%d %b %H:%M') }}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% else %}
+  <div class="mt-10 text-center text-sm text-slate-400">
+    No open requests found.
+  </div>
+  {% endif %}
+</div>
+
+{% set fab_label = "Offer help" if mode == 'offer' else "Request help" %} {% set
+fab_href = url_for('can_help') if mode == 'offer' else url_for('need_help') %}
+
+<a
+  href="{{ fab_href }}"
+  class="fixed bottom-6 right-6 md:bottom-8 md:right-10 z-20 inline-flex items-center gap-2 px-4 py-2.5 rounded-full shadow-lg shadow-emerald-500/25 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-semibold transition"
+>
+  <span>＋</span><span>{{ fab_label }}</span>
+</a>
+
+<script>
+  async function respondToSOSFromList(requestId) {
+    try {
+      const send = async (payload) => {
+        const resp = await fetch(`/api/sos/${requestId}/respond`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload || {}),
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+          alert(data.error || "Failed to respond to SOS");
+          return;
+        }
+        window.location.href = `/map?focus_request_id=${requestId}`;
+      };
+
+      if (!navigator.geolocation) {
+        await send({});
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          await send({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        },
+        async () => {
+          // If blocked, still respond (server may use last-known helper location)
+          await send({});
+        },
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+      );
+    } catch (e) {
+      console.error(e);
+      alert("Failed to respond to SOS");
+    }
+  }
+
+  function toggleDetails(id) {
+    // Only toggle if the click wasn't inside the "Manage Post" area (to prevent conflicts)
+    // Actually, simple toggle is fine if we manage events properly.
+
+    var body = document.getElementById("details-" + id);
+    var icon = document.getElementById("icon-" + id);
+    var isHidden = body.classList.contains("hidden");
+
+    // Close others
+    document
+      .querySelectorAll("[data-details]")
+      .forEach((el) => el.classList.add("hidden"));
+    document
+      .querySelectorAll("[data-icon]")
+      .forEach((el) => el.classList.remove("rotate-180"));
+
+    if (isHidden) {
+      body.classList.remove("hidden");
+      icon.classList.add("rotate-180");
+    }
+  }
+
+  // New function to toggle the internal list of offers inside a card
+  function toggleCardOffers(id, ev) {
+    var list = document.getElementById("card-offers-" + id);
+    if (list) {
+      list.classList.toggle("hidden");
+    }
+    // Prevent the click from bubbling up and closing the main card details
+    if (ev && ev.stopPropagation) ev.stopPropagation();
+  }
+
+  // Bind SOS respond buttons (avoid inline Jinja-in-onclick errors in editor)
+  document.addEventListener("DOMContentLoaded", () => {
+    document.querySelectorAll(".js-sos-respond").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const rid = btn.getAttribute("data-request-id");
+        const requestId = rid ? parseInt(rid, 10) : null;
+        if (!requestId) return;
+        respondToSOSFromList(requestId);
+      });
+    });
+  });
+</script>
+
+{% endblock %}

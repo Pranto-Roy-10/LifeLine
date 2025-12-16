@@ -1,0 +1,20 @@
+# Smart Suggestions Configuration
+# Copy this file to .env and fill in your API keys
+
+# OpenWeatherMap API (Get free key from https://openweathermap.org/api)
+OPENWEATHER_API_KEY=your_api_key_here
+
+# Suggestion radius (in kilometers)
+SUGGESTION_RADIUS_KM=5
+
+# Enable/disable smart suggestions feature
+ENABLE_SMART_SUGGESTIONS=true
+
+# Suggestion cache TTL (in seconds)
+SUGGESTION_CACHE_TTL=300
+
+# Max suggestions per request
+MAX_SUGGESTIONS_PER_REQUEST=5
+
+# Google Cloud Translation (optional, for multi-language support)
+USE_GOOGLE_CLOUD_TRANSLATE=0

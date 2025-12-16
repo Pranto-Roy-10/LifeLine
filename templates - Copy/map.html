@@ -1,0 +1,942 @@
+{% extends "base.html" %} {% block title %}LifeLine – Live Map{% endblock %} {%
+block content %}
+
+<section class="w-full px-6 md:px-12 py-8 md:py-10 space-y-4">
+  <!-- Header -->
+  <div
+    class="flex flex-col md:flex-row md:items-center md:justify-between gap-3"
+  >
+    <div>
+      <h2 class="text-xl md:text-2xl font-semibold mb-1">
+        Live neighborhood map
+      </h2>
+      <p class="text-sm text-slate-400 max-w-2xl">
+        See help requests and offers around you in real time. Click a card to
+        focus on a request, or use the filters to view only medicine runs, ride
+        offers, or general help.
+      </p>
+    </div>
+
+    <div class="text-[10px] text-slate-400 space-y-1">
+      <p class="font-semibold text-slate-200">Pin colors</p>
+      <p>
+        <span
+          class="inline-block h-2 w-2 rounded-full bg-[#22c55e] mr-1"
+        ></span>
+        Need – normal/low
+      </p>
+      <p>
+        <span
+          class="inline-block h-2 w-2 rounded-full bg-[#f97316] mr-1"
+        ></span>
+        Need – high
+      </p>
+      <p>
+        <span
+          class="inline-block h-2 w-2 rounded-full bg-[#ef4444] mr-1"
+        ></span>
+        Need – emergency
+      </p>
+      <p>
+        <span
+          class="inline-block h-2 w-2 rounded-full bg-[#3b82f6] mr-1"
+        ></span>
+        Helper offers (radius shown if set)
+      </p>
+    </div>
+  </div>
+
+  <!-- Main content: Map + Sidebar -->
+  <div class="grid lg:grid-cols-3 gap-4 lg:gap-6">
+    <!-- MAP COLUMN -->
+    <div class="lg:col-span-2 relative">
+      <!-- Top overlay controls -->
+      <div class="absolute z-20 top-3 left-3 flex flex-col gap-2">
+        <div
+          class="rounded-2xl bg-slate-900/80 border border-slate-700/70 px-3 py-2 text-[11px] text-slate-200 shadow-lg"
+        >
+          <div class="flex items-center gap-2">
+            <span
+              class="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"
+            ></span>
+            <span class="font-semibold"
+              >Live radius: <span id="radius-label">3 km</span></span
+            >
+          </div>
+          <p id="map-status" class="text-[10px] text-slate-400 mt-1">
+            Detecting your location…
+          </p>
+        </div>
+      </div>
+
+      <!-- Bottom-left recenter button -->
+      <button
+        id="recenter-btn"
+        class="absolute z-20 bottom-3 left-3 px-3 py-1.5 rounded-full bg-slate-900/80 border border-slate-700 text-[11px] text-slate-200 hover:border-emerald-400 hover:text-emerald-300 transition shadow-lg"
+        type="button"
+      >
+        Recenter on me
+      </button>
+
+      <!-- MAP BOX -->
+      <div
+        id="map"
+        class="w-full rounded-3xl border border-slate-800 bg-slate-900"
+        style="height: 500px"
+      ></div>
+    </div>
+
+    <!-- SIDEBAR: LIST OF REQUESTS -->
+    <div
+      class="flex flex-col rounded-3xl border border-slate-800 bg-slate-900/80 backdrop-blur p-4 shadow-xl max-h-[500px]"
+    >
+      <!-- Filters -->
+      <div class="flex flex-wrap gap-2 mb-3 text-[11px]">
+        <button
+          class="filter-btn px-3 py-1.5 rounded-full border border-emerald-400/60 bg-emerald-500/10 text-emerald-200 font-semibold"
+          data-filter="all"
+          type="button"
+        >
+          All
+        </button>
+        <button
+          class="filter-btn px-3 py-1.5 rounded-full border border-slate-700 text-slate-300 hover:border-emerald-400 hover:text-emerald-300 transition"
+          data-filter="help"
+          type="button"
+        >
+          Help Needed
+        </button>
+        <button
+          class="filter-btn px-3 py-1.5 rounded-full border border-slate-700 text-slate-300 hover:border-sky-400 hover:text-sky-300 transition"
+          data-filter="medicine"
+          type="button"
+        >
+          Medicine Run
+        </button>
+        <button
+          class="filter-btn px-3 py-1.5 rounded-full border border-slate-700 text-slate-300 hover:border-amber-400 hover:text-amber-300 transition"
+          data-filter="ride"
+          type="button"
+        >
+          Ride Offer
+        </button>
+      </div>
+
+      <!-- Summary -->
+      <div
+        class="flex items-center justify-between mb-2 text-[11px] text-slate-400"
+      >
+        <span id="requests-summary">No requests loaded yet.</span>
+        <span class="text-slate-500">Auto-refresh every 10s</span>
+      </div>
+
+      <!-- Scrollable list -->
+      <div
+        id="requests-list"
+        class="mt-1 space-y-2 overflow-y-auto pr-1 custom-scrollbar text-xs"
+      >
+        <!-- JS will inject cards here -->
+      </div>
+    </div>
+  </div>
+</section>
+
+<div
+  id="lifeline-map-config"
+  class="hidden"
+  data-is-trusted-helper="{{ '1' if session.get('is_trusted_helper') else '0' }}"
+  data-current-user-id="{{ session.get('user_id') or '' }}"
+  data-emergency-number="{{ user.emergency_number or '' }}"
+></div>
+
+<script>
+  let map;
+  let userMarker = null;
+  let requestMarkers = []; // { marker, infoWindow, data }
+  let helperCircles = []; // radius circles for offers
+  let userPosition = null;
+  let lastRequests = [];
+  let activeFilter = "all";
+  let currentRadiusKm = 3;
+
+  const __lifelineCfg = document.getElementById("lifeline-map-config");
+  const IS_TRUSTED_HELPER =
+    (__lifelineCfg?.dataset?.isTrustedHelper || "0") === "1";
+  const CURRENT_USER_ID = __lifelineCfg?.dataset?.currentUserId
+    ? parseInt(__lifelineCfg.dataset.currentUserId, 10)
+    : null;
+  const EMERGENCY_NUMBER = __lifelineCfg?.dataset?.emergencyNumber || "";
+
+  let sosPulseItems = []; // [{ polygons: [{ polygon, offset, baseStrokeOpacity, baseFillOpacity }], center: {lat,lng}, requestId }]
+  let sosPulseAnimId = null;
+  let autoFocusDone = false;
+  let sosFallbackStarted = false;
+  let sosResponderMarkers = [];
+  let sosResponderTrackingStarted = false;
+
+  const INITIAL_FOCUS_ID = getQueryParamInt("focus_request_id");
+  let mapDidInitialFit = false;
+  let userInteractedWithMap = false;
+  let programmaticZoom = false;
+
+  // Pin colors based on role (need vs offer) + urgency
+  const ICON_URLS = {
+    need: {
+      emergency: "http://maps.google.com/mapfiles/ms/icons/red-dot.png",
+      high: "http://maps.google.com/mapfiles/ms/icons/orange-dot.png",
+      normal: "http://maps.google.com/mapfiles/ms/icons/green-dot.png",
+      low: "http://maps.google.com/mapfiles/ms/icons/ltblue-dot.png",
+    },
+    offer: {
+      emergency: "http://maps.google.com/mapfiles/ms/icons/purple-dot.png",
+      high: "http://maps.google.com/mapfiles/ms/icons/purple-dot.png",
+      normal: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png",
+      low: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png",
+    },
+  };
+
+  function getQueryParamInt(name) {
+    const params = new URLSearchParams(window.location.search);
+    const v = params.get(name);
+    if (!v) return null;
+    const n = parseInt(v, 10);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function getQueryParamBool(name) {
+    const params = new URLSearchParams(window.location.search);
+    const v = params.get(name);
+    return v === "1" || v === "true";
+  }
+
+  function normalizePhoneForTel(number) {
+    if (!number) return "";
+    const trimmed = String(number).trim();
+    const keepPlus = trimmed.startsWith("+");
+    const digits = trimmed.replace(/[^0-9]/g, "");
+    return keepPlus ? `+${digits}` : digits;
+  }
+
+  function openSosCallModal(number) {
+    const modal = document.getElementById("sos-call-modal");
+    const link = document.getElementById("sos-call-link");
+    const text = document.getElementById("sos-call-text");
+    const closeBtn = document.getElementById("sos-call-close");
+    if (!modal || !link || !text || !closeBtn) return;
+
+    if (number) {
+      const tel = normalizePhoneForTel(number);
+      link.href = tel ? `tel:${tel}` : `tel:${number}`;
+      link.textContent = "Call now";
+      text.textContent = `Calling ${number}… (simulated)`;
+      link.classList.remove("pointer-events-none", "opacity-60");
+    } else {
+      link.href = "{{ url_for('profile') }}";
+      text.textContent =
+        "No emergency number saved. Add one in your profile to enable auto-call.";
+      link.textContent = "Open profile";
+    }
+
+    modal.classList.remove("hidden");
+
+    const close = () => modal.classList.add("hidden");
+    closeBtn.onclick = close;
+    modal.addEventListener(
+      "click",
+      (e) => {
+        if (e.target === modal) close();
+      },
+      { once: true }
+    );
+  }
+
+  function buildRequestInfoHtml(r) {
+    const isSos = (r.category || "").toLowerCase() === "sos";
+    const viewerResponded = !!r.viewer_sos_responded;
+    const canRespond =
+      isSos &&
+      IS_TRUSTED_HELPER &&
+      CURRENT_USER_ID &&
+      r.user_id !== CURRENT_USER_ID &&
+      !viewerResponded;
+
+    const respondedBadge =
+      isSos && IS_TRUSTED_HELPER && viewerResponded
+        ? `<div style="margin-top: 8px; width: 100%; background: #0f172a; color: #34d399; border: 1px solid rgba(52, 211, 153, 0.35); padding: 8px 10px; border-radius: 10px; font-weight: 700; font-size: 12px; text-align: center;">✓ Responded</div>`
+        : "";
+
+    return `
+      <div style="max-width: 240px;">
+        <h3 style="font-size: 14px; margin-bottom: 4px;">${r.title}</h3>
+        <p style="font-size: 12px; color: #64748b; margin-bottom: 4px;">
+          ${r.description || ""}
+        </p>
+        <p style="font-size: 11px; color: #22c55e; margin-bottom: 2px;">
+          ~ ${r.distance_km} km away
+        </p>
+        ${
+          isSos
+            ? `<p style="font-size: 11px; color: #ef4444; margin-bottom: 4px; font-weight: 700;">SOS SIGNAL • Trusted helpers alerted</p>`
+            : ""
+        }
+        ${
+          r.urgency
+            ? `<p style="font-size: 11px; color: #f97316;">Urgency: ${r.urgency}</p>`
+            : ""
+        }
+        ${
+          r.is_offer
+            ? `<p style="font-size: 11px; color: #38bdf8;">Helper offer${
+                r.radius_pref ? " • radius " + r.radius_pref + " km" : ""
+              }</p>`
+            : ""
+        }
+        ${
+          canRespond
+            ? `<button onclick="respondToSOS(${r.id})" style="margin-top: 8px; width: 100%; background: #ef4444; color: white; border: 0; padding: 8px 10px; border-radius: 10px; font-weight: 700; font-size: 12px; cursor: pointer;">Respond to SOS</button>`
+            : ""
+        }
+        ${respondedBadge}
+      </div>
+    `;
+  }
+
+  async function respondToSOS(requestId) {
+    try {
+      const send = async (payload) => {
+        const resp = await fetch(`/api/sos/${requestId}/respond`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload || {}),
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+          alert(data.error || "Failed to respond to SOS");
+          return;
+        }
+        // Update local state immediately so the UI shows "Responded" without waiting for refresh.
+        try {
+          for (const r of lastRequests) {
+            if (r && r.id === requestId) {
+              r.viewer_sos_responded = true;
+            }
+          }
+          for (const item of requestMarkers) {
+            if (item && item.data && item.data.id === requestId) {
+              item.data.viewer_sos_responded = true;
+            }
+          }
+          renderRequests();
+        } catch (e) {}
+        focusOnRequest(requestId);
+      };
+
+      if (!navigator.geolocation) {
+        await send({});
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          await send({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        },
+        async () => {
+          // If blocked, still respond (server may use last-known helper location)
+          await send({});
+        },
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+      );
+    } catch (e) {
+      console.error(e);
+      alert("Failed to respond to SOS");
+    }
+  }
+  window.respondToSOS = respondToSOS;
+
+  function clearSosResponderMarkers() {
+    for (const m of sosResponderMarkers) {
+      try {
+        m.setMap(null);
+      } catch (e) {}
+    }
+    sosResponderMarkers = [];
+  }
+
+  function updateSosResponderMarkers(responderLocations) {
+    clearSosResponderMarkers();
+    if (!Array.isArray(responderLocations) || responderLocations.length === 0)
+      return;
+
+    for (const r of responderLocations) {
+      if (r.lat == null || r.lng == null) continue;
+      const pos = { lat: r.lat, lng: r.lng };
+      const marker = new google.maps.Marker({
+        position: pos,
+        map: map,
+        title: r.name ? `${r.name} (Responder)` : "SOS Responder",
+        icon: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png",
+      });
+      sosResponderMarkers.push(marker);
+    }
+  }
+
+  function startSosResponderTracking(sosRequestId) {
+    if (sosResponderTrackingStarted) return;
+    sosResponderTrackingStarted = true;
+
+    const loop = async () => {
+      try {
+        const resp = await fetch(`/api/sos/${sosRequestId}/status`, {
+          credentials: "include",
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) return;
+
+        if (
+          Array.isArray(data.responder_locations) &&
+          data.responder_locations.length
+        ) {
+          updateSosResponderMarkers(data.responder_locations);
+        }
+      } catch (e) {
+        // ignore
+      }
+      setTimeout(loop, 5000);
+    };
+
+    setTimeout(loop, 1500);
+  }
+
+  function destinationPoint(lat, lng, bearingDeg, distanceMeters) {
+    const R = 6378137;
+    const brng = (bearingDeg * Math.PI) / 180;
+    const lat1 = (lat * Math.PI) / 180;
+    const lon1 = (lng * Math.PI) / 180;
+    const dr = distanceMeters / R;
+
+    const lat2 = Math.asin(
+      Math.sin(lat1) * Math.cos(dr) +
+        Math.cos(lat1) * Math.sin(dr) * Math.cos(brng)
+    );
+    const lon2 =
+      lon1 +
+      Math.atan2(
+        Math.sin(brng) * Math.sin(dr) * Math.cos(lat1),
+        Math.cos(dr) - Math.sin(lat1) * Math.sin(lat2)
+      );
+
+    return { lat: (lat2 * 180) / Math.PI, lng: (lon2 * 180) / Math.PI };
+  }
+
+  function hexagonPath(center, radiusMeters) {
+    // 6 points around the center; rotate 30deg so it looks like a "hex signal"
+    const bearings = [30, 90, 150, 210, 270, 330];
+    return bearings.map((b) =>
+      destinationPoint(center.lat, center.lng, b, radiusMeters)
+    );
+  }
+
+  function clearSosPulses() {
+    for (const item of sosPulseItems) {
+      try {
+        for (const p of item.polygons) {
+          p.polygon.setMap(null);
+        }
+      } catch (e) {}
+    }
+    sosPulseItems = [];
+  }
+
+  function ensureSosPulseAnimation() {
+    if (sosPulseAnimId && sosPulseItems.length === 0) {
+      cancelAnimationFrame(sosPulseAnimId);
+      sosPulseAnimId = null;
+      return;
+    }
+    if (sosPulseAnimId || sosPulseItems.length === 0) return;
+
+    const minR = 60;
+    const maxR = 1000;
+    const periodMs = 2600;
+
+    const animate = (t) => {
+      if (sosPulseItems.length === 0) {
+        sosPulseAnimId = null;
+        return;
+      }
+
+      for (const item of sosPulseItems) {
+        for (const p of item.polygons) {
+          // Option B: Expand only (no shrink), and fade out as it expands.
+          const phase01 = ((t % periodMs) / periodMs + (p.offset || 0)) % 1;
+          const radius = minR + (maxR - minR) * phase01;
+
+          // Fade-out curve: strong at start, near 0 at the edge
+          const fade = Math.max(0, 1 - phase01);
+          const easedFade = fade * fade;
+
+          const path = hexagonPath(item.center, radius);
+          p.polygon.setPath(path);
+          p.polygon.setOptions({
+            strokeOpacity: (p.baseStrokeOpacity || 0.25) * easedFade,
+            fillOpacity: (p.baseFillOpacity || 0.08) * easedFade,
+          });
+        }
+      }
+
+      sosPulseAnimId = requestAnimationFrame(animate);
+    };
+
+    sosPulseAnimId = requestAnimationFrame(animate);
+  }
+
+  function syncSosPulsesFromRequests(requests) {
+    clearSosPulses();
+    for (const r of requests) {
+      const isSos = (r.category || "").toLowerCase() === "sos";
+      if (!isSos || r.lat == null || r.lng == null) continue;
+
+      const center = { lat: r.lat, lng: r.lng };
+      // Multiple rings to feel like a continuous broadcast signal
+      const ringOffsets = [0, 0.2, 0.4, 0.6, 0.8];
+      const polygons = ringOffsets.map((off, idx) => {
+        const baseStrokeOpacity = idx === 0 ? 0.85 : 0.55;
+        const baseFillOpacity = idx === 0 ? 0.22 : 0.12;
+        const poly = new google.maps.Polygon({
+          paths: hexagonPath(center, 60),
+          strokeColor: "#ef4444",
+          strokeOpacity: baseStrokeOpacity,
+          strokeWeight: idx === 0 ? 3 : 2,
+          fillColor: "#ef4444",
+          fillOpacity: baseFillOpacity,
+          clickable: false,
+          zIndex: 999,
+        });
+        poly.setMap(map);
+        return {
+          polygon: poly,
+          offset: off,
+          baseStrokeOpacity,
+          baseFillOpacity,
+        };
+      });
+
+      sosPulseItems.push({ polygons, center, requestId: r.id });
+    }
+
+    ensureSosPulseAnimation();
+  }
+
+  async function startSosCallerFallbackTimer(sosRequestId) {
+    if (sosFallbackStarted) return;
+    sosFallbackStarted = true;
+
+    const loop = async () => {
+      try {
+        const resp = await fetch(`/api/sos/${sosRequestId}/status`, {
+          credentials: "include",
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (resp.ok && data.responded) {
+          return; // helper responded; do nothing
+        }
+
+        // Server-driven fallback (based on request created_at)
+        if (resp.ok && data.should_call) {
+          openSosCallModal(EMERGENCY_NUMBER);
+          return;
+        }
+      } catch (e) {
+        // ignore transient failures
+      }
+
+      setTimeout(loop, 5000);
+    };
+
+    setTimeout(loop, 5000);
+  }
+
+  // Start the no-response fallback timer ASAP for SOS callers.
+  // This makes the auto-call modal appear even if map refresh/focus fails.
+  document.addEventListener("DOMContentLoaded", () => {
+    try {
+      if (INITIAL_FOCUS_ID && getQueryParamBool("sos_caller")) {
+        startSosCallerFallbackTimer(INITIAL_FOCUS_ID);
+      }
+    } catch (e) {
+      // ignore
+    }
+  });
+
+  function initMap() {
+    const defaultCenter = { lat: 23.75, lng: 90.38 }; // Dhaka-ish
+
+    map = new google.maps.Map(document.getElementById("map"), {
+      center: defaultCenter,
+      zoom: 13,
+      mapTypeControl: false,
+      streetViewControl: false,
+      fullscreenControl: false,
+      styles: [
+        { elementType: "geometry", stylers: [{ color: "#020617" }] },
+        { elementType: "labels.text.fill", stylers: [{ color: "#e5e7eb" }] },
+        { elementType: "labels.text.stroke", stylers: [{ color: "#020617" }] },
+        { featureType: "poi", stylers: [{ visibility: "off" }] },
+        { featureType: "road", stylers: [{ color: "#0f172a" }] },
+        { featureType: "water", stylers: [{ color: "#020617" }] },
+      ],
+    });
+
+    // Track user interaction so we don't keep auto-zooming
+    map.addListener("dragstart", () => {
+      userInteractedWithMap = true;
+    });
+    map.addListener("click", () => {
+      userInteractedWithMap = true;
+    });
+    map.addListener("zoom_changed", () => {
+      if (!programmaticZoom) userInteractedWithMap = true;
+    });
+
+    const statusEl = document.getElementById("map-status");
+
+    // Recenter button
+    document.getElementById("recenter-btn").addEventListener("click", () => {
+      if (userPosition) {
+        map.setCenter(userPosition);
+        map.setZoom(14);
+      }
+    });
+
+    // Filter buttons
+    document.querySelectorAll(".filter-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        activeFilter = btn.getAttribute("data-filter");
+        document.querySelectorAll(".filter-btn").forEach((b) => {
+          b.classList.remove(
+            "border-emerald-400/60",
+            "bg-emerald-500/10",
+            "text-emerald-200",
+            "font-semibold"
+          );
+          b.classList.add("border-slate-700", "text-slate-300");
+        });
+        btn.classList.remove("border-slate-700", "text-slate-300");
+        btn.classList.add(
+          "border-emerald-400/60",
+          "bg-emerald-500/10",
+          "text-emerald-200",
+          "font-semibold"
+        );
+
+        const allBtn = document.querySelector('.filter-btn[data-filter="all"]');
+        if (allBtn && activeFilter !== "all") {
+          allBtn.classList.remove(
+            "border-emerald-400/60",
+            "bg-emerald-500/10",
+            "text-emerald-200",
+            "font-semibold"
+          );
+          allBtn.classList.add("border-slate-700", "text-slate-300");
+        }
+
+        renderRequests();
+      });
+    });
+
+    // Geolocation
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          userPosition = {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+          };
+          statusEl.innerText = "Location detected. Loading nearby help…";
+
+          // Save last-known location for distance-based SOS broadcasts
+          fetch("/api/user/location", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              lat: userPosition.lat,
+              lng: userPosition.lng,
+            }),
+          }).catch(() => {});
+
+          map.setCenter(userPosition);
+
+          userMarker = new google.maps.Marker({
+            position: userPosition,
+            map: map,
+            title: "Your location",
+            icon: {
+              path: google.maps.SymbolPath.CIRCLE,
+              scale: 6,
+              fillColor: "#22c55e",
+              fillOpacity: 1,
+              strokeColor: "#bbf7d0",
+              strokeWeight: 2,
+            },
+          });
+
+          fetchAndRenderRequests();
+          setInterval(fetchAndRenderRequests, 10000); // auto refresh
+        },
+        (err) => {
+          console.error(err);
+          statusEl.innerText =
+            "Could not access your location. Showing area around Dhaka.";
+          fetchAndRenderRequests();
+        }
+      );
+    } else {
+      statusEl.innerText =
+        "Geolocation not supported. Showing area around Dhaka.";
+      fetchAndRenderRequests();
+    }
+  }
+
+  function clearRequestMarkers() {
+    for (const item of requestMarkers) {
+      item.marker.setMap(null);
+    }
+    requestMarkers = [];
+
+    for (const c of helperCircles) {
+      c.setMap(null);
+    }
+    helperCircles = [];
+  }
+
+  async function fetchAndRenderRequests() {
+    const statusEl = document.getElementById("map-status");
+    const radiusLabel = document.getElementById("radius-label");
+    radiusLabel.textContent = `${currentRadiusKm} km`;
+    statusEl.innerText = "Loading nearby help…";
+
+    try {
+      const lat = userPosition ? userPosition.lat : 23.75;
+      const lng = userPosition ? userPosition.lng : 90.38;
+
+      const resp = await fetch(
+        `/api/requests/nearby?lat=${lat}&lng=${lng}&radius_km=${currentRadiusKm}`
+      );
+      const data = await resp.json();
+
+      clearRequestMarkers();
+      lastRequests = data.requests || [];
+
+      if (!lastRequests.length) {
+        statusEl.innerText =
+          "No nearby help requests or offers in the last hour.";
+        renderRequests();
+        return;
+      }
+
+      const bounds = new google.maps.LatLngBounds();
+
+      for (const r of lastRequests) {
+        const pos = { lat: r.lat, lng: r.lng };
+
+        const isSos = (r.category || "").toLowerCase() === "sos";
+
+        const urgencyRaw = (r.urgency || "normal").toLowerCase();
+        const urgency = ["low", "normal", "high", "emergency"].includes(
+          urgencyRaw
+        )
+          ? urgencyRaw
+          : "normal";
+
+        const isOffer = !!r.is_offer;
+        const roleKey = isOffer ? "offer" : "need";
+
+        let iconUrl =
+          (ICON_URLS[roleKey] && ICON_URLS[roleKey][urgency]) ||
+          (ICON_URLS[roleKey] && ICON_URLS[roleKey].normal) ||
+          ICON_URLS.need.normal;
+
+        const marker = new google.maps.Marker({
+          position: pos,
+          map: map,
+          title: r.title,
+          icon: iconUrl,
+        });
+
+        const infoWindow = new google.maps.InfoWindow({
+          content: "",
+        });
+
+        marker.addListener("click", () => {
+          try {
+            infoWindow.setContent(buildRequestInfoHtml(r));
+          } catch (e) {}
+          infoWindow.open(map, marker);
+        });
+
+        requestMarkers.push({ marker, infoWindow, data: r });
+        bounds.extend(pos);
+
+        // Draw helper radius if this is an offer and radius_pref is set
+        if (isOffer && r.radius_pref) {
+          const radiusKm = parseFloat(r.radius_pref);
+          if (!isNaN(radiusKm) && radiusKm > 0) {
+            const circle = new google.maps.Circle({
+              map: map,
+              center: pos,
+              radius: radiusKm * 1000,
+              strokeColor: "#38bdf8",
+              strokeOpacity: 0.4,
+              strokeWeight: 1,
+              fillColor: "#38bdf8",
+              fillOpacity: 0.05,
+            });
+            helperCircles.push(circle);
+          }
+        }
+      }
+
+      if (userPosition) bounds.extend(userPosition);
+      // Avoid periodic auto-zooming: only fit once, and never when focusing a request.
+      if (!INITIAL_FOCUS_ID && !userInteractedWithMap && !mapDidInitialFit) {
+        mapDidInitialFit = true;
+        map.fitBounds(bounds, 80);
+      }
+
+      statusEl.innerText = `Showing ${lastRequests.length} nearby request(s) and offer(s) within ${currentRadiusKm} km.`;
+
+      // SOS pulse overlays (hex signal)
+      syncSosPulsesFromRequests(lastRequests);
+
+      renderRequests();
+
+      // Auto-focus on SOS (or any request) when redirected here
+      if (!autoFocusDone) {
+        const focusId = getQueryParamInt("focus_request_id");
+        if (focusId) {
+          autoFocusDone = true;
+          focusOnRequest(focusId);
+          startSosResponderTracking(focusId);
+          if (getQueryParamBool("sos_caller")) {
+            startSosCallerFallbackTimer(focusId);
+          }
+        }
+      }
+    } catch (e) {
+      console.error(e);
+      statusEl.innerText = "Failed to load nearby requests.";
+    }
+  }
+
+  function renderRequests() {
+    const listEl = document.getElementById("requests-list");
+    const summaryEl = document.getElementById("requests-summary");
+
+    listEl.innerHTML = "";
+
+    let filtered = lastRequests;
+    if (activeFilter !== "all") {
+      filtered = lastRequests.filter((r) => r.type === activeFilter);
+    }
+
+    if (!filtered.length) {
+      summaryEl.innerText = "No requests match the current filter.";
+      return;
+    }
+
+    summaryEl.innerText = `${filtered.length} request(s) nearby. Click a card to focus on the map.`;
+
+    for (const r of filtered) {
+      const isOffer = !!r.is_offer;
+      const isSos = (r.category || "").toLowerCase() === "sos";
+      const viewerResponded = !!r.viewer_sos_responded;
+
+      let tagLabel = "Help needed";
+      let tagColor = "text-emerald-300 bg-emerald-500/10 border-emerald-400/40";
+
+      if (isSos) {
+        tagLabel = "SOS Signal";
+        tagColor = "text-rose-300 bg-rose-500/10 border-rose-400/40";
+      }
+
+      if (!isSos && isOffer) {
+        tagLabel = "Helper (general)";
+        tagColor = "text-sky-300 bg-sky-500/10 border-sky-400/40";
+      } else if (!isSos && r.type === "medicine") {
+        tagLabel = "Medicine run";
+        tagColor = "text-sky-300 bg-sky-500/10 border-sky-400/40";
+      } else if (!isSos && r.type === "ride") {
+        tagLabel = "Ride offer";
+        tagColor = "text-amber-300 bg-amber-500/10 border-amber-400/40";
+      }
+
+      const urgencyText = r.urgency ? r.urgency : null;
+
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className = isSos
+        ? "w-full text-left rounded-2xl border border-rose-500/30 bg-slate-900/90 px-3 py-2.5 hover:border-rose-400 hover:bg-slate-900 transition flex flex-col gap-1"
+        : "w-full text-left rounded-2xl border border-slate-800 bg-slate-900/90 px-3 py-2.5 hover:border-emerald-400 hover:bg-slate-900 transition flex flex-col gap-1";
+      card.dataset.requestId = r.id;
+
+      card.innerHTML = `
+        <div class="flex items-center justify-between gap-2">
+          <p class="font-semibold text-slate-100 text-[13px] line-clamp-1">${
+            r.title
+          }</p>
+          <span class="text-[10px] px-2 py-1 rounded-full border ${tagColor}">
+            ${tagLabel}
+          </span>
+        </div>
+        <p class="text-[11px] text-slate-400 line-clamp-2">
+          ${r.description || ""}
+        </p>
+        <p class="text-[11px] text-emerald-300 mt-1">
+          ~ ${r.distance_km} km away
+          ${r.is_offer && r.radius_pref ? ` • radius ${r.radius_pref} km` : ""}
+        </p>
+        ${
+          urgencyText
+            ? `<p class="text-[10px] ${
+                isSos ? "text-rose-300" : "text-orange-300"
+              } mt-0.5 capitalize">Urgency: ${urgencyText}</p>`
+            : ""
+        }
+        ${
+          isSos && IS_TRUSTED_HELPER && viewerResponded
+            ? `<p class="text-[10px] text-emerald-400 font-semibold mt-0.5">✓ You responded</p>`
+            : ""
+        }
+      `;
+
+      card.addEventListener("click", () => {
+        focusOnRequest(r.id);
+      });
+
+      listEl.appendChild(card);
+    }
+  }
+
+  function focusOnRequest(requestId) {
+    const item = requestMarkers.find((m) => m.data.id === requestId);
+    if (!item) return;
+    map.panTo({ lat: item.data.lat, lng: item.data.lng });
+    programmaticZoom = true;
+    map.setZoom(15);
+    setTimeout(() => {
+      programmaticZoom = false;
+    }, 0);
+    try {
+      item.infoWindow.setContent(buildRequestInfoHtml(item.data));
+    } catch (e) {}
+    item.infoWindow.open(map, item.marker);
+  }
+</script>
+
+<script
+  async
+  defer
+  src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}&callback=initMap"
+></script>
+
+{% endblock %}
