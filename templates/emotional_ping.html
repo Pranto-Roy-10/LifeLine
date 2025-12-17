@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Emotional Ping • LifeLine</title>
+
+    <style>
+      :root {
+        --bg: #050b18;
+        --bg2: #071126;
+        --card: rgba(15, 23, 42, 0.72);
+        --card2: rgba(2, 6, 23, 0.7);
+        --border: rgba(148, 163, 184, 0.18);
+        --ink: #e5e7eb;
+        --muted: #9ca3af;
+        --muted2: #94a3b8;
+
+        --accent: #22c55e;
+        --accent2: #06b6d4;
+        --danger: #ef4444;
+
+        --shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+        --shadow2: 0 10px 24px rgba(0, 0, 0, 0.28);
+
+        --radius: 20px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial,
+          sans-serif;
+        color: var(--ink);
+        min-height: 100vh;
+        background: radial-gradient(
+            900px 500px at 20% 20%,
+            rgba(34, 197, 94, 0.12),
+            transparent 60%
+          ),
+          radial-gradient(
+            900px 500px at 80% 10%,
+            rgba(6, 182, 212, 0.12),
+            transparent 60%
+          ),
+          linear-gradient(180deg, var(--bg2), var(--bg));
+        overflow-x: hidden;
+      }
+
+      .page {
+        min-height: 100vh;
+        padding: 22px 16px 40px;
+      }
+
+      .topbar {
+        width: min(1060px, 100%);
+        margin: 0 auto 14px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 800;
+        letter-spacing: 0.2px;
+      }
+
+      .brand-text {
+        display: flex;
+        flex-direction: column;
+        line-height: 1.05;
+      }
+
+      .brand-title {
+        font-size: 18px;
+        font-weight: 800;
+        letter-spacing: 0.2px;
+        color: var(--ink);
+      }
+
+      .brand-subtitle {
+        margin-top: 4px;
+        font-size: 12px;
+        color: var(--muted2);
+        font-weight: 600;
+      }
+
+      .brand-badge {
+        width: 42px;
+        height: 42px;
+        border-radius: 16px;
+        background: linear-gradient(
+          180deg,
+          rgba(6, 182, 212, 0.25),
+          rgba(34, 197, 94, 0.25)
+        );
+        border: 1px solid rgba(6, 182, 212, 0.25);
+        box-shadow: var(--shadow2);
+        display: grid;
+        place-items: center;
+      }
+      .brand-badge span {
+        font-size: 18px;
+      }
+      .brand-badge.logo {
+        width: 46px;
+        height: 46px;
+        border-radius: 14px;
+        background: #ffffff;
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+        display: grid;
+        place-items: center;
+        padding: 6px;
+        text-decoration: none;
+      }
+
+      .brand-badge.logo img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        display: block;
+      }
+
+      .btn {
+        border: 1px solid var(--border);
+        background: rgba(15, 23, 42, 0.45);
+        color: var(--ink);
+        padding: 10px 14px;
+        border-radius: 999px;
+        cursor: pointer;
+        box-shadow: var(--shadow2);
+        transition: transform 0.08s ease, background 0.2s ease;
+        font-weight: 650;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .btn:hover {
+        transform: translateY(-1px);
+        background: rgba(15, 23, 42, 0.65);
+      }
+      .btn:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+        transform: none;
+      }
+      .btn.primary {
+        background: linear-gradient(
+          180deg,
+          rgba(34, 197, 94, 0.25),
+          rgba(34, 197, 94, 0.12)
+        );
+        border-color: rgba(34, 197, 94, 0.35);
+      }
+      .btn.small {
+        padding: 8px 11px;
+        font-size: 12px;
+      }
+
+      .shell {
+        width: min(1060px, 100%);
+        margin: 0 auto;
+        display: grid;
+        grid-template-columns: 1fr 1.25fr;
+        gap: 16px;
+        align-items: start;
+      }
+
+      .card {
+        background: linear-gradient(180deg, var(--card), var(--card2));
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        padding: 18px;
+        backdrop-filter: blur(10px);
+      }
+
+      h1 {
+        margin: 0 0 6px;
+        font-size: 34px;
+      }
+      h2 {
+        margin: 0 0 6px;
+        font-size: 20px;
+      }
+      .sub {
+        color: var(--muted2);
+        font-size: 13px;
+        line-height: 1.35;
+      }
+
+      .chips {
+        margin-top: 14px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+      .chip {
+        padding: 9px 12px;
+        border-radius: 999px;
+        border: 1px solid rgba(148, 163, 184, 0.22);
+        background: rgba(2, 6, 23, 0.35);
+        cursor: pointer;
+        user-select: none;
+        font-weight: 650;
+        font-size: 13px;
+        transition: transform 0.08s ease, border-color 0.2s ease,
+          background 0.2s ease;
+      }
+      .chip:hover {
+        transform: translateY(-1px);
+      }
+      .chip.selected {
+        border-color: rgba(34, 197, 94, 0.45);
+        background: rgba(34, 197, 94, 0.14);
+      }
+
+      .msg {
+        width: 100%;
+        margin-top: 14px;
+        min-height: 84px;
+        resize: none;
+        border-radius: 16px;
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        background: rgba(2, 6, 23, 0.35);
+        padding: 12px 12px;
+        color: var(--ink);
+        outline: none;
+      }
+      .msg::placeholder {
+        color: rgba(156, 163, 175, 0.7);
+      }
+
+      .hint {
+        margin-top: 10px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .hint.error {
+        color: #fecaca;
+      }
+      .hint.success {
+        color: #bbf7d0;
+      }
+
+      .actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 12px;
+      }
+      .spacer {
+        flex: 1;
+      }
+
+      #feed {
+        margin-top: 12px;
+        display: grid;
+        gap: 10px;
+      }
+      .empty {
+        padding: 14px;
+        border-radius: 16px;
+        border: 1px dashed rgba(148, 163, 184, 0.25);
+        background: rgba(2, 6, 23, 0.25);
+        color: var(--muted2);
+      }
+
+      .post {
+        border-radius: 18px;
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        background: rgba(2, 6, 23, 0.3);
+        padding: 12px;
+      }
+      .post-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 8px;
+      }
+      .who {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+      }
+      .avatar {
+        width: 38px;
+        height: 38px;
+        border-radius: 16px;
+        display: grid;
+        place-items: center;
+        font-weight: 800;
+        background: linear-gradient(
+          180deg,
+          rgba(6, 182, 212, 0.18),
+          rgba(34, 197, 94, 0.18)
+        );
+        border: 1px solid rgba(6, 182, 212, 0.22);
+        flex: 0 0 auto;
+      }
+      .name {
+        font-weight: 800;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 240px;
+      }
+      .meta {
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 1px;
+      }
+      .mood {
+        font-size: 12px;
+        color: #c7d2fe;
+        opacity: 0.95;
+        flex: 0 0 auto;
+      }
+
+      .post-body {
+        color: rgba(229, 231, 235, 0.92);
+        line-height: 1.35;
+        white-space: pre-wrap;
+      }
+      .post-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 10px;
+        flex-wrap: wrap;
+      }
+
+      @media (max-width: 980px) {
+        .shell {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="page">
+      <div class="topbar">
+        <div class="brand">
+          <a
+            href="{{ url_for('home') }}"
+            class="brand-badge logo"
+            aria-label="LifeLine Home"
+          >
+            <img
+              src="{{ url_for('static', filename='images/lifeline_logo.png') }}"
+              alt="LifeLine"
+            />
+          </a>
+
+          <div class="brand-text">
+            <div class="brand-title">LifeLine</div>
+            <div class="brand-subtitle">
+              Neighborhood Help &amp; Emergency Network
+            </div>
+          </div>
+        </div>
+
+        <a class="btn" href="{{ url_for('home') }}">Return Home</a>
+      </div>
+
+      <div class="shell">
+        <div class="card">
+          <h1>Emotional Ping</h1>
+          <p class="sub">
+            Share how you feel. Your ping will notify trusted helpers. You can
+            also browse other pings in the feed.
+          </p>
+
+          <div class="chips" id="chips">
+            <div class="chip" data-mood="FEELING_LOW">😔 Feeling Low</div>
+            <div class="chip" data-mood="FRUSTRATED">😤 Frustrated</div>
+            <div class="chip" data-mood="HAPPY">😊 Happy</div>
+            <div class="chip" data-mood="ANXIOUS">😰 Anxious</div>
+            <div class="chip" data-mood="NEED_MOTIVATION">
+              🫶 Need Motivation
+            </div>
+            <div class="chip" data-mood="FEELING_FESTIVE">
+              🎉 Feeling Festive
+            </div>
+          </div>
+
+          <textarea
+            class="msg"
+            id="message"
+            placeholder="Add a short message (optional)"
+          ></textarea>
+
+          <div class="hint" id="hint">Pick a feeling to enable sending.</div>
+
+          <div class="actions">
+            <button class="btn primary" id="sendBtn" disabled>Send Ping</button>
+            <div class="spacer"></div>
+            <button class="btn" id="refreshBtn" type="button">
+              Refresh Feed
+            </button>
+          </div>
+        </div>
+
+        <div class="card feed">
+          <h2>Others Emotional Pings</h2>
+          <div class="sub">
+            Browse recent emotional pings. You can chat, mark listened, or
+            uplift.
+          </div>
+
+          <div id="feed"></div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const API_PING_URL = "{{ url_for('api_emotional_ping') }}";
+      const API_FEED_URL = "{{ url_for('api_emotional_pings') }}";
+      const LOGIN_URL = "/login"; // ✅ fixed (no globals())
+
+      let selectedMood = null;
+
+      const chips = document.querySelectorAll(".chip");
+      const sendBtn = document.getElementById("sendBtn");
+      const refreshBtn = document.getElementById("refreshBtn");
+      const hint = document.getElementById("hint");
+      const feed = document.getElementById("feed");
+
+      function setHint(text, type) {
+        hint.textContent = text;
+        hint.classList.remove("error", "success");
+        if (type) hint.classList.add(type);
+      }
+
+      function updateSendState() {
+        sendBtn.disabled = !selectedMood;
+      }
+
+      function prettyMood(m) {
+        return (m || "").replaceAll("_", " ").toLowerCase();
+      }
+
+      function initials(name) {
+        const s = (name || "?").trim();
+        if (!s) return "?";
+        const parts = s.split(/\s+/);
+        const a = parts[0]?.[0] || "?";
+        const b = parts.length > 1 ? parts[parts.length - 1]?.[0] : "";
+        return (a + b).toUpperCase();
+      }
+
+      function escapeHTML(str) {
+        return (str || "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      }
+
+      async function fetchJSON(url, options = {}) {
+        const res = await fetch(url, {
+          credentials: "same-origin",
+          ...options,
+        });
+
+        const contentType = res.headers.get("content-type") || "";
+        const isJson = contentType.includes("application/json");
+
+        if (res.status === 401) return { __unauthorized: true, status: 401 };
+
+        if (!res.ok) {
+          let json = null;
+          let text = "";
+          if (isJson) json = await res.json().catch(() => null);
+          else text = await res.text().catch(() => "");
+          return { __error: true, status: res.status, json, text };
+        }
+
+        if (!isJson) {
+          const text = await res.text().catch(() => "");
+          if (text.toLowerCase().includes("<html"))
+            return { __unauthorized: true, status: 401 };
+          return { __error: true, status: 500, text };
+        }
+
+        return await res.json().catch(() => ({}));
+      }
+
+      function renderPost(p) {
+        const div = document.createElement("div");
+        div.className = "post";
+
+        const safeName = escapeHTML(p.user_name || "Unknown");
+        const safeMeta = escapeHTML(p.created_at_human || "");
+        const safeMood = escapeHTML(prettyMood(p.mood));
+        const safeMsg = p.message ? escapeHTML(p.message) : "";
+
+        div.innerHTML = `
+                      <div class="post-head">
+                        <div class="who">
+                          <div class="avatar">${initials(p.user_name)}</div>
+                          <div style="min-width:0">
+                            <div class="name">${safeName}</div>
+                            <div class="meta">${safeMeta}</div>
+                          </div>
+                        </div>
+                        <div class="mood">${safeMood}</div>
+                      </div>
+
+                      <div class="post-body">${
+                        safeMsg
+                          ? safeMsg
+                          : "<span style='color:rgba(156,163,175,0.85)'>No message provided.</span>"
+                      }</div>
+
+                      <div class="post-actions">
+        <button class="btn small listened" data-action="listen" data-ping-id="${
+          p.id
+        }"
+          ${p.is_listened ? "disabled" : ""}>
+          ${p.is_listened ? "Listened ✔" : "Listen"}
+        </button>
+
+        <button class="btn small" data-action="chat" data-user-id="${
+          p.user_id ?? ""
+        }">
+          Chat
+        </button>
+
+        <button class="btn small" data-action="uplift" data-ping-id="${p.id}">
+          Uplift
+        </button>
+      </div>
+
+                    `;
+
+        div.addEventListener("click", (e) => {
+          const btn = e.target.closest("button");
+          if (!btn) return;
+
+          const action = btn.dataset.action;
+
+          if (action === "chat") {
+            const uid = btn.dataset.userId;
+            if (!uid) return alert("Cannot start chat: user not found.");
+            window.location.href = `/chat/${uid}`;
+            return;
+          }
+
+          if (action === "listen") {
+            const pingId = btn.dataset.pingId;
+
+            fetch(`/api/emotional_pings/${pingId}/listen`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+            })
+              .then((res) => res.json())
+              .then((data) => {
+                if (data.ok) {
+                  btn.textContent = "Listened ✔";
+                  btn.disabled = true;
+                } else {
+                  alert("Failed to mark as listened");
+                }
+              })
+              .catch((err) => {
+                console.error(err);
+                alert("Error connecting to server");
+              });
+
+            return;
+          }
+
+          if (action === "uplift") {
+            const pingId = btn.dataset.pingId;
+
+            fetch(`/api/emotional_pings/${pingId}/uplift`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+            })
+              .then((res) => res.json())
+              .then((data) => {
+                if (data.ok) {
+                  // 🔥 IMPORTANT: reload feed so uplifted post moves to top
+                  loadFeed();
+                } else {
+                  alert("Failed to uplift");
+                }
+              })
+              .catch((err) => {
+                console.error(err);
+                alert("Error uplifting post");
+              });
+
+            return;
+          }
+        });
+
+        return div;
+      }
+
+      async function loadFeed() {
+        feed.innerHTML = `<div class="empty">Loading emotional pings…</div>`;
+
+        const data = await fetchJSON(API_FEED_URL);
+
+        if (data.__unauthorized) {
+          feed.innerHTML = `
+                        <div class="empty">
+                          You are not logged in. <a href="${LOGIN_URL}" style="color:#93c5fd">Log in</a> to see the feed.
+                        </div>`;
+          return;
+        }
+
+        if (data.__error) {
+          feed.innerHTML = `
+                        <div class="empty">
+                          Could not load feed (HTTP ${data.status}).<br/>
+                          <span style="opacity:.85">${escapeHTML(
+                            data.json?.error ||
+                              data.json?.message ||
+                              data.text ||
+                              ""
+                          )}</span>
+                        </div>`;
+          return;
+        }
+
+        const pings = data.pings || [];
+        feed.innerHTML = "";
+
+        if (!pings.length) {
+          feed.innerHTML = `<div class="empty">No emotional pings yet. Be the first to post one 💗</div>`;
+          return;
+        }
+
+        pings.forEach((p) => feed.appendChild(renderPost(p)));
+      }
+
+      chips.forEach((chip) => {
+        chip.addEventListener("click", () => {
+          chips.forEach((c) => c.classList.remove("selected"));
+          chip.classList.add("selected");
+          selectedMood = chip.dataset.mood;
+          updateSendState();
+          setHint("Ready — click Send Ping.");
+        });
+      });
+
+      sendBtn.addEventListener("click", async () => {
+        const message = document.getElementById("message").value.trim();
+
+        if (!selectedMood)
+          return setHint("Please pick a feeling first.", "error");
+
+        sendBtn.disabled = true;
+        const oldText = sendBtn.textContent;
+        sendBtn.textContent = "Sending…";
+        setHint("Sending ping…");
+
+        const data = await fetchJSON(API_PING_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mood: selectedMood, message }),
+        });
+
+        if (data.__unauthorized) {
+          setHint("Please log in to send an emotional ping.", "error");
+          setTimeout(() => (window.location.href = LOGIN_URL), 600);
+          sendBtn.textContent = oldText;
+          updateSendState();
+          return;
+        }
+
+        if (data.__error) {
+          const msg =
+            data.json?.error ||
+            data.json?.message ||
+            data.text ||
+            `Failed (HTTP ${data.status})`;
+          setHint(msg, "error");
+          sendBtn.textContent = oldText;
+          updateSendState();
+          return;
+        }
+
+        setHint(data.message || "Ping sent successfully 💗", "success");
+
+        document.getElementById("message").value = "";
+        chips.forEach((c) => c.classList.remove("selected"));
+        selectedMood = null;
+        updateSendState();
+
+        await loadFeed();
+
+        sendBtn.textContent = oldText;
+        updateSendState();
+      });
+
+      refreshBtn.addEventListener("click", loadFeed);
+
+      loadFeed();
+    </script>
+  </body>
+</html>

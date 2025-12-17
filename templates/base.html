@@ -81,8 +81,27 @@
         </div>
 
         <div class="flex items-center gap-3">
-          {% if session.get('user_id') %} {% if session.get('is_trusted_helper')
-          %}
+          {% if session.get('user_id') %} {% if current_user.is_admin %}
+          <a
+            href="{{ url_for('admin_dashboard') }}"
+            class="hidden md:inline-flex items-center gap-1 px-3 py-1 rounded-full border border-indigo-500/50 text-indigo-400 text-[10px] font-bold hover:bg-indigo-500 hover:text-white transition"
+          >
+            🛡️ Admin
+          </a>
+          {% endif %} {% if current_user.is_premium %}
+          <span
+            class="hidden md:inline-flex items-center gap-1 px-3 py-1 rounded-full bg-gradient-to-r from-pink-500 to-rose-500 text-white text-[10px] font-bold shadow-lg shadow-rose-500/30"
+          >
+            <span>👑</span> Premium
+          </span>
+          {% else %}
+          <a
+            href="{{ url_for('plans') }}"
+            class="hidden md:inline-flex items-center gap-1 px-3 py-1 rounded-full border border-rose-500/50 text-rose-400 text-[10px] font-bold hover:bg-rose-500 hover:text-white transition"
+          >
+            <span>⚡</span> Upgrade
+          </a>
+          {% endif %} {% if session.get('is_trusted_helper') %}
           <span
             class="text-[10px] px-2 py-1 rounded-full bg-emerald-600/20 text-emerald-300 border border-emerald-500/50 hidden md:inline"
           >
@@ -91,10 +110,13 @@
           {% endif %}
 
           <form
+            id="sosForm"
             action="{{ url_for('trigger_sos') }}"
             method="POST"
-            onsubmit="return confirm('🚨 ARE YOU SURE? \n\nThis will broadcast an emergency SOS alert to all trusted helpers within 1km.');"
+            onsubmit="return lifelineSubmitSOS(event);"
           >
+            <input type="hidden" name="lat" id="sos-lat" />
+            <input type="hidden" name="lng" id="sos-lng" />
             <button
               type="submit"
               class="animate-pulse bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-[0_0_10px_rgba(220,38,38,0.7)] border border-red-500 transition hover:scale-105 flex items-center gap-1 mx-2"
@@ -188,7 +210,7 @@
 
           <a
             href="{{ url_for('dashboard') }}"
-            class="hidden md:inline text-xs md:text-sm px-3 py-1.5 rounded-full border border-slate-700 hover:border-emerald-400 hover:text-emerald-300 transition"
+            class="text-xs md:text-sm px-3 py-1.5 rounded-full border border-slate-700 hover:border-emerald-400 hover:text-emerald-300 transition"
           >
             Dashboard
           </a>
@@ -233,6 +255,48 @@
 
     <main class="flex-1 w-full">{% block content %}{% endblock %}</main>
 
+    <div id="sos-call-modal" class="hidden fixed inset-0 z-50">
+      <div class="absolute inset-0 bg-slate-950/80"></div>
+      <div class="relative w-full h-full flex items-center justify-center p-6">
+        <div
+          class="w-full max-w-md rounded-2xl border border-rose-500/30 bg-slate-900 p-6 shadow-xl"
+        >
+          <div class="flex items-start gap-3">
+            <div
+              class="w-10 h-10 rounded-xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-300"
+            >
+              🚨
+            </div>
+            <div class="flex-1">
+              <p class="text-sm font-bold text-slate-100">
+                No helper response yet
+              </p>
+              <p id="sos-call-text" class="text-xs text-slate-300 mt-1">
+                Calling your emergency number…
+              </p>
+            </div>
+          </div>
+
+          <div class="mt-4 flex gap-2">
+            <a
+              id="sos-call-link"
+              href="#"
+              class="flex-1 text-center bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold py-2 rounded-xl transition"
+            >
+              Calling…
+            </a>
+            <button
+              id="sos-call-close"
+              type="button"
+              class="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold py-2 rounded-xl border border-slate-700 transition"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <footer class="border-t border-slate-800 bg-slate-950 mt-auto">
       <div
         class="w-full px-6 md:px-12 py-4 flex flex-col md:flex-row justify-between items-center gap-2 text-[11px] text-slate-500"
@@ -246,7 +310,306 @@
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
     <script src="{{ url_for('static', filename='js/fcm.js') }}"></script>
 
+    <script type="application/json" id="lifeline-page-config">
+      {{ {
+            'emergency_number': ((current_user.emergency_number if current_user else '') or ''),
+            'active_sos_request_id': session.get('active_sos_request_id')
+          }|tojson }}
+    </script>
+
     <script>
+      const LIFELINE_PAGE_CONFIG = (() => {
+        try {
+          const el = document.getElementById("lifeline-page-config");
+          return el ? JSON.parse(el.textContent || "{}") : {};
+        } catch (e) {
+          return {};
+        }
+      })();
+
+      const LIFELINE_EMERGENCY_NUMBER =
+        LIFELINE_PAGE_CONFIG.emergency_number || "";
+      const LIFELINE_ACTIVE_SOS_REQUEST_ID =
+        LIFELINE_PAGE_CONFIG.active_sos_request_id ?? null;
+
+      function lifelineGetQueryParamInt(name) {
+        const params = new URLSearchParams(window.location.search);
+        const v = params.get(name);
+        if (!v) return null;
+        const n = parseInt(v, 10);
+        return Number.isFinite(n) ? n : null;
+      }
+
+      function lifelineGetQueryParamBool(name) {
+        const params = new URLSearchParams(window.location.search);
+        const v = params.get(name);
+        return v === "1" || v === "true";
+      }
+
+      function lifelineNormalizePhoneForTel(number) {
+        if (!number) return "";
+        const trimmed = String(number).trim();
+        const keepPlus = trimmed.startsWith("+");
+        const digits = trimmed.replace(/[^0-9]/g, "");
+        return keepPlus ? `+${digits}` : digits;
+      }
+
+      function openSosCallModal(number) {
+        const modal = document.getElementById("sos-call-modal");
+        const link = document.getElementById("sos-call-link");
+        const text = document.getElementById("sos-call-text");
+        const closeBtn = document.getElementById("sos-call-close");
+        if (!modal || !link || !text || !closeBtn) return;
+
+        if (number) {
+          const tel = lifelineNormalizePhoneForTel(number);
+          const href = tel ? `tel:${tel}` : `tel:${number}`;
+          link.href = href;
+          link.textContent = "Calling…";
+          text.textContent = `Calling ${number}…`;
+
+          // Attempt to open the dialer automatically.
+          // Browsers may block without a user gesture; the button remains as fallback.
+          setTimeout(() => {
+            try {
+              window.location.href = href;
+            } catch (e) {}
+          }, 300);
+        } else {
+          link.href = "{{ url_for('profile') }}";
+          link.textContent = "Open profile";
+          text.textContent =
+            "No emergency number saved. Add one in your profile to enable auto-call.";
+        }
+
+        modal.classList.remove("hidden");
+
+        const close = () => modal.classList.add("hidden");
+        closeBtn.onclick = close;
+        modal.addEventListener(
+          "click",
+          (e) => {
+            if (e.target === modal) close();
+          },
+          { once: true }
+        );
+      }
+      window.openSosCallModal = openSosCallModal;
+
+      async function lifelineStartSosFallbackPoll(sosRequestId) {
+        if (!sosRequestId) return;
+        if (window.__lifelineSosFallbackPollActive) return;
+        window.__lifelineSosFallbackPollActive = true;
+
+        const loop = async () => {
+          try {
+            const resp = await fetch(`/api/sos/${sosRequestId}/status`, {
+              credentials: "include",
+            });
+            const data = await resp.json().catch(() => ({}));
+
+            if (!resp.ok) {
+              sessionStorage.removeItem("lifeline_active_sos_request_id");
+              sessionStorage.removeItem("lifeline_active_sos_called");
+              window.__lifelineSosFallbackPollActive = false;
+              return;
+            }
+
+            if (data.responded) {
+              sessionStorage.removeItem("lifeline_active_sos_request_id");
+              sessionStorage.removeItem("lifeline_active_sos_called");
+              window.__lifelineSosFallbackPollActive = false;
+              return;
+            }
+
+            if (data.should_call) {
+              const alreadyCalled =
+                sessionStorage.getItem("lifeline_active_sos_called") === "1";
+              if (!alreadyCalled) {
+                sessionStorage.setItem("lifeline_active_sos_called", "1");
+                openSosCallModal(LIFELINE_EMERGENCY_NUMBER);
+              }
+              // stop polling after triggering the modal
+              window.__lifelineSosFallbackPollActive = false;
+              return;
+            }
+          } catch (e) {
+            // ignore transient failures
+          }
+
+          setTimeout(loop, 5000);
+        };
+
+        setTimeout(loop, 5000);
+      }
+
+      function lifelineSubmitSOS(e) {
+        try {
+          if (e && e.preventDefault) e.preventDefault();
+
+          const ok = confirm(
+            "🚨 ARE YOU SURE?\n\nThis will broadcast an emergency SOS alert to all trusted helpers."
+          );
+          if (!ok) return false;
+
+          const form = (e && e.target) || document.getElementById("sosForm");
+          if (!form) return false;
+
+          const latInput = document.getElementById("sos-lat");
+          const lngInput = document.getElementById("sos-lng");
+
+          const submitNow = () => {
+            try {
+              form.submit();
+            } catch (err) {
+              if (form.requestSubmit) form.requestSubmit();
+            }
+          };
+
+          if (!navigator.geolocation) {
+            alert(
+              "Location is required for SOS. Your browser does not support GPS."
+            );
+            return false;
+          }
+
+          if (!window.isSecureContext) {
+            const sendAnyway = confirm(
+              "Your browser is blocking GPS because this page is not a secure context.\n\nOpen the app using http://localhost:5000 (on this computer) or HTTPS to allow GPS.\n\nSend SOS anyway using your last saved/default location?"
+            );
+            if (!sendAnyway) return false;
+            submitNow();
+            return false;
+          }
+
+          // Collect a more accurate fix by sampling watchPosition briefly.
+          // This reduces the chance of sending an approximate/wrong SOS location.
+          let best = null; // { lat, lng, acc }
+          let finished = false;
+          let watchId = null;
+          let lastGeoError = null;
+          const targetAccuracyM = 30;
+          const sampleWindowMs = 4500;
+
+          const finalize = () => {
+            if (finished) return;
+            finished = true;
+            try {
+              if (watchId != null) navigator.geolocation.clearWatch(watchId);
+            } catch (e) {}
+
+            if (!best) {
+              const sendAnyway = confirm(
+                "Could not get your precise location.\n\nSend SOS anyway using your last saved/default location?"
+              );
+              if (!sendAnyway) return;
+              if (latInput) latInput.value = "";
+              if (lngInput) lngInput.value = "";
+              submitNow();
+              return;
+            }
+            if (latInput) latInput.value = String(best.lat);
+            if (lngInput) lngInput.value = String(best.lng);
+            submitNow();
+          };
+
+          watchId = navigator.geolocation.watchPosition(
+            (pos) => {
+              const acc = Number(pos.coords.accuracy);
+              const cur = {
+                lat: pos.coords.latitude,
+                lng: pos.coords.longitude,
+                acc: Number.isFinite(acc) ? acc : 999999,
+              };
+              if (!best || cur.acc < best.acc) best = cur;
+
+              if (best && best.acc <= targetAccuracyM) {
+                finalize();
+              }
+            },
+            (err) => {
+              lastGeoError = err || null;
+
+              // If permission denied, give a clear message and stop.
+              if (err && err.code === 1) {
+                try {
+                  if (watchId != null)
+                    navigator.geolocation.clearWatch(watchId);
+                } catch (e) {}
+                const sendAnyway = confirm(
+                  "Location permission was denied.\n\nEnable location permission (Precise) for accuracy.\n\nSend SOS anyway using your last saved/default location?"
+                );
+                if (!sendAnyway) return;
+                if (latInput) latInput.value = "";
+                if (lngInput) lngInput.value = "";
+                submitNow();
+                return;
+              }
+
+              // Fallback: try a single fix (some devices fail watchPosition but allow getCurrentPosition)
+              try {
+                navigator.geolocation.getCurrentPosition(
+                  (pos) => {
+                    const acc = Number(pos.coords.accuracy);
+                    best = {
+                      lat: pos.coords.latitude,
+                      lng: pos.coords.longitude,
+                      acc: Number.isFinite(acc) ? acc : 999999,
+                    };
+                    finalize();
+                  },
+                  () => {
+                    finalize();
+                  },
+                  { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+                );
+              } catch (e) {
+                finalize();
+              }
+            },
+            { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+          );
+
+          setTimeout(finalize, sampleWindowMs);
+
+          return false;
+        } catch (err) {
+          return true;
+        }
+      }
+
+      // If an SOS is active, keep the fallback working across pages.
+      document.addEventListener("DOMContentLoaded", () => {
+        try {
+          if (LIFELINE_ACTIVE_SOS_REQUEST_ID) {
+            sessionStorage.setItem(
+              "lifeline_active_sos_request_id",
+              String(LIFELINE_ACTIVE_SOS_REQUEST_ID)
+            );
+            if (!sessionStorage.getItem("lifeline_active_sos_called")) {
+              sessionStorage.setItem("lifeline_active_sos_called", "0");
+            }
+          }
+
+          const focusId = lifelineGetQueryParamInt("focus_request_id");
+          if (focusId && lifelineGetQueryParamBool("sos_caller")) {
+            sessionStorage.setItem(
+              "lifeline_active_sos_request_id",
+              String(focusId)
+            );
+            sessionStorage.setItem("lifeline_active_sos_called", "0");
+          }
+
+          const stored = sessionStorage.getItem(
+            "lifeline_active_sos_request_id"
+          );
+          const activeId = stored ? parseInt(stored, 10) : null;
+          if (Number.isFinite(activeId)) {
+            lifelineStartSosFallbackPoll(activeId);
+          }
+        } catch (e) {}
+      });
+
       document.addEventListener("DOMContentLoaded", function () {
         const notifBtn = document.getElementById("notif-btn");
         const notifDropdown = document.getElementById("notif-dropdown");
@@ -290,9 +653,6 @@
             const data = await response.json();
 
             renderStack(data);
-
-            // IMPORTANT FIX: Fetch the actual UNREAD COUNT separately
-            // We do NOT use data.length here because 'data' is the whole list (read + unread)
             fetchUnreadCount();
           } catch (error) {
             console.error("Notif Error:", error);
@@ -373,10 +733,7 @@
       // MARK ALL READ FUNCTION
       async function markAllRead() {
         try {
-          // 1. Tell backend to mark them read
           await fetch("/api/notifications/read", { method: "POST" });
-
-          // 2. Immediately hide badge on frontend
           const badge = document.getElementById("notif-badge");
           if (badge) badge.classList.add("hidden");
         } catch (e) {}
