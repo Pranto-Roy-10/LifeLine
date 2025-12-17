@@ -1381,13 +1381,6 @@ def build_otp_email_html(user, code):
 def emotional_ping_placeholder():
     return render_template("emotional_ping.html")
 
-@app.route("/emotional")
-@login_required
-def emotional():
-    return redirect(url_for("emotional_ping"))
-
-
-
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime
 
