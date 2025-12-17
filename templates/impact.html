@@ -1,0 +1,129 @@
+{% extends "base.html" %} {% block title %}Impact – LifeLine{% endblock %} {%
+block content %}
+<div class="w-full max-w-6xl mx-auto px-6 py-10 space-y-6">
+  <div
+    class="flex flex-col md:flex-row md:items-center md:justify-between gap-4"
+  >
+    <div>
+      <h1 class="text-2xl font-bold text-slate-100">
+        {{ title or 'Impact dashboard' }}
+      </h1>
+      <p class="text-sm text-slate-400 mt-1">
+        Track volunteer hours, donated items and environmental impact.
+      </p>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div class="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+      <p class="text-[11px] text-slate-400">Total hours</p>
+      <p id="impact-hours" class="text-2xl font-bold text-emerald-300 mt-1">
+        —
+      </p>
+    </div>
+    <div class="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+      <p class="text-[11px] text-slate-400">Items donated</p>
+      <p id="impact-items" class="text-2xl font-bold text-sky-300 mt-1">—</p>
+    </div>
+    <div class="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+      <p class="text-[11px] text-slate-400">Carbon saved</p>
+      <p id="impact-carbon" class="text-2xl font-bold text-amber-300 mt-1">—</p>
+    </div>
+    <div class="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+      <p class="text-[11px] text-slate-400">People helped</p>
+      <p id="impact-helped" class="text-2xl font-bold text-slate-200 mt-1">—</p>
+    </div>
+  </div>
+
+  <div class="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="text-sm font-semibold text-slate-100">Impact over time</h2>
+      <p class="text-[11px] text-slate-400">Last 6 months</p>
+    </div>
+    <div class="w-full" style="height: 320px">
+      <canvas id="impactChart"></canvas>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  async function loadImpactTotals() {
+    try {
+      const res = await fetch("/api/community/impact");
+      if (!res.ok) return;
+      const data = await res.json();
+      document.getElementById("impact-hours").innerText = data.total_hours ?? 0;
+      document.getElementById("impact-items").innerText = data.total_items ?? 0;
+      document.getElementById("impact-carbon").innerText =
+        data.total_carbon ?? 0;
+      document.getElementById("impact-helped").innerText =
+        data.total_helped ?? 0;
+    } catch (e) {}
+  }
+
+  async function loadImpactChart() {
+    try {
+      const res = await fetch("/api/community/impact-over-time?months=6");
+      if (!res.ok) return;
+      const data = await res.json();
+
+      const ctx = document.getElementById("impactChart");
+      if (!ctx) return;
+
+      new Chart(ctx, {
+        type: "line",
+        data: {
+          labels: data.labels || [],
+          datasets: [
+            {
+              label: "Hours",
+              data: data.hours || [],
+              borderColor: "rgb(16, 185, 129)",
+              backgroundColor: "rgba(16, 185, 129, 0.15)",
+              tension: 0.35,
+              fill: true,
+            },
+            {
+              label: "Items",
+              data: data.items || [],
+              borderColor: "rgb(59, 130, 246)",
+              backgroundColor: "rgba(59, 130, 246, 0.15)",
+              tension: 0.35,
+              fill: true,
+            },
+            {
+              label: "Carbon",
+              data: data.carbon || [],
+              borderColor: "rgb(245, 158, 11)",
+              backgroundColor: "rgba(245, 158, 11, 0.15)",
+              tension: 0.35,
+              fill: true,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { labels: { color: "#cbd5e1" } },
+          },
+          scales: {
+            x: {
+              ticks: { color: "#94a3b8" },
+              grid: { color: "rgba(148,163,184,0.12)" },
+            },
+            y: {
+              ticks: { color: "#94a3b8" },
+              grid: { color: "rgba(148,163,184,0.12)" },
+            },
+          },
+        },
+      });
+    } catch (e) {}
+  }
+
+  loadImpactTotals();
+  loadImpactChart();
+</script>
+{% endblock %}

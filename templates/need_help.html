@@ -313,14 +313,15 @@ content %}
               {% endif %}
             </div>
 
-            {% set flag = flagged_map.get(post.id) if flagged_map is defined and
-            flagged_map else None %} {% set reasons = (flag.get('reasons') if
-            flag is mapping else '') | default('', true) %} {% set reasons_l =
-            reasons|lower %} {% set is_duplicate = ('possible duplicate' in
-            reasons_l) or ('duplicate of request' in reasons_l) or ('flagged
-            duplicate' in reasons_l) %} {% set is_scam = ('scam-like keywords'
-            in reasons_l) or ('contains scam' in reasons_l) %} {% if flag and
-            (is_scam or is_duplicate) %} {% if is_scam and is_duplicate %}
+            {% if not is_sos %} {% set flag = flagged_map.get(post.id) if
+            flagged_map is defined and flagged_map else None %} {% set reasons =
+            (flag.get('reasons') if flag is mapping else '') | default('', true)
+            %} {% set reasons_l = reasons|lower %} {% set is_duplicate =
+            ('possible duplicate' in reasons_l) or ('duplicate of request' in
+            reasons_l) or ('flagged duplicate' in reasons_l) %} {% set is_scam =
+            ('scam-like keywords' in reasons_l) or ('contains scam' in
+            reasons_l) %} {% if flag and (is_scam or is_duplicate) %} {% if
+            is_scam and is_duplicate %}
             <div
               class="mt-2 p-3 rounded-xl border border-sky-400/60 bg-sky-500/10"
             >
@@ -350,7 +351,7 @@ content %}
                 recommended: Verify before offering help
               </p>
             </div>
-            {% endif %} {% endif %}
+            {% endif %} {% endif %} {% endif %}
 
             <div class="mt-2 text-[12px] text-slate-300 line-clamp-2">
               {{ post.description }}
@@ -377,6 +378,96 @@ content %}
                 <span class="font-semibold">Contact via:</span> {{
                 post.contact_method }}
               </p>
+              {% endif %} {% if is_sos and current_user and post.user_id ==
+              current_user.id %}
+              <div
+                class="mt-2 rounded-xl border border-slate-700 bg-slate-900/40 p-3"
+              >
+                <p class="text-[11px] text-slate-200 font-bold mb-2">
+                  SOS responders
+                </p>
+                {% if post.sos_responses and post.sos_responses|length > 0 %}
+                <div class="space-y-2">
+                  {% for resp in post.sos_responses %}
+                  <div
+                    class="rounded-lg border border-slate-700 bg-slate-950/60 p-2"
+                  >
+                    <div class="flex items-center justify-between gap-2">
+                      <div class="flex items-center gap-2 min-w-0">
+                        <div
+                          class="w-6 h-6 rounded-full bg-slate-700 overflow-hidden"
+                        >
+                          <img
+                            src="{{ (resp.helper.profile_photo if resp.helper and resp.helper.profile_photo else url_for('static', filename='uploads/profile_photos/default.png')) }}"
+                            class="w-full h-full object-cover"
+                          />
+                        </div>
+                        <span
+                          class="text-[12px] font-semibold text-slate-200 truncate"
+                          >{{ resp.helper.name if resp.helper else ('User #' ~
+                          resp.helper_id) }}</span
+                        >
+                      </div>
+                      <a
+                        href="{{ url_for('chat_with_user', other_user_id=resp.helper_id) }}"
+                        class="text-[11px] bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded border border-slate-700"
+                      >
+                        Chat
+                      </a>
+                    </div>
+
+                    <form
+                      action="{{ url_for('complete_sos', request_id=post.id, helper_id=resp.helper_id) }}"
+                      method="POST"
+                      class="mt-2 space-y-2"
+                    >
+                      <div class="flex gap-1">
+                        {% for i in range(1, 6) %}
+                        <label class="cursor-pointer">
+                          <input type="radio" name="rating" value="{{ i }}"
+                          class="sr-only peer" {% if i==5 %}checked{% endif %}>
+                          <span
+                            class="text-slate-600 peer-checked:text-yellow-400 text-base hover:text-yellow-300 transition"
+                            >★</span
+                          >
+                        </label>
+                        {% endfor %}
+                      </div>
+                      <div>
+                        <label class="block text-[10px] text-slate-400 mb-1"
+                          >Duration (Hours)</label
+                        >
+                        <input
+                          type="number"
+                          name="hours"
+                          step="0.5"
+                          min="0.5"
+                          value="1"
+                          class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-[11px] text-white focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                      <textarea
+                        name="comment"
+                        rows="2"
+                        placeholder="How did they help?"
+                        class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-[11px] focus:outline-none focus:border-emerald-500"
+                      ></textarea>
+                      <button
+                        type="submit"
+                        class="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold py-2 rounded"
+                      >
+                        Mark SOS Complete & Review
+                      </button>
+                    </form>
+                  </div>
+                  {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-[11px] text-slate-500">
+                  Waiting for responders…
+                </p>
+                {% endif %}
+              </div>
               {% endif %}
             </div>
 

@@ -490,9 +490,13 @@
 
         if (!isJson) {
           const text = await res.text().catch(() => "");
-          if (text.toLowerCase().includes("<html"))
+          // If Flask-Login redirected us to an HTML login page, treat as unauthorized.
+          if ((text || "").toLowerCase().includes("<html")) {
             return { __unauthorized: true, status: 401 };
-          return { __error: true, status: 500, text };
+          }
+          // Some endpoints may return 204/empty or plain-text on success.
+          // Treat any 2xx non-HTML response as success to avoid false "Failed".
+          return { message: text || "OK" };
         }
 
         return await res.json().catch(() => ({}));

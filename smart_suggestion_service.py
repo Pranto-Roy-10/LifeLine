@@ -163,6 +163,7 @@ class DemandAnalyzer:
     @staticmethod
     def get_weather_suggestions(weather_condition: str) -> List[str]:
         """Get categories suggested by weather condition"""
+        weather_condition = weather_condition or ""
         suggestions = set()
         for weather, categories in DemandAnalyzer.WEATHER_CATEGORY_MAP.items():
             if weather.lower() in weather_condition.lower():
