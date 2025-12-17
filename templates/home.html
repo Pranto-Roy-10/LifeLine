@@ -346,34 +346,6 @@ block content %}
         <p class="text-xs text-slate-400 mb-1">CO₂ Saved</p>
         <p class="text-3xl font-bold text-violet-300 mb-1" id="total-carbon">0 kg</p>
         <p class="text-[11px] text-slate-500">Carbon emissions reduced through shared rides.</p>
-
-    <div class="grid md:grid-cols-3 gap-6 text-sm">
-      <div class="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
-        <p class="text-xs text-slate-400 mb-1">Neighbors helped (demo)</p>
-        <p class="text-3xl font-bold text-emerald-300 mb-1">0</p>
-        <p class="text-[11px] text-slate-500">
-          This will update once the backend is connected.
-        </p>
-      </div>
-
-      <div class="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
-        <p class="text-xs text-slate-400 mb-1">
-          Volunteer time recorded (demo)
-        </p>
-        <p class="text-3xl font-bold text-sky-300 mb-1">0 h</p>
-        <p class="text-[11px] text-slate-500">
-          Track your hours and build a verified history.
-        </p>
-      </div>
-
-      <div class="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
-        <p class="text-xs text-slate-400 mb-1">
-          Estimated CO₂ saved via shared rides (demo)
-        </p>
-        <p class="text-3xl font-bold text-violet-300 mb-1">0 kg</p>
-        <p class="text-[11px] text-slate-500">
-          Shared rides reduce cost and climate impact.
-        </p>
       </div>
     </div>
 
@@ -428,14 +400,32 @@ block content %}
           type: 'line',
           data: {
             labels: data.labels,
-            datasets: [{
-              label: 'Volunteer Hours',
-              data: data.hours,
-              borderColor: '#0ea5e9',
-              backgroundColor: 'rgba(14, 165, 233, 0.1)',
-              fill: true,
-              tension: 0.4
-            }]
+            datasets: [
+              {
+                label: 'Volunteer Hours',
+                data: data.hours,
+                borderColor: '#0ea5e9',
+                backgroundColor: 'rgba(14, 165, 233, 0.1)',
+                fill: true,
+                tension: 0.4
+              },
+              {
+                label: 'Items Shared',
+                data: data.items,
+                borderColor: '#f59e0b',
+                backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                fill: true,
+                tension: 0.4
+              },
+              {
+                label: 'CO₂ Saved (kg)',
+                data: data.carbon,
+                borderColor: '#10b981',
+                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                fill: true,
+                tension: 0.4
+              }
+            ]
           },
           options: {
             responsive: true,
@@ -462,10 +452,6 @@ block content %}
 
   // Refresh on page load and then every 30 seconds
   document.addEventListener('DOMContentLoaded', function() {
-
-  // Refresh on page load and then every 10 seconds
-  document.addEventListener("DOMContentLoaded", function () {
-
     // Initial refresh
     refreshResourcesWidget();
     refreshCommunityImpact();
@@ -473,7 +459,6 @@ block content %}
 
     // Refresh resources widget every 10 seconds
     setInterval(refreshResourcesWidget, 10000);
-
 
     // Refresh impact data every 30 seconds
     setInterval(refreshCommunityImpact, 30000);

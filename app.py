@@ -3015,8 +3015,16 @@ def dashboard():
     chart_trust = [stats["trust"]]
     chart_kindness = [stats["kindness"]]
 
-    # User's created events
-    user_events = Event.query.filter_by(creator_id=user.id).order_by(Event.date.desc()).limit(5).all()
+    # Get events where user showed interest OR events they created
+    interested_event_ids = [ei.event_id for ei in EventInterest.query.filter_by(user_id=user.id).all()]
+    
+    # Combine: events user is interested in OR events user created
+    user_events = Event.query.filter(
+        db.or_(
+            Event.id.in_(interested_event_ids) if interested_event_ids else False,
+            Event.creator_id == user.id
+        )
+    ).filter_by(completed=False).order_by(Event.date.desc()).limit(5).all()
 
     return render_template(
         "dashboard.html",
@@ -3429,30 +3437,20 @@ def api_impact_stories():
 # 8) Community-wide impact summary
 @app.route("/api/community/impact", methods=["GET"])
 def api_community_impact():
-    # Total hours volunteered across all users
-    total_hours = db.session.query(func.coalesce(func.sum(func.julianday(Request.completed_at) - func.julianday(Request.created_at)), 0.0)).filter(
-        Request.status == "completed",
-        Request.completed_at != None
-    ).scalar() or 0.0
-    total_hours = float(total_hours) * 24  # Convert days to hours
-
-    # Total items shared
-    total_items = Resource.query.count()
-
-    # Total carbon saved (estimate: each ride share saves 2.5 kg CO2)
-    ride_requests = Request.query.filter(Request.category == "ride", Request.status == "completed").count()
-    total_carbon = ride_requests * 2.5
-
-    # Total people helped
-    total_helped = db.session.query(func.count(func.distinct(Request.user_id))).filter(
-        Request.status == "completed",
-        Request.completed_at != None,
-        Request.user_id != None
-    ).scalar() or 0
+    # Get all impact logs
+    all_impacts = ImpactLog.query.all()
+    
+    # Calculate totals from ImpactLog table
+    total_hours = sum(impact.hours for impact in all_impacts)
+    total_items = sum(impact.items for impact in all_impacts)
+    total_carbon = sum(impact.carbon for impact in all_impacts)
+    
+    # Total people helped (unique helpers who logged impact)
+    total_helped = db.session.query(func.count(func.distinct(ImpactLog.helper_id))).scalar() or 0
 
     return jsonify({
         "total_hours": round(total_hours, 1),
-        "total_items": total_items,
+        "total_items": int(total_items),
         "total_carbon": round(total_carbon, 1),
         "total_helped": total_helped
     })
@@ -3465,39 +3463,33 @@ def api_community_impact_over_time():
     end_date = datetime.utcnow()
     start_date = end_date - timedelta(days=months*30)
 
-    # Monthly hours
+    # Get monthly impact data from ImpactLog
     monthly_data = db.session.query(
-        func.strftime('%Y-%m', Request.completed_at).label('month'),
-        func.coalesce(func.sum(func.julianday(Request.completed_at) - func.julianday(Request.created_at)), 0.0).label('hours')
+        func.strftime('%Y-%m', ImpactLog.created_at).label('month'),
+        func.sum(ImpactLog.hours).label('hours'),
+        func.sum(ImpactLog.items).label('items'),
+        func.sum(ImpactLog.carbon).label('carbon')
     ).filter(
-        Request.status == "completed",
-        Request.completed_at >= start_date,
-        Request.completed_at <= end_date
-    ).group_by(func.strftime('%Y-%m', Request.completed_at)).order_by(func.strftime('%Y-%m', Request.completed_at)).all()
+        ImpactLog.created_at >= start_date,
+        ImpactLog.created_at <= end_date
+    ).group_by(func.strftime('%Y-%m', ImpactLog.created_at)).order_by(func.strftime('%Y-%m', ImpactLog.created_at)).all()
 
     labels = []
     hours_data = []
+    items_data = []
+    carbon_data = []
+    
     for row in monthly_data:
         labels.append(row.month)
-        hours_data.append(round(float(row.hours) * 24, 1))  # Convert to hours
-
-    # Fill missing months with 0
-    current = start_date.replace(day=1)
-    while current <= end_date:
-        month_str = current.strftime('%Y-%m')
-        if month_str not in labels:
-            labels.append(month_str)
-            hours_data.append(0.0)
-        current += timedelta(days=32)
-        current = current.replace(day=1)
-
-    # Sort by month
-    combined = sorted(zip(labels, hours_data), key=lambda x: x[0])
-    labels, hours_data = zip(*combined) if combined else ([], [])
+        hours_data.append(round(float(row.hours or 0), 1))
+        items_data.append(int(row.items or 0))
+        carbon_data.append(round(float(row.carbon or 0), 1))
 
     return jsonify({
         "labels": list(labels),
-        "hours": list(hours_data)
+        "hours": list(hours_data),
+        "items": list(items_data),
+        "carbon": list(carbon_data)
     })
 
 @app.route("/impact")
