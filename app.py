@@ -176,9 +176,15 @@ class User(db.Model):
     emergency_number = db.Column(db.String(30), nullable=True)
     dob = db.Column(db.String(20))  # or Date type if you prefer
     
+
+    fcm_token = db.Column(db.String(512), nullable=True)
+
+
     fcm_tokens = db.relationship('FCMToken', backref='user', lazy='dynamic')
-
-
+    is_premium = db.Column(db.Boolean, default=False)
+    premium_expiry = db.Column(db.DateTime, nullable=True)
+    is_admin = db.Column(db.Boolean, default=False)
+    
 
     def set_password(self, password: str):
         self.password_hash = generate_password_hash(password)
@@ -209,7 +215,22 @@ class User(db.Model):
             return "Bronze Helper", "text-amber-300"
         else:
             return "Newbie", "text-slate-400"
+
         
+class Payment(db.Model):
+    __tablename__ = "payments"
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    
+    amount = db.Column(db.Float, nullable=False)
+    bkash_number = db.Column(db.String(20), nullable=False) # User's phone number
+    trx_id = db.Column(db.String(50), unique=True, nullable=False) # The ID they enter
+    
+    status = db.Column(db.String(20), default="pending") # pending, approved, rejected
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    user = db.relationship("User", backref="payments")    
+
 
 class Request(db.Model):
     __tablename__ = "requests"
@@ -292,9 +313,12 @@ class Request(db.Model):
                 d["distance_km"] = None
         return d
 
+
+
 # ------------------ MODEL: Impact Story ------------------
 class ImpactStory(db.Model):
     __tablename__ = "impact_stories"
+
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
@@ -592,6 +616,8 @@ class Offer(db.Model):
     body = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+
+
     user = db.relationship("User", backref="impact_stories")
 
     # Relationships
@@ -625,6 +651,16 @@ class Review(db.Model):
     
     # NEW FIELD: Store the actual hours worked
     duration_hours = db.Column(db.Float, default=1.0) 
+
+
+
+    # AI Analysis Results
+    sentiment_score = db.Column(db.Float, default=0.0)
+    is_flagged_fake = db.Column(db.Boolean, default=False)
+    flag_reason = db.Column(db.String(255), nullable=True)
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
 
 
 
@@ -1036,6 +1072,7 @@ def update_user_scores(user):
         Request.completed_at != None
     ).count()
 
+
     # Sum total hours volunteered
     rows = Request.query.filter(
         Request.helper_id == user.id,
@@ -1063,7 +1100,32 @@ def update_user_scores(user):
 def send_push_to_user(user: User, title: str, body: str, data: dict | None = None):
     """Send a push notification to the user (FCM)."""
     return send_fcm_to_user(user, title=title, body=body, data=data)
+def check_post_limit(user):
+    """
+    Returns True if user can post, False if limit reached.
+    Rules: Premium = Unlimited. Free = 2 posts per 21 days.
+    """
+    if not user: return True # Guests handled separately or allowed
+    
+    # 1. Premium Check
+    if user.is_premium:
+        if user.premium_expiry and user.premium_expiry > datetime.utcnow():
+            return True
+        else:
+            # Expired? Downgrade automatically
+            user.is_premium = False
+            db.session.commit()
 
+    # 2. Free User Logic
+    three_weeks_ago = datetime.utcnow() - timedelta(days=21)
+    
+    # Count posts in last 21 days
+    recent_posts = Request.query.filter(
+        Request.user_id == user.id,
+        Request.created_at >= three_weeks_ago
+    ).count()
+
+    return recent_posts < 2
         
 def send_fcm_notification(token, title, body, data=None):
     if not token:
@@ -2045,8 +2107,12 @@ def need_help():
     - If not logged in     -> use Emergency Guest user (quick help)
     """
     user = current_user()
-
+    if user:
+        can_post = check_post_limit(user)
     if request.method == "POST":
+        if user and not can_post:
+            flash("Free limit reached (2 posts/3 weeks). Please go Premium!", "error")
+            return redirect(url_for('plans'))
         title = request.form.get("title", "").strip()
         category = request.form.get("category", "").strip()
 
@@ -2172,6 +2238,7 @@ def need_help():
         total_need=total_need,
         total_offer=total_offer,
         categories=categories,
+        can_post=can_post,
         google_maps_key=GOOGLE_MAPS_API_KEY,
     )
 
@@ -2279,6 +2346,7 @@ def can_help():
         categories=categories,
         google_maps_key=GOOGLE_MAPS_API_KEY,
     )
+
 
 
     # Cannot offer help to your own post
@@ -2467,6 +2535,7 @@ def complete_request(request_id):
     return redirect(url_for("dashboard"))
 
 
+
 @app.route("/requests")
 @login_required
 def list_requests():
@@ -2495,32 +2564,19 @@ def list_requests():
     user = current_user()
     offered_ids = {r.id for r in Request.query.filter(Request.helper_id == user.id).all()}
 
-    sos_responded_ids = set()
-    if user:
-        my_sos = SOSResponse.query.filter_by(helper_id=user.id).all()
-        sos_responded_ids = {r.request_id for r in my_sos}
-
-    sos_response_counts = {}
-    try:
-        rows = (
-            db.session.query(SOSResponse.request_id, func.count(SOSResponse.id))
-            .group_by(SOSResponse.request_id)
-            .all()
-        )
-        sos_response_counts = {int(rid): int(cnt) for rid, cnt in rows}
-    except Exception:
-        sos_response_counts = {}
-
     return render_template(
         "list_requests.html",
         requests=requests_list,
         mode=mode,
+
 
         offered_ids=offered_ids,
 
         offered_ids=offered_ids,  # <--- Pass this to the HTML
         sos_responded_ids=sos_responded_ids,
         sos_response_counts=sos_response_counts,
+
+        offered_ids=offered_ids,
 
     )
 
@@ -2539,10 +2595,27 @@ def make_offer(request_id):
         flash("You cannot offer help on your own request.", "error")
         return redirect(url_for("list_requests"))
 
+
     # Assign the helper
     req.helper_id = user.id
     req.status = "claimed"  # or "in_progress"
     db.session.commit()
+
+@app.route("/debug/fcm-users")
+def debug_fcm_users():
+    users = User.query.all()
+    data = []
+    for u in users:
+        tokens = [t.token for t in u.fcm_tokens.all()]  # relationship
+        data.append({
+            "id": u.id,
+            "email": u.email,
+            "is_trusted_helper": bool(u.is_trusted_helper),
+            "token_count": len(tokens),
+            "tokens_preview": [tok[:20] + "..." for tok in tokens[:3]],  # show first 3 previews
+        })
+    return jsonify(data)
+
 
     flash("You have offered to help! The requester will be notified.", "success")
     return redirect(url_for("list_requests"))
@@ -2755,6 +2828,32 @@ def update_impact_from_event(event, user):
 
 
 
+    sos_responded_ids = set()
+    if user:
+        my_sos = SOSResponse.query.filter_by(helper_id=user.id).all()
+        sos_responded_ids = {r.request_id for r in my_sos}
+
+    sos_response_counts = {}
+    try:
+        rows = (
+            db.session.query(SOSResponse.request_id, func.count(SOSResponse.id))
+            .group_by(SOSResponse.request_id)
+            .all()
+        )
+        sos_response_counts = {int(rid): int(cnt) for rid, cnt in rows}
+    except Exception:
+        sos_response_counts = {}
+
+    return render_template(
+        "list_requests.html",
+        requests=requests_list,
+        mode=mode,
+        offered_ids=offered_ids,  # <--- Pass this to the HTML
+        sos_responded_ids=sos_responded_ids,
+        sos_response_counts=sos_response_counts,
+    )
+
+
 # ------------------ CHAT PAGES & API ------------------
 @app.route("/chat/<int:other_user_id>")
 @login_required
@@ -2888,6 +2987,10 @@ def api_nearby_requests():
         print(f"[API] Error in api_nearby_requests: {e}")
         return jsonify({"error": str(e)}), 500
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> 52309700888cf76114c080b53109095291fab29d
 
 @app.route("/dashboard")
 @login_required
@@ -3050,6 +3153,227 @@ def api_dashboard_impact_over_time():
         data.append(round(hours, 2))
     return jsonify({"labels": labels, "data": data})
 
+def update_user_location():
+    """
+    Updates the logged-in users live location.
+    Required for receiving 'nearby' help requests.
+    """
+    data = request.get_json() or {}
+    try:
+        lat = float(data.get("lat"))
+        lng = float(data.get("lng"))
+        
+        user = current_user()
+        user.lat = lat
+        user.lng = lng
+        db.session.commit()
+        
+        return jsonify({"ok": True})
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid location data"}), 400
+    
+
+# In app.py
+# --- PLANS PAGE ---
+@app.route("/plans")
+def plans():
+    user = current_user()
+
+    latest_payment = None
+    if user is not None:
+        latest_payment = (
+            Payment.query.filter_by(user_id=user.id)
+            .order_by(Payment.created_at.desc())
+            .first()
+        )
+
+    return render_template("plans.html", latest_payment=latest_payment)
+
+# --- MANUAL PAYMENT SUBMISSION ---
+@app.route("/pay/manual/submit", methods=["POST"])
+@login_required
+def submit_manual_payment():
+    user = current_user()
+    bkash_number = request.form.get("bkash_number", "").strip()
+    trx_id = request.form.get("trx_id", "").strip()
+    amount_raw = request.form.get("amount", "").strip()
+    plan_name = request.form.get("plan_name", "").strip()
+    
+    if not bkash_number or not trx_id:
+        flash("Please provide both bKash number and Transaction ID.", "error")
+        return redirect(url_for('plans'))
+        
+    # Check for duplicate Trx ID
+    existing = Payment.query.filter_by(trx_id=trx_id).first()
+    if existing:
+        flash("This Transaction ID has already been used.", "error")
+        return redirect(url_for('plans'))
+
+    # Prevent spamming multiple pending submissions.
+    existing_pending = Payment.query.filter_by(user_id=user.id, status="pending").first()
+    if existing_pending:
+        flash("Your previous payment is still under review. Please wait for admin approval/rejection.", "error")
+        return redirect(url_for("plans"))
+
+    allowed_amounts = {500.0, 1000.0, 2000.0, 5000.0}
+    try:
+        amount = float(amount_raw)
+    except (TypeError, ValueError):
+        amount = None
+
+    if amount not in allowed_amounts:
+        flash("Invalid plan amount selected. Please try again.", "error")
+        return redirect(url_for("plans"))
+
+    # Create Payment Request
+    pay = Payment(
+        user_id=user.id,
+        amount=amount,
+        bkash_number=bkash_number,
+        trx_id=trx_id,
+        status="pending"
+    )
+    db.session.add(pay)
+    db.session.commit()
+    
+    if plan_name:
+        flash(f"Payment submitted for {plan_name} (৳{int(amount)}). Wait for Admin approval to activate Premium.", "success")
+    else:
+        flash(f"Payment submitted (৳{int(amount)}). Wait for Admin approval to activate Premium.", "success")
+    return redirect(url_for('dashboard'))
+
+# --- ADMIN DASHBOARD ---
+@app.route("/admin/dashboard")
+@login_required
+def admin_dashboard():
+    user = current_user()
+    # Simple security: Check is_admin flag OR hardcoded email
+    if not user.is_admin and user.email != "admin@lifeline.com":
+        flash("Access Denied: Admins Only.", "error")
+        return redirect(url_for('home'))
+
+    # --- Monitoring KPIs ---
+    total_users = User.query.count()
+    premium_users = User.query.filter_by(is_premium=True).count()
+    trusted_helpers = User.query.filter_by(is_trusted_helper=True).count()
+    pending_helper_verifications = User.query.filter_by(id_verification_status="pending").count()
+
+    open_requests = Request.query.filter_by(status="open").count()
+    claimed_requests = Request.query.filter_by(status="claimed").count()
+    closed_requests = Request.query.filter_by(status="closed").count()
+
+    active_pings = EmotionalPing.query.filter_by(is_active=True).count()
+        
+    # Get all pending payments
+    pending_payments = Payment.query.filter_by(status="pending").order_by(Payment.created_at.desc()).all()
+    
+    # Get recent approved payments (for history)
+    history = Payment.query.filter(Payment.status != "pending").order_by(Payment.created_at.desc()).limit(20).all()
+
+    # --- Recent activity ---
+    latest_users = User.query.order_by(User.id.desc()).limit(10).all()
+    latest_requests = Request.query.order_by(Request.created_at.desc()).limit(10).all()
+    latest_sos = SOSResponse.query.order_by(SOSResponse.created_at.desc()).limit(10).all()
+
+    # --- Charts (last N days) ---
+    days = 14
+    start_dt = datetime.utcnow() - timedelta(days=days - 1)
+    start_date = start_dt.date()
+    date_labels = [(start_date + timedelta(days=i)).isoformat() for i in range(days)]
+
+    req_counts_rows = (
+        db.session.query(func.date(Request.created_at), func.count(Request.id))
+        .filter(Request.created_at >= start_dt)
+        .group_by(func.date(Request.created_at))
+        .all()
+    )
+    req_counts = {str(d): int(c) for d, c in req_counts_rows if d is not None}
+    chart_requests_created = [req_counts.get(lbl, 0) for lbl in date_labels]
+
+    sos_counts_rows = (
+        db.session.query(func.date(SOSResponse.created_at), func.count(SOSResponse.id))
+        .filter(SOSResponse.created_at >= start_dt)
+        .group_by(func.date(SOSResponse.created_at))
+        .all()
+    )
+    sos_counts = {str(d): int(c) for d, c in sos_counts_rows if d is not None}
+    chart_sos_responses = [sos_counts.get(lbl, 0) for lbl in date_labels]
+
+    pay_counts_rows = (
+        db.session.query(func.date(Payment.created_at), Payment.status, func.count(Payment.id))
+        .filter(Payment.created_at >= start_dt)
+        .group_by(func.date(Payment.created_at), Payment.status)
+        .all()
+    )
+    pay_counts = {}
+    for d, status, c in pay_counts_rows:
+        if d is None:
+            continue
+        pay_counts[(str(d), status)] = int(c)
+    chart_payments_pending = [pay_counts.get((lbl, "pending"), 0) for lbl in date_labels]
+    chart_payments_approved = [pay_counts.get((lbl, "approved"), 0) for lbl in date_labels]
+    chart_payments_rejected = [pay_counts.get((lbl, "rejected"), 0) for lbl in date_labels]
+
+
+    stats = {
+        "total_users": total_users,
+        "premium_users": premium_users,
+        "trusted_helpers": trusted_helpers,
+        "pending_helper_verifications": pending_helper_verifications,
+        "open_requests": open_requests,
+        "claimed_requests": claimed_requests,
+        "closed_requests": closed_requests,
+        "active_pings": active_pings,
+        "pending_payments": len(pending_payments),
+    }
+
+    charts = {
+        "labels": date_labels,
+        "requests_created": chart_requests_created,
+        "sos_responses": chart_sos_responses,
+        "payments_pending": chart_payments_pending,
+        "payments_approved": chart_payments_approved,
+        "payments_rejected": chart_payments_rejected,
+    }
+
+    return render_template(
+        "admin_dashboard.html",
+        pending=pending_payments,
+        history=history,
+        stats=stats,
+        charts=charts,
+        latest_users=latest_users,
+        latest_requests=latest_requests,
+        latest_sos=latest_sos,
+    )
+
+# --- ADMIN ACTION (APPROVE/REJECT) ---
+@app.route("/admin/payment/<int:payment_id>/<action>", methods=["POST"])
+@login_required
+def admin_payment_action(payment_id, action):
+    user = current_user()
+    if not user.is_admin and user.email != "admin@lifeline.com":
+        return jsonify({"error": "Unauthorized"}), 403
+        
+    payment = Payment.query.get_or_404(payment_id)
+    
+    if action == "approve":
+        payment.status = "approved"
+        # Grant Premium
+        payment.user.is_premium = True
+        payment.user.premium_expiry = datetime.utcnow() + timedelta(days=30)
+        flash(f"Approved payment for {payment.user.name}", "success")
+        
+        # Notify User
+        push_notification(payment.user.id, "system", "🎉 Premium Activated! Your payment was approved.")
+        
+    elif action == "reject":
+        payment.status = "rejected"
+        flash(f"Rejected payment for {payment.user.name}", "error")
+        push_notification(payment.user.id, "system", "❌ Payment Rejected. Please check Trx ID.")
+        
+    db.session.commit()
+    return redirect(url_for('admin_dashboard'))
 
 # ------------------ Impact APIs ------------------
 
@@ -3058,6 +3382,7 @@ def api_dashboard_impact_over_time():
 @login_required
 def api_impact_summary():
     user = current_user()
+
     # resources shared count (Resource model exists)
     resources_shared = Resource.query.filter(Resource.user_id == user.id).count()
     # hours volunteered (reuse query)
@@ -3098,6 +3423,7 @@ def api_impact_by_category():
     return jsonify({"labels": labels, "values": values})
 
 
+<<<<<<< HEAD
 # 6) Create an impact story
 @app.route("/api/impact/story", methods=["POST"])
 @login_required
@@ -3295,6 +3621,7 @@ def update_user_location():
 @login_required
 def trigger_sos():
     user = current_user()
+
 
     if not user:
         flash("Please log in again to send SOS.", "error")
@@ -3570,6 +3897,177 @@ def api_sos_status(request_id):
     )
 
 
+
+# 6) Create an impact story
+@app.route("/api/impact/story", methods=["POST"])
+@login_required
+def api_impact_story_create():
+    user = current_user()
+    data = request.get_json(silent=True) or {}
+    title = (data.get("title") or "").strip()
+    body = (data.get("body") or "").strip()
+    if not title or not body:
+        return jsonify({"error": "title and body required"}), 400
+    s = ImpactStory(user_id=user.id, title=title[:255], body=body)
+    db.session.add(s)
+    db.session.commit()
+    return jsonify({"id": s.id, "created_at": int(s.created_at.timestamp())}), 201
+
+
+# 7) List impact stories (pagination)
+@app.route("/api/impact/stories", methods=["GET"])
+@login_required
+def api_impact_stories():
+    page = int(request.args.get("page", 1))
+    per_page = int(request.args.get("per_page", 10))
+    q = ImpactStory.query.order_by(ImpactStory.created_at.desc())
+    total = q.count()
+    items = q.offset((page - 1) * per_page).limit(per_page).all()
+    stories = [{
+        "id": it.id,
+        "title": it.title,
+        "body": it.body,
+        "author_name": it.user.name if it.user else None,
+        "created_at": int(it.created_at.timestamp())
+    } for it in items]
+    return jsonify({"total": total, "page": page, "per_page": per_page, "stories": stories})
+
+
+# 8) Community-wide impact summary
+@app.route("/api/community/impact", methods=["GET"])
+def api_community_impact():
+    # Total hours volunteered across all users
+    total_hours = db.session.query(func.coalesce(func.sum(func.julianday(Request.completed_at) - func.julianday(Request.created_at)), 0.0)).filter(
+        Request.status == "completed",
+        Request.completed_at != None
+    ).scalar() or 0.0
+    total_hours = float(total_hours) * 24  # Convert days to hours
+
+    # Total items shared
+    total_items = Resource.query.count()
+
+    # Total carbon saved (estimate: each ride share saves 2.5 kg CO2)
+    ride_requests = Request.query.filter(Request.category == "ride", Request.status == "completed").count()
+    total_carbon = ride_requests * 2.5
+
+    # Total people helped
+    total_helped = db.session.query(func.count(func.distinct(Request.user_id))).filter(
+        Request.status == "completed",
+        Request.completed_at != None,
+        Request.user_id != None
+    ).scalar() or 0
+
+    return jsonify({
+        "total_hours": round(total_hours, 1),
+        "total_items": total_items,
+        "total_carbon": round(total_carbon, 1),
+        "total_helped": total_helped
+    })
+
+
+# 9) Community impact over time (monthly data for graphs)
+@app.route("/api/community/impact-over-time", methods=["GET"])
+def api_community_impact_over_time():
+    months = int(request.args.get("months", 6))
+    end_date = datetime.utcnow()
+    start_date = end_date - timedelta(days=months*30)
+
+    # Monthly hours
+    monthly_data = db.session.query(
+        func.strftime('%Y-%m', Request.completed_at).label('month'),
+        func.coalesce(func.sum(func.julianday(Request.completed_at) - func.julianday(Request.created_at)), 0.0).label('hours')
+    ).filter(
+        Request.status == "completed",
+        Request.completed_at >= start_date,
+        Request.completed_at <= end_date
+    ).group_by(func.strftime('%Y-%m', Request.completed_at)).order_by(func.strftime('%Y-%m', Request.completed_at)).all()
+
+    labels = []
+    hours_data = []
+    for row in monthly_data:
+        labels.append(row.month)
+        hours_data.append(round(float(row.hours) * 24, 1))  # Convert to hours
+
+    # Fill missing months with 0
+    current = start_date.replace(day=1)
+    while current <= end_date:
+        month_str = current.strftime('%Y-%m')
+        if month_str not in labels:
+            labels.append(month_str)
+            hours_data.append(0.0)
+        current += timedelta(days=32)
+        current = current.replace(day=1)
+
+    # Sort by month
+    combined = sorted(zip(labels, hours_data), key=lambda x: x[0])
+    labels, hours_data = zip(*combined) if combined else ([], [])
+
+    return jsonify({
+        "labels": list(labels),
+        "hours": list(hours_data)
+    })
+
+@app.route("/impact")
+@login_required
+def impact_dashboard():
+    return render_template("impact.html")
+
+
+@app.route("/impact")
+@login_required
+def impact():
+    user = current_user()
+
+    if user.role == "helper":
+        # Helper sees ONLY their own impact
+        logs = ImpactLog.query.filter_by(helper_id=user.id).all()
+        title = "Your Volunteer Impact"
+    else:
+        # Normal users see COMMUNITY impact
+        logs = ImpactLog.query.all()
+        title = "Community Impact"
+
+    labels = [l.created_at.strftime("%b %Y") for l in logs]
+    hours = [l.hours for l in logs]
+    items = [l.items for l in logs]
+    carbon = [l.carbon for l in logs]
+
+    return render_template(
+        "impact.html",
+        title=title,
+        labels=labels,
+        hours=hours,
+        items=items,
+        carbon=carbon
+    )
+
+
+
+@app.route("/emotional")
+def emotional_ping():
+    user = current_user()
+    if not user:
+        # quick guest flow: use Emergency Guest
+        user = get_emergency_user()
+        login_user(user)
+    # find a trusted helper (listener)
+    listener = User.query.filter(User.is_trusted_helper == True, User.id != user.id).first()
+    if not listener:
+        # create or get a generic listener account
+        listener = User.query.filter_by(email="listener@lifeline.local").first()
+        if not listener:
+            listener = User(email="listener@lifeline.local", name="Listener")
+            listener.is_trusted_helper = True
+            # set random password
+            listener.password_hash = generate_password_hash(os.urandom(12).hex())
+            db.session.add(listener)
+            db.session.commit()
+
+    conv = get_or_create_conversation(user.id, listener.id)
+    return redirect(url_for('chat_with_user', other_user_id=listener.id))
+
+
+
 @app.route("/api/conversations/<int:conv_id>/messages")
 @login_required
 def api_get_messages(conv_id):
@@ -3835,6 +4333,7 @@ def on_send_message(data):
 
     payload = serialize_message(msg)
 
+
     
     # Include file data in payload if present
     if file_data:
@@ -3854,13 +4353,14 @@ def on_send_message(data):
     # return payload as acknowledgement to sender (Socket.IO ack)
     return payload
 
+
     payload["temp_id"] = temp_id
 
-    if file_data:
-        payload["has_file"] = True
-        payload["file_name"] = file_name
-        payload["file_size"] = file_size
-        payload["is_image"] = is_image
+
+    payload["has_file"] = True
+    payload["file_name"] = file_name
+    payload["file_size"] = file_size
+    payload["is_image"] = is_image
 
     room = f"chat_{conv.id}"
     print(f"[SEND_MESSAGE] Emitting 'new_message' to room {room}")
@@ -4215,6 +4715,7 @@ def get_suggestion_insights():
 # ==================== END SMART SUGGESTION AI ROUTES ====================
 
 
+
 # ------------------ REGISTER BLUEPRINTS ------------------
 # Register resource pooling blueprint (must be after all models are defined)
 from resources import resources_bp
@@ -4248,11 +4749,41 @@ if __name__ == "__main__":
                 print("✓ Added image_url column to resource_wanted_items")
         except Exception as e:
             print(f"Migration note: {e}")
+
     
 
     socketio.run(app, debug=True)
 
-    
-    debug_mode = os.getenv("FLASK_DEBUG", "0") == "1"
-    socketio.run(app, debug=debug_mode, use_reloader=False)
 
+    socketio.run(app, debug=True)
+
+
+    
+
+    try:
+            inspector = inspect(db.engine)
+            cols = [c['name'] for c in inspector.get_columns('user')]
+            with db.engine.connect() as conn:
+                if 'is_premium' not in cols:
+                    conn.execute(db.text('ALTER TABLE user ADD COLUMN is_premium BOOLEAN DEFAULT 0'))
+                if 'premium_expiry' not in cols:
+                    conn.execute(db.text('ALTER TABLE user ADD COLUMN premium_expiry DATETIME'))
+                if 'is_admin' not in cols:
+                    conn.execute(db.text('ALTER TABLE user ADD COLUMN is_admin BOOLEAN DEFAULT 0'))
+                conn.commit()
+            print("✓ Added premium/admin columns")
+            
+            # --- CREATE DEFAULT ADMIN ---
+            admin = User.query.filter_by(email="admin@lifeline.com").first()
+            if not admin:
+                admin = User(email="admin@lifeline.com", name="Super Admin", is_admin=True, is_trusted_helper=True)
+                admin.set_password("admin123") # Change this!
+                db.session.add(admin)
+                db.session.commit()
+                print("✓ Created default admin: admin@lifeline.com / admin123")
+                
+    except Exception as e:
+            print(f"Migration error: {e}")    
+
+            debug_mode = os.getenv("FLASK_DEBUG", "0") == "1"
+            socketio.run(app, debug=debug_mode, use_reloader=False)
