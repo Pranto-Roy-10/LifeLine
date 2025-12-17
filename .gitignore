@@ -1,27 +1,59 @@
+# ===============================
+# Python / Flask
+# ===============================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
 
-
-# local DB and venv
-instance/lifeline.db
+# environment files
+.env
+.env.*
 venv/
-
-# project-local venv (common name)
 .venv/
 
-# local sqlite DB in project root (app.py uses this path)
-lifeline.db
+# ===============================
+# Flask instance & DB
+# ===============================
+instance/
+*.db
 
+# ===============================
+# Logs
+# ===============================
+*.log
+server.log
+app_output.txt
 
-__pycache__/
+# ===============================
+# Uploads / Media
+# ===============================
+static/uploads/
 
-# compiled python bytecode
-*.pyc
+# ===============================
+# Node / Frontend
+# ===============================
+node_modules/
+package-lock.json
 
-# common tooling caches
+# ===============================
+# IDE / Editor
+# ===============================
+.vscode/
+
+# ===============================
+# OS junk
+# ===============================
+.DS_Store
+Thumbs.db
+
+# ===============================
+# Tooling caches
+# ===============================
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-
-# generated Jinja template bytecode caches
 compiled_templates_cache/
 compiled_templates_cache2/
 compiled_templates_cache*/
+
