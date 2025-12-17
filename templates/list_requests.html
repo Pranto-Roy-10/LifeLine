@@ -42,15 +42,16 @@ endblock %} {% block content %}
 
   {% if requests %}
   <div class="space-y-3">
-    {% for r in requests %} {% set is_sos = (r.category|lower == 'sos') %}
+    {% for r in requests %}
     <div
       class="rounded-2xl border border-slate-800 bg-slate-900/70 overflow-hidden"
     >
       <button
-        type="button"
-        class="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-slate-900/90 transition"
-        onclick="toggleDetails('{{ r.id }}')"
-      >
+  type="button"
+  class="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-slate-900/90 transition"
+  onclick="toggleDetails('{{ r.id }}')"
+>
+
         <div class="flex-1 min-w-0">
           <div class="flex flex-wrap items-center gap-2">
             <p class="font-semibold text-sm text-slate-100 truncate">
@@ -63,13 +64,7 @@ endblock %} {% block content %}
               {{ r.category|capitalize }}
             </span>
 
-            {% if is_sos %}
-            <span
-              class="text-[11px] px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-300 border border-rose-500/40 font-bold"
-            >
-              🚨 SOS
-            </span>
-            {% endif %} {% if r.is_offer %}
+            {% if r.is_offer %}
             <span
               class="text-[11px] px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-300 border border-sky-500/40"
             >
@@ -87,7 +82,7 @@ endblock %} {% block content %}
             >
               My Post
             </span>
-            {% endif %} {% if r.id in offered_ids and not is_sos %}
+            {% endif %} {% if r.id in offered_ids %}
             <span
               class="text-[10px] px-2 py-0.5 rounded-full bg-slate-700 text-emerald-400 border border-slate-600 font-bold"
             >
@@ -97,35 +92,80 @@ endblock %} {% block content %}
             {% endif %}
           </div>
 
-          <div
-            class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-400"
-          >
-            {% if r.area %}<span>📍 {{ r.area }}</span>{% endif %} {% if
-            r.urgency %}
-            <span>
-              ⏱️ Urgency:
-              <span
-                class="{% if r.urgency == 'emergency' %}text-rose-400 {% elif r.urgency == 'high' %}text-amber-300 {% elif r.urgency == 'normal' %}text-sky-300 {% else %}text-emerald-300{% endif %}"
-              >
-                {{ r.urgency|capitalize }}
-              </span>
-            </span>
-            {% endif %}
-            <span class="text-slate-500"
-              >Created: {{ r.created_at|default('now', true) }}</span
-            >
-          </div>
-        </div>
+          {# --- AI flags (scam / duplicate / both) --- #}
+{% set flag = flagged_map.get(r.id) if flagged_map is defined and flagged_map else None %}
+{% set reasons = (flag.get('reasons') if flag is mapping else '') | default('', true) %}
+{% set reasons_l = reasons|lower %}
 
-        <div class="ml-3">
-          <span
-            id="icon-{{ r.id }}"
-            data-icon
-            class="inline-block transition-transform duration-150 text-slate-400"
-          >
-            ▼
-          </span>
-        </div>
+{# ✅ stronger duplicate detection #}
+{% set is_duplicate =
+    ('possible duplicate' in reasons_l)
+    or ('duplicate of request' in reasons_l)
+    or ('flagged duplicate' in reasons_l)
+%}
+
+{# ✅ scam detection #}
+{% set is_scam =
+    ('scam-like keywords' in reasons_l)
+    or ('contains scam' in reasons_l)
+%}
+
+{% if flag and (is_scam or is_duplicate) %}
+  {% if is_scam and is_duplicate %}
+    <!-- 🔵 BOTH -->
+    <div class="mt-2 p-3 rounded-xl border border-sky-400/60 bg-sky-500/10">
+      <p class="text-sky-200 text-sm font-semibold">
+        Potential scam + duplicate flagged by LifeLine AI
+      </p>
+    </div>
+
+  {% elif is_duplicate %}
+    <!-- 🟣 DUPLICATE ONLY -->
+    <div class="mt-2 p-3 rounded-xl border border-purple-400/60 bg-purple-500/10">
+      <p class="text-purple-200 text-sm font-semibold">
+        Possible duplicate flagged by LifeLine AI
+      </p>
+    </div>
+
+  {% elif is_scam %}
+    <!-- 🟡 SCAM ONLY -->
+    <div class="mt-2 p-3 rounded-xl border border-amber-400/60 bg-amber-500/10">
+      <p class="text-amber-200 text-sm font-semibold">
+        Possible scam detected by LifeLine AI
+      </p>
+      <p class="text-amber-200/80 text-xs mt-0.5">
+        recommended: Verify before offering help
+      </p>
+    </div>
+  {% endif %}
+{% endif %}
+
+{# --- meta row (ONLY once) --- #}
+<div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-400">
+  {% if r.area %}<span>📍 {{ r.area }}</span>{% endif %}
+  {% if r.urgency %}
+    <span>
+      ⏱️ Urgency:
+      <span class="{% if r.urgency == 'emergency' %}text-rose-400
+                     {% elif r.urgency == 'high' %}text-amber-300
+                     {% elif r.urgency == 'normal' %}text-sky-300
+                     {% else %}text-emerald-300{% endif %}">
+        {{ r.urgency|capitalize }}
+      </span>
+    </span>
+  {% endif %}
+  <span class="text-slate-500">Created: {{ r.created_at|default('now', true) }}</span>
+</div>
+
+
+        <span
+  id="icon-{{ r.id }}"
+  data-icon
+  class="ml-4 shrink-0 text-slate-400 transition-transform duration-150"
+>
+  ▼
+</span>
+
       </button>
 
       <div
@@ -182,7 +222,7 @@ endblock %} {% block content %}
                 Assigned to: {{ r.helper.name }}
               </p>
               {% endif %} {% if current_user and not r.helper_id and r.user_id
-              != current_user.id and not is_sos %} {% if r.id in offered_ids %}
+              != current_user.id %} {% if r.id in offered_ids %}
               <div
                 class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-emerald-400 text-sm font-semibold text-center flex justify-center items-center gap-2"
               >
@@ -208,54 +248,10 @@ endblock %} {% block content %}
                 </button>
                 {% endif %}
               </form>
-              {% endif %} {% endif %} {% if current_user and r.user_id !=
-              current_user.id and is_sos %} {% if
-              session.get('is_trusted_helper') %} {% if r.id in
-              sos_responded_ids %}
-              <div
-                class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-emerald-400 text-sm font-semibold text-center flex justify-center items-center gap-2"
-              >
-                <span>✓</span> Responded to SOS
-              </div>
-              {% else %}
+              {% endif %} {% endif %} {% if current_user and r.user_id ==
+              current_user.id %} {% set offer_count = r.offers|length %}
               <button
-                type="button"
-                class="w-full px-3 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-sm font-semibold transition shadow-lg shadow-rose-900/20 js-sos-respond"
-                data-request-id="{{ r.id }}"
-              >
-                🚨 Respond to SOS
-              </button>
-              {% endif %} {% else %}
-              <div
-                class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 text-sm font-semibold text-center"
-              >
-                SOS is visible to verified helpers
-              </div>
-              {% endif %}
-
-              <a
-                href="{{ url_for('map_page', focus_request_id=r.id) }}"
-                class="w-full text-center bg-slate-800 text-slate-300 text-[11px] py-2 rounded-lg hover:bg-slate-700 border border-slate-600"
-              >
-                View on map
-              </a>
-              {% endif %} {% if current_user and r.user_id == current_user.id %}
-              {% if is_sos %}
-              <div
-                class="w-full px-3 py-2 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-bold text-center"
-              >
-                SOS responders: {{ sos_response_counts.get(r.id, 0) }}
-              </div>
-              <a
-                href="{{ url_for('map_page', focus_request_id=r.id, sos_caller=1) }}"
-                class="w-full text-center bg-slate-800 text-slate-300 text-[11px] py-2 rounded-lg hover:bg-slate-700 border border-slate-600"
-              >
-                Track SOS on map
-              </a>
-              {% endif %} {% if not is_sos %} {% set offer_count =
-              r.offers|length %}
-              <button
-                onclick="toggleCardOffers('{{ r.id }}', event)"
+                onclick="toggleCardOffers('{{ r.id }}')"
                 class="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 hover:bg-slate-700 transition text-left"
               >
                 <div class="flex items-center gap-2">
@@ -324,7 +320,6 @@ endblock %} {% block content %}
                 </div>
                 {% endif %} {% endfor %} {% endif %}
               </div>
-              {% endif %}
 
               <form
                 method="POST"
@@ -370,43 +365,6 @@ fab_href = url_for('can_help') if mode == 'offer' else url_for('need_help') %}
 </a>
 
 <script>
-  async function respondToSOSFromList(requestId) {
-    try {
-      const send = async (payload) => {
-        const resp = await fetch(`/api/sos/${requestId}/respond`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload || {}),
-        });
-        const data = await resp.json().catch(() => ({}));
-        if (!resp.ok) {
-          alert(data.error || "Failed to respond to SOS");
-          return;
-        }
-        window.location.href = `/map?focus_request_id=${requestId}`;
-      };
-
-      if (!navigator.geolocation) {
-        await send({});
-        return;
-      }
-
-      navigator.geolocation.getCurrentPosition(
-        async (pos) => {
-          await send({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        },
-        async () => {
-          // If blocked, still respond (server may use last-known helper location)
-          await send({});
-        },
-        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
-      );
-    } catch (e) {
-      console.error(e);
-      alert("Failed to respond to SOS");
-    }
-  }
-
   function toggleDetails(id) {
     // Only toggle if the click wasn't inside the "Manage Post" area (to prevent conflicts)
     // Actually, simple toggle is fine if we manage events properly.
@@ -430,26 +388,14 @@ fab_href = url_for('can_help') if mode == 'offer' else url_for('need_help') %}
   }
 
   // New function to toggle the internal list of offers inside a card
-  function toggleCardOffers(id, ev) {
+  function toggleCardOffers(id) {
     var list = document.getElementById("card-offers-" + id);
     if (list) {
       list.classList.toggle("hidden");
     }
     // Prevent the click from bubbling up and closing the main card details
-    if (ev && ev.stopPropagation) ev.stopPropagation();
+    event.stopPropagation();
   }
-
-  // Bind SOS respond buttons (avoid inline Jinja-in-onclick errors in editor)
-  document.addEventListener("DOMContentLoaded", () => {
-    document.querySelectorAll(".js-sos-respond").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const rid = btn.getAttribute("data-request-id");
-        const requestId = rid ? parseInt(rid, 10) : null;
-        if (!requestId) return;
-        respondToSOSFromList(requestId);
-      });
-    });
-  });
 </script>
 
 {% endblock %}

@@ -173,13 +173,10 @@ class User(db.Model):
     # profile photo, phone and dob
     profile_photo = db.Column(db.String(255), default="default.png")
     phone = db.Column(db.String(20))
-    emergency_number = db.Column(db.String(30), nullable=True)
     dob = db.Column(db.String(20))  # or Date type if you prefer
     
     fcm_tokens = db.relationship('FCMToken', backref='user', lazy='dynamic')
-    is_premium = db.Column(db.Boolean, default=False)
-    premium_expiry = db.Column(db.DateTime, nullable=True)
-    is_admin = db.Column(db.Boolean, default=False)
+
     
 
     def set_password(self, password: str):
@@ -211,19 +208,7 @@ class User(db.Model):
             return "Bronze Helper", "text-amber-300"
         else:
             return "Newbie", "text-slate-400"
-class Payment(db.Model):
-    __tablename__ = "payments"
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     
-    amount = db.Column(db.Float, nullable=False)
-    bkash_number = db.Column(db.String(20), nullable=False) # User's phone number
-    trx_id = db.Column(db.String(50), unique=True, nullable=False) # The ID they enter
-    
-    status = db.Column(db.String(20), default="pending") # pending, approved, rejected
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    user = db.relationship("User", backref="payments")    
 
 class Request(db.Model):
     __tablename__ = "requests"
@@ -439,28 +424,6 @@ def send_fcm_to_user(target_user, title, body, data=None):
         print(f"[FCM] Error sending multicast: {e}")
         return False
 
-
-def send_fcm_to_trusted_helpers(title, body, data=None, exclude_user_id=None):
-    """Best-effort broadcast to all trusted helpers that have FCM tokens."""
-    try:
-        q = User.query.filter(User.is_trusted_helper == True)  # noqa: E712
-        if exclude_user_id is not None:
-            q = q.filter(User.id != exclude_user_id)
-
-        sent = 0
-        for helper in q.all():
-            try:
-                if helper.fcm_tokens.count() > 0:
-                    if send_fcm_to_user(helper, title=title, body=body, data=data):
-                        sent += 1
-            except Exception:
-                continue
-
-        return sent
-    except Exception as e:
-        print("[FCM] Error in send_fcm_to_trusted_helpers:", e)
-        return 0
-
     
 # --- 1. NEARBY HELP REQUEST ---
 # --- UPDATE IN app.py ---
@@ -562,26 +525,6 @@ def send_fcm_for_sos(from_user):
         print("[SOS] Error:", e)
         return False
 
-
-def get_trusted_helpers_within_radius_km(center_lat, center_lng, radius_km, exclude_user_id=None):
-    q = User.query.filter(User.is_trusted_helper == True)  # noqa: E712
-    if exclude_user_id is not None:
-        q = q.filter(User.id != exclude_user_id)
-
-    q = q.filter(User.lat.isnot(None), User.lng.isnot(None))
-
-    results = []
-    for h in q.all():
-        try:
-            dist = haversine_distance_km(center_lat, center_lng, h.lat, h.lng)
-        except Exception:
-            continue
-        if dist <= radius_km:
-            results.append((h, dist))
-
-    results.sort(key=lambda t: t[1])
-    return [h for h, _ in results]
-
         
 # NEW MODEL FOR FCM TOKENS
 class FCMToken(db.Model):
@@ -605,21 +548,6 @@ class Offer(db.Model):
     # Relationships
     request = db.relationship("Request", backref=db.backref("offers", cascade="all, delete-orphan"))
     helper = db.relationship("User", backref="sent_offers")   
-
-
-class SOSResponse(db.Model):
-    __tablename__ = "sos_responses"
-    id = db.Column(db.Integer, primary_key=True)
-    request_id = db.Column(db.Integer, db.ForeignKey("requests.id"), nullable=False)
-    helper_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
-    responder_lat = db.Column(db.Float, nullable=True)
-    responder_lng = db.Column(db.Float, nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-
-    request = db.relationship(
-        "Request", backref=db.backref("sos_responses", cascade="all, delete-orphan")
-    )
-    helper = db.relationship("User", backref="sos_responses")
 # In app.py
 class Review(db.Model):
     __tablename__ = "reviews"
@@ -803,21 +731,9 @@ def logout_user():
 
 
 def current_user():
-    uid = session.get("user_id")
-    if not uid:
-        return None
-
-    try:
-        user = db.session.get(User, uid)
-    except Exception:
-        user = None
-
-    # If the DB was reset or user deleted, avoid hard-crashing downstream.
-    if user is None:
-        logout_user()
-        return None
-
-    return user
+    if "user_id" in session:
+        return db.session.get(User, session["user_id"])
+    return None
 
 
 def login_required(view_func):
@@ -825,8 +741,7 @@ def login_required(view_func):
 
     @wraps(view_func)
     def wrapper(*args, **kwargs):
-        # Require both a session user_id and a resolvable User row.
-        if current_user() is None:
+        if "user_id" not in session:
             next_url = request.path
             return redirect(url_for("login", next=next_url))
         return view_func(*args, **kwargs)
@@ -953,32 +868,7 @@ def update_user_scores(user):
 def send_push_to_user(user: User, title: str, body: str, data: dict | None = None):
     """Send a push notification to the user (FCM)."""
     return send_fcm_to_user(user, title=title, body=body, data=data)
-def check_post_limit(user):
-    """
-    Returns True if user can post, False if limit reached.
-    Rules: Premium = Unlimited. Free = 2 posts per 21 days.
-    """
-    if not user: return True # Guests handled separately or allowed
-    
-    # 1. Premium Check
-    if user.is_premium:
-        if user.premium_expiry and user.premium_expiry > datetime.utcnow():
-            return True
-        else:
-            # Expired? Downgrade automatically
-            user.is_premium = False
-            db.session.commit()
 
-    # 2. Free User Logic
-    three_weeks_ago = datetime.utcnow() - timedelta(days=21)
-    
-    # Count posts in last 21 days
-    recent_posts = Request.query.filter(
-        Request.user_id == user.id,
-        Request.created_at >= three_weeks_ago
-    ).count()
-
-    return recent_posts < 2
         
 def send_fcm_notification(token, title, body, data=None):
     if not token:
@@ -1027,11 +917,7 @@ def debug_session():
 @app.route("/map")
 @login_required
 def map_page():
-    return render_template(
-        "map.html",
-        google_maps_key=GOOGLE_MAPS_API_KEY,
-        user=current_user(),
-    )
+    return render_template("map.html", google_maps_key=GOOGLE_MAPS_API_KEY)
 
 # ------------------ ROUTES: AUTH ------------------
 @app.route("/signup", methods=["GET", "POST"])
@@ -1616,7 +1502,6 @@ def update_profile():
     # ---- basic fields ----
     name = request.form.get("name", "").strip()
     phone = request.form.get("phone", "").strip()
-    emergency_number = request.form.get("emergency_number", "").strip()
     dob   = request.form.get("dob", "").strip()
 
     if name:
@@ -1625,16 +1510,6 @@ def update_profile():
         session["user_name"] = name
 
     user.phone = phone or None
-    if emergency_number:
-        # allow digits/spaces and common prefixes; keep minimal validation for MVP
-        cleaned = "".join(ch for ch in emergency_number if ch.isdigit() or ch in "+- ()")
-        cleaned = cleaned.strip()
-        if len(cleaned) < 6:
-            flash("Emergency number looks too short.", "error")
-            return redirect(url_for("profile"))
-        user.emergency_number = cleaned
-    else:
-        user.emergency_number = None
     user.dob   = dob or None
 
     # ---- profile photo upload ----
@@ -1729,9 +1604,7 @@ def api_requests_nearby():
         Request.lng.isnot(None),
     )
 
-    viewer = current_user()
     nearby = []
-    sos_ids = []
 
     for r in q.all():
         dist = haversine_distance_km(user_lat, user_lng, r.lat, r.lng)
@@ -1751,34 +1624,7 @@ def api_requests_nearby():
         item["type"] = t
         item["distance_km"] = round(dist, 2)
 
-        is_sos = cat == "sos"
-        item["is_sos"] = is_sos
-        if is_sos:
-            sos_ids.append(int(r.id))
-
         nearby.append(item)
-
-    responded_ids = set()
-    try:
-        if viewer and sos_ids:
-            rows = (
-                db.session.query(SOSResponse.request_id)
-                .filter(SOSResponse.helper_id == viewer.id)
-                .filter(SOSResponse.request_id.in_(sos_ids))
-                .all()
-            )
-            responded_ids = {int(rid) for (rid,) in rows}
-    except Exception:
-        responded_ids = set()
-
-    if responded_ids:
-        for item in nearby:
-            if (item.get("category") or "").lower() == "sos":
-                item["viewer_sos_responded"] = int(item.get("id")) in responded_ids
-    else:
-        for item in nearby:
-            if (item.get("category") or "").lower() == "sos":
-                item["viewer_sos_responded"] = False
 
     return jsonify({"requests": nearby})
 
@@ -1932,12 +1778,8 @@ def need_help():
     - If not logged in     -> use Emergency Guest user (quick help)
     """
     user = current_user()
-    if user:
-        can_post = check_post_limit(user)
+
     if request.method == "POST":
-        if user and not can_post:
-            flash("Free limit reached (2 posts/3 weeks). Please go Premium!", "error")
-            return redirect(url_for('plans'))
         title = request.form.get("title", "").strip()
         category = request.form.get("category", "").strip()
 
@@ -2045,6 +1887,7 @@ def need_help():
         if (not is_guest) and (result.get("is_flagged") or result.get("matched_request_id") is not None):
             flash("Your post looks suspicious, so it has been flagged by LifeLine AI.", "warning")
 
+
         # ---- Push notifications to helpers ----
         try:
             print(f"[FCM] Trigger nearby helpers for req {req.id}")
@@ -2066,7 +1909,6 @@ def need_help():
         except Exception as e:
             print("[FCM] Failed to broadcast need_help notification:", e)
 
-        # ---- Flash + redirect as before ----
         if current_user():
             flash("Your need request has been posted.", "success")
         else:
@@ -2112,13 +1954,13 @@ def need_help():
 
 
     return render_template(
-        "need_help.html",
-        posts=posts,
-        total_need=total_need,
-        total_offer=total_offer,
-        categories=categories,
-        can_post=can_post,
-        google_maps_key=GOOGLE_MAPS_API_KEY,
+    "need_help.html",
+    posts=posts,
+    total_need=total_need,
+    total_offer=total_offer,
+    categories=categories,
+    google_maps_key=GOOGLE_MAPS_API_KEY,
+    flagged_map=flagged_map,  
     )
 
 
@@ -2459,30 +2301,14 @@ def list_requests():
     # --- NEW LOGIC END ---
     print("flagged_map sample:", list(flagged_map.items())[:5])
 
-    sos_responded_ids = set()
-    if user:
-        my_sos = SOSResponse.query.filter_by(helper_id=user.id).all()
-        sos_responded_ids = {r.request_id for r in my_sos}
-
-    sos_response_counts = {}
-    try:
-        rows = (
-            db.session.query(SOSResponse.request_id, func.count(SOSResponse.id))
-            .group_by(SOSResponse.request_id)
-            .all()
-        )
-        sos_response_counts = {int(rid): int(cnt) for rid, cnt in rows}
-    except Exception:
-        sos_response_counts = {}
-
     return render_template(
-        "list_requests.html",
-        requests=requests_list,
-        mode=mode,
-        offered_ids=offered_ids,  # <--- Pass this to the HTML
-        sos_responded_ids=sos_responded_ids,
-        sos_response_counts=sos_response_counts,
-    )
+    "list_requests.html",
+    requests=requests_list,
+    mode=mode,
+    offered_ids=offered_ids,
+    flagged_map=flagged_map,   # ✅ add this
+)
+
 
 # ------------------ CHAT PAGES & API ------------------
 @app.route("/chat/<int:other_user_id>")
@@ -2722,483 +2548,19 @@ def update_user_location():
     
 
 # In app.py
-# --- PLANS PAGE ---
-@app.route("/plans")
-def plans():
-    user = current_user()
 
-    latest_payment = None
-    if user is not None:
-        latest_payment = (
-            Payment.query.filter_by(user_id=user.id)
-            .order_by(Payment.created_at.desc())
-            .first()
-        )
-
-    return render_template("plans.html", latest_payment=latest_payment)
-
-# --- MANUAL PAYMENT SUBMISSION ---
-@app.route("/pay/manual/submit", methods=["POST"])
-@login_required
-def submit_manual_payment():
-    user = current_user()
-    bkash_number = request.form.get("bkash_number", "").strip()
-    trx_id = request.form.get("trx_id", "").strip()
-    amount_raw = request.form.get("amount", "").strip()
-    plan_name = request.form.get("plan_name", "").strip()
-    
-    if not bkash_number or not trx_id:
-        flash("Please provide both bKash number and Transaction ID.", "error")
-        return redirect(url_for('plans'))
-        
-    # Check for duplicate Trx ID
-    existing = Payment.query.filter_by(trx_id=trx_id).first()
-    if existing:
-        flash("This Transaction ID has already been used.", "error")
-        return redirect(url_for('plans'))
-
-    # Prevent spamming multiple pending submissions.
-    existing_pending = Payment.query.filter_by(user_id=user.id, status="pending").first()
-    if existing_pending:
-        flash("Your previous payment is still under review. Please wait for admin approval/rejection.", "error")
-        return redirect(url_for("plans"))
-
-    allowed_amounts = {500.0, 1000.0, 2000.0, 5000.0}
-    try:
-        amount = float(amount_raw)
-    except (TypeError, ValueError):
-        amount = None
-
-    if amount not in allowed_amounts:
-        flash("Invalid plan amount selected. Please try again.", "error")
-        return redirect(url_for("plans"))
-
-    # Create Payment Request
-    pay = Payment(
-        user_id=user.id,
-        amount=amount,
-        bkash_number=bkash_number,
-        trx_id=trx_id,
-        status="pending"
-    )
-    db.session.add(pay)
-    db.session.commit()
-    
-    if plan_name:
-        flash(f"Payment submitted for {plan_name} (৳{int(amount)}). Wait for Admin approval to activate Premium.", "success")
-    else:
-        flash(f"Payment submitted (৳{int(amount)}). Wait for Admin approval to activate Premium.", "success")
-    return redirect(url_for('dashboard'))
-
-# --- ADMIN DASHBOARD ---
-@app.route("/admin/dashboard")
-@login_required
-def admin_dashboard():
-    user = current_user()
-    # Simple security: Check is_admin flag OR hardcoded email
-    if not user.is_admin and user.email != "admin@lifeline.com":
-        flash("Access Denied: Admins Only.", "error")
-        return redirect(url_for('home'))
-
-    # --- Monitoring KPIs ---
-    total_users = User.query.count()
-    premium_users = User.query.filter_by(is_premium=True).count()
-    trusted_helpers = User.query.filter_by(is_trusted_helper=True).count()
-    pending_helper_verifications = User.query.filter_by(id_verification_status="pending").count()
-
-    open_requests = Request.query.filter_by(status="open").count()
-    claimed_requests = Request.query.filter_by(status="claimed").count()
-    closed_requests = Request.query.filter_by(status="closed").count()
-
-    active_pings = EmotionalPing.query.filter_by(is_active=True).count()
-        
-    # Get all pending payments
-    pending_payments = Payment.query.filter_by(status="pending").order_by(Payment.created_at.desc()).all()
-    
-    # Get recent approved payments (for history)
-    history = Payment.query.filter(Payment.status != "pending").order_by(Payment.created_at.desc()).limit(20).all()
-
-    # --- Recent activity ---
-    latest_users = User.query.order_by(User.id.desc()).limit(10).all()
-    latest_requests = Request.query.order_by(Request.created_at.desc()).limit(10).all()
-    latest_sos = SOSResponse.query.order_by(SOSResponse.created_at.desc()).limit(10).all()
-
-    # --- Charts (last N days) ---
-    days = 14
-    start_dt = datetime.utcnow() - timedelta(days=days - 1)
-    start_date = start_dt.date()
-    date_labels = [(start_date + timedelta(days=i)).isoformat() for i in range(days)]
-
-    req_counts_rows = (
-        db.session.query(func.date(Request.created_at), func.count(Request.id))
-        .filter(Request.created_at >= start_dt)
-        .group_by(func.date(Request.created_at))
-        .all()
-    )
-    req_counts = {str(d): int(c) for d, c in req_counts_rows if d is not None}
-    chart_requests_created = [req_counts.get(lbl, 0) for lbl in date_labels]
-
-    sos_counts_rows = (
-        db.session.query(func.date(SOSResponse.created_at), func.count(SOSResponse.id))
-        .filter(SOSResponse.created_at >= start_dt)
-        .group_by(func.date(SOSResponse.created_at))
-        .all()
-    )
-    sos_counts = {str(d): int(c) for d, c in sos_counts_rows if d is not None}
-    chart_sos_responses = [sos_counts.get(lbl, 0) for lbl in date_labels]
-
-    pay_counts_rows = (
-        db.session.query(func.date(Payment.created_at), Payment.status, func.count(Payment.id))
-        .filter(Payment.created_at >= start_dt)
-        .group_by(func.date(Payment.created_at), Payment.status)
-        .all()
-    )
-    pay_counts = {}
-    for d, status, c in pay_counts_rows:
-        if d is None:
-            continue
-        pay_counts[(str(d), status)] = int(c)
-    chart_payments_pending = [pay_counts.get((lbl, "pending"), 0) for lbl in date_labels]
-    chart_payments_approved = [pay_counts.get((lbl, "approved"), 0) for lbl in date_labels]
-    chart_payments_rejected = [pay_counts.get((lbl, "rejected"), 0) for lbl in date_labels]
-
-    stats = {
-        "total_users": total_users,
-        "premium_users": premium_users,
-        "trusted_helpers": trusted_helpers,
-        "pending_helper_verifications": pending_helper_verifications,
-        "open_requests": open_requests,
-        "claimed_requests": claimed_requests,
-        "closed_requests": closed_requests,
-        "active_pings": active_pings,
-        "pending_payments": len(pending_payments),
-    }
-
-    charts = {
-        "labels": date_labels,
-        "requests_created": chart_requests_created,
-        "sos_responses": chart_sos_responses,
-        "payments_pending": chart_payments_pending,
-        "payments_approved": chart_payments_approved,
-        "payments_rejected": chart_payments_rejected,
-    }
-
-    return render_template(
-        "admin_dashboard.html",
-        pending=pending_payments,
-        history=history,
-        stats=stats,
-        charts=charts,
-        latest_users=latest_users,
-        latest_requests=latest_requests,
-        latest_sos=latest_sos,
-    )
-
-# --- ADMIN ACTION (APPROVE/REJECT) ---
-@app.route("/admin/payment/<int:payment_id>/<action>", methods=["POST"])
-@login_required
-def admin_payment_action(payment_id, action):
-    user = current_user()
-    if not user.is_admin and user.email != "admin@lifeline.com":
-        return jsonify({"error": "Unauthorized"}), 403
-        
-    payment = Payment.query.get_or_404(payment_id)
-    
-    if action == "approve":
-        payment.status = "approved"
-        # Grant Premium
-        payment.user.is_premium = True
-        payment.user.premium_expiry = datetime.utcnow() + timedelta(days=30)
-        flash(f"Approved payment for {payment.user.name}", "success")
-        
-        # Notify User
-        push_notification(payment.user.id, "system", "🎉 Premium Activated! Your payment was approved.")
-        
-    elif action == "reject":
-        payment.status = "rejected"
-        flash(f"Rejected payment for {payment.user.name}", "error")
-        push_notification(payment.user.id, "system", "❌ Payment Rejected. Please check Trx ID.")
-        
-    db.session.commit()
-    return redirect(url_for('admin_dashboard'))
 
 @app.route("/sos/trigger", methods=["POST"])
 @login_required
 def trigger_sos():
     user = current_user()
-
-    if not user:
-        flash("Please log in again to send SOS.", "error")
-        return redirect(url_for("login", next=request.path))
-
-    # Prefer client-provided GPS for accuracy; fallback to user's last-known location
-    sos_lat = None
-    sos_lng = None
-    try:
-        lat_raw = request.form.get("lat")
-        lng_raw = request.form.get("lng")
-        if lat_raw is not None and lng_raw is not None:
-            sos_lat = float(lat_raw)
-            sos_lng = float(lng_raw)
-    except (TypeError, ValueError):
-        sos_lat = None
-        sos_lng = None
-
-    used_fallback_location = False
-    if sos_lat is None or sos_lng is None:
-        # Fallback to last-known location (or configured defaults) so SOS can still be sent.
-        try:
-            if getattr(user, "lat", None) is not None and getattr(user, "lng", None) is not None:
-                sos_lat = float(user.lat)
-                sos_lng = float(user.lng)
-            else:
-                sos_lat = float(os.getenv("DEFAULT_LAT", "23.8103"))
-                sos_lng = float(os.getenv("DEFAULT_LNG", "90.4125"))
-            used_fallback_location = True
-        except Exception:
-            flash(
-                "Could not determine your location. Please enable location permission and try again.",
-                "error",
-            )
-            return redirect(request.referrer or url_for("map_page"))
-
-    created_at = datetime.utcnow()
-    expires_at = created_at + timedelta(minutes=15)
-
-    sos_req = Request(
-        user_id=user.id,
-        title="🚨 SOS Alert",
-        category="sos",
-        description=f"Emergency SOS from {user.name}.",
-        lat=sos_lat,
-        lng=sos_lng,
-        urgency="emergency",
-        is_offer=False,
-        created_at=created_at,
-        expires_at=expires_at,
-        status="open",
-    )
-    db.session.add(sos_req)
-    db.session.commit()
-
-    # Update last-known location if GPS was provided
-    if sos_lat is not None and sos_lng is not None:
-        try:
-            user.lat = sos_lat
-            user.lng = sos_lng
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
-
-    # Broadcast to all trusted helpers (verified helpers). Location filtering can be
-    # added later; for now "all trusted helpers" matches the SOS broadcast intent.
-    helpers = User.query.filter(User.is_trusted_helper == True, User.id != user.id).all()  # noqa: E712
-
-    for h in helpers:
-        try:
-            push_notification(
-                user_id=h.id,
-                type="sos",
-                message=f"🚨 SOS: {user.name} needs immediate help nearby!",
-                link=url_for("map_page", focus_request_id=sos_req.id),
-            )
-        except Exception:
-            pass
-
-        try:
-            if h.fcm_tokens.count() > 0:
-                send_fcm_to_user(
-                    h,
-                    title="🚨 SOS ALERT!",
-                    body=f"EMERGENCY: {user.name} needs help nearby!",
-                    data={"type": "SOS_ALERT", "request_id": str(sos_req.id)},
-                )
-        except Exception:
-            pass
-
-    # Persist active SOS id so the UI can keep the fallback timer across pages.
-    try:
-        session["active_sos_request_id"] = sos_req.id
-    except Exception:
-        pass
-
-    if used_fallback_location:
-        flash(
-            "SOS SENT using your last saved/default location. Enable Precise location for accuracy.",
-            "error",
-        )
-    else:
-        flash("SOS SENT! Trusted helpers have been alerted.", "error")
-    return redirect(url_for("map_page", focus_request_id=sos_req.id, sos_caller=1))
-
-
-@app.route("/sos/<int:request_id>/accept/<int:helper_id>", methods=["POST"])
-@login_required
-def accept_sos_responder(request_id, helper_id):
-    """SOS owner selects a responder to connect with (enables chat/call + completion review flow)."""
-    user = current_user()
-    req_obj = Request.query.get_or_404(request_id)
-
-    if req_obj.user_id != user.id:
-        flash("Unauthorized.", "error")
-        return redirect(url_for("dashboard"))
-
-    if (req_obj.category or "").lower() != "sos":
-        flash("Not an SOS request.", "error")
-        return redirect(url_for("dashboard"))
-
-    if req_obj.status != "open":
-        flash("This SOS is no longer open.", "error")
-        return redirect(url_for("dashboard"))
-
-    existing = SOSResponse.query.filter_by(request_id=req_obj.id, helper_id=helper_id).first()
-    if not existing:
-        flash("That user has not responded to this SOS.", "error")
-        return redirect(url_for("dashboard"))
-
-    helper_user = User.query.get(helper_id)
-    if not helper_user:
-        flash("Responder not found.", "error")
-        return redirect(url_for("dashboard"))
-
-    req_obj.helper_id = helper_id
-    req_obj.status = "in_progress"
-    db.session.commit()
-
-    try:
-        push_notification(
-            user_id=helper_id,
-            type="sos_connected",
-            message=f"✅ {user.name} accepted your SOS response. Please coordinate in chat.",
-            link=url_for("map_page", focus_request_id=req_obj.id),
-        )
-    except Exception:
-        pass
-
-    flash("Connected with the responder. You can chat/call and mark complete.", "success")
-    return redirect(url_for("dashboard"))
-
-
-@app.route("/api/sos/<int:request_id>/respond", methods=["POST"])
-@login_required
-def api_sos_respond(request_id):
-    user = current_user()
-    if not user or not user.is_trusted_helper:
-        return jsonify({"error": "Only verified helpers can respond"}), 403
-
-    req_obj = Request.query.get_or_404(request_id)
-    if (req_obj.category or "").lower() != "sos":
-        return jsonify({"error": "Not an SOS request"}), 400
-    if req_obj.status != "open":
-        return jsonify({"error": "SOS is not open"}), 400
-    if req_obj.user_id == user.id:
-        return jsonify({"error": "Cannot respond to your own SOS"}), 400
-
-    existing = SOSResponse.query.filter_by(request_id=req_obj.id, helper_id=user.id).first()
-    if existing:
-        return jsonify({"ok": True, "already": True})
-
-    data = request.get_json(silent=True) or {}
-    responder_lat = None
-    responder_lng = None
-    try:
-        if data.get("lat") is not None and data.get("lng") is not None:
-            responder_lat = float(data.get("lat"))
-            responder_lng = float(data.get("lng"))
-    except (TypeError, ValueError):
-        responder_lat = None
-        responder_lng = None
-
-    # Fallback to helper's last known location if available
-    if responder_lat is None or responder_lng is None:
-        responder_lat = getattr(user, "lat", None)
-        responder_lng = getattr(user, "lng", None)
-
-    resp = SOSResponse(
-        request_id=req_obj.id,
-        helper_id=user.id,
-        responder_lat=responder_lat,
-        responder_lng=responder_lng,
-    )
-    db.session.add(resp)
-    db.session.commit()
-
-    try:
-        push_notification(
-            user_id=req_obj.user_id,
-            type="sos_response",
-            message=f"✅ {user.name} is responding to your SOS.",
-            link=url_for("map_page", focus_request_id=req_obj.id),
-        )
-    except Exception:
-        pass
-
-    return jsonify({"ok": True})
-
-
-@app.route("/api/sos/<int:request_id>/status", methods=["GET"])
-@login_required
-def api_sos_status(request_id):
-    req_obj = Request.query.get_or_404(request_id)
-    if (req_obj.category or "").lower() != "sos":
-        return jsonify({"error": "Not an SOS request"}), 400
-
-    viewer = current_user()
-
-    responders = (
-        SOSResponse.query.filter_by(request_id=req_obj.id)
-        .order_by(SOSResponse.created_at.asc())
-        .all()
-    )
-
-    names = []
-    responder_locations = []
-    for r in responders:
-        u = User.query.get(r.helper_id)
-        if u:
-            names.append(u.name)
-            if viewer and viewer.id == req_obj.user_id:
-                responder_locations.append(
-                    {
-                        "helper_id": u.id,
-                        "name": u.name,
-                        "lat": r.responder_lat,
-                        "lng": r.responder_lng,
-                    }
-                )
-
-    # Caller fallback: if no helpers respond within 60 seconds, the UI can prompt
-    # the SOS caller to call their saved emergency number (simulated via tel: link).
-    # We only expose this flag to the SOS owner.
-    should_call = False
-    seconds_remaining = None
-    try:
-        if viewer and viewer.id == req_obj.user_id:
-            now = datetime.utcnow()
-            elapsed_s = (now - req_obj.created_at).total_seconds() if req_obj.created_at else 0
-            seconds_remaining = max(0, int(60 - elapsed_s))
-            should_call = (elapsed_s >= 60) and (len(responders) == 0)
-
-            if len(responders) > 0:
-                try:
-                    session.pop("active_sos_request_id", None)
-                except Exception:
-                    pass
-    except Exception:
-        should_call = False
-        seconds_remaining = None
-
-    return jsonify(
-        {
-            "request_id": req_obj.id,
-            "responded": len(responders) > 0,
-            "responders_count": len(responders),
-            "responders": names[:10],
-            "responder_locations": responder_locations,
-            "should_call": should_call,
-            "seconds_remaining": seconds_remaining,
-        }
-    )
+    
+    # 1. Broadcast the alert
+    send_fcm_for_sos(user) 
+    
+    # 2. Feedback to the user
+    flash("SOS BROADCAST SENT! Nearby Trusted Helpers have been alerted.", "error")
+    return redirect(request.referrer or url_for("home"))
 
 @app.route("/api/conversations/<int:conv_id>/messages")
 @login_required
@@ -3938,29 +3300,6 @@ if __name__ == "__main__":
                 print("✓ Added image_url column to resource_wanted_items")
         except Exception as e:
             print(f"Migration note: {e}")
-        try:
-            inspector = inspect(db.engine)
-            cols = [c['name'] for c in inspector.get_columns('user')]
-            with db.engine.connect() as conn:
-                if 'is_premium' not in cols:
-                    conn.execute(db.text('ALTER TABLE user ADD COLUMN is_premium BOOLEAN DEFAULT 0'))
-                if 'premium_expiry' not in cols:
-                    conn.execute(db.text('ALTER TABLE user ADD COLUMN premium_expiry DATETIME'))
-                if 'is_admin' not in cols:
-                    conn.execute(db.text('ALTER TABLE user ADD COLUMN is_admin BOOLEAN DEFAULT 0'))
-                conn.commit()
-            print("✓ Added premium/admin columns")
-            
-            # --- CREATE DEFAULT ADMIN ---
-            admin = User.query.filter_by(email="admin@lifeline.com").first()
-            if not admin:
-                admin = User(email="admin@lifeline.com", name="Super Admin", is_admin=True, is_trusted_helper=True)
-                admin.set_password("admin123") # Change this!
-                db.session.add(admin)
-                db.session.commit()
-                print("✓ Created default admin: admin@lifeline.com / admin123")
-                
-        except Exception as e:
-            print(f"Migration error: {e}")    
+    
     debug_mode = os.getenv("FLASK_DEBUG", "0") == "1"
     socketio.run(app, debug=debug_mode, use_reloader=False)
