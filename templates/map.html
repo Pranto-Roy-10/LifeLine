@@ -17,32 +17,47 @@ block content %}
       </p>
     </div>
 
-    <div class="text-[10px] text-slate-400 space-y-1">
-      <p class="font-semibold text-slate-200">Pin colors</p>
-      <p>
-        <span
-          class="inline-block h-2 w-2 rounded-full bg-[#22c55e] mr-1"
-        ></span>
-        Need – normal/low
-      </p>
-      <p>
-        <span
-          class="inline-block h-2 w-2 rounded-full bg-[#f97316] mr-1"
-        ></span>
-        Need – high
-      </p>
-      <p>
-        <span
-          class="inline-block h-2 w-2 rounded-full bg-[#ef4444] mr-1"
-        ></span>
-        Need – emergency
-      </p>
-      <p>
-        <span
-          class="inline-block h-2 w-2 rounded-full bg-[#3b82f6] mr-1"
-        ></span>
-        Helper offers (radius shown if set)
-      </p>
+    <div class="flex flex-col gap-3">
+      <!-- Radar button -->
+      <button
+        id="radar-toggle-btn"
+        class="px-4 py-2 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm font-semibold hover:opacity-90 transition flex items-center justify-center gap-2 shadow-lg"
+        type="button"
+        title="Activate Human Availability Radar"
+      >
+        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+        </svg>
+        Availability Radar
+      </button>
+
+      <div class="text-[10px] text-slate-400 space-y-1">
+        <p class="font-semibold text-slate-200">Pin colors</p>
+        <p>
+          <span
+            class="inline-block h-2 w-2 rounded-full bg-[#22c55e] mr-1"
+          ></span>
+          Need – normal/low
+        </p>
+        <p>
+          <span
+            class="inline-block h-2 w-2 rounded-full bg-[#f97316] mr-1"
+          ></span>
+          Need – high
+        </p>
+        <p>
+          <span
+            class="inline-block h-2 w-2 rounded-full bg-[#ef4444] mr-1"
+          ></span>
+          Need – emergency
+        </p>
+        <p>
+          <span
+            class="inline-block h-2 w-2 rounded-full bg-[#3b82f6] mr-1"
+          ></span>
+          Helper offers (radius shown if set)
+        </p>
+      </div>
     </div>
   </div>
 
@@ -173,6 +188,14 @@ block content %}
   let sosFallbackStarted = false;
   let sosResponderMarkers = [];
   let sosResponderTrackingStarted = false;
+
+  // Availability Radar state
+  let radarEnabled = false;
+  let heatmapLayer = null;
+  let radarMarkers = [];
+  let radarRefreshInterval = null;
+  let radarCircles = [];
+  let radarDidFit = false;
 
   const INITIAL_FOCUS_ID = getQueryParamInt("focus_request_id");
   let mapDidInitialFit = false;
@@ -568,6 +591,498 @@ block content %}
     }
   });
 
+  // ================== AVAILABILITY RADAR FUNCTIONS ==================
+
+  function clearRadarMarkers() {
+    for (const marker of radarMarkers) {
+      try {
+        marker.setMap(null);
+      } catch (e) {}
+    }
+    radarMarkers = [];
+  }
+
+  function clearRadarHeatmap() {
+    if (heatmapLayer) {
+      try {
+        heatmapLayer.setMap(null);
+      } catch (e) {}
+      heatmapLayer = null;
+    }
+  }
+
+  function clearRadarCircles() {
+    if (radarCircles && radarCircles.length) {
+      for (const c of radarCircles) {
+        try { c.setMap(null); } catch (e) {}
+      }
+    }
+    radarCircles = [];
+  }
+
+  function jitterLatLng(lat, lng, meters, seedIndex) {
+    // Deterministic tiny jitter to avoid perfect overlap
+    try {
+      const R = 6378137; // Earth radius in meters
+      const angle = (seedIndex * 137.508) % 360; // golden angle for distribution
+      const dist = Math.min(Math.max(meters * 0.5, 1), Math.abs(meters));
+      const brng = (angle * Math.PI) / 180;
+      const lat1 = (lat * Math.PI) / 180;
+      const lon1 = (lng * Math.PI) / 180;
+      const dr = dist / R;
+      const lat2 = Math.asin(
+        Math.sin(lat1) * Math.cos(dr) +
+          Math.cos(lat1) * Math.sin(dr) * Math.cos(brng)
+      );
+      const lon2 =
+        lon1 +
+        Math.atan2(
+          Math.sin(brng) * Math.sin(dr) * Math.cos(lat1),
+          Math.cos(dr) - Math.sin(lat1) * Math.sin(lat2)
+        );
+      return { lat: (lat2 * 180) / Math.PI, lng: (lon2 * 180) / Math.PI };
+    } catch (e) {
+      return { lat, lng };
+    }
+  }
+
+  function styleInfoWindow(infoWindow) {
+    if (!infoWindow) return;
+    infoWindow.addListener("domready", () => {
+      try {
+        const iwOuter = document.querySelector(".gm-style-iw");
+        const iwInner = document.querySelector(".gm-style-iw-d");
+        const closeBtn = document.querySelector(".gm-ui-hover-effect");
+        if (iwOuter) {
+          iwOuter.parentElement.style.borderRadius = "12px";
+          iwOuter.parentElement.style.boxShadow = "0 10px 30px rgba(0,0,0,0.35)";
+          iwOuter.style.background = "transparent";
+          iwOuter.style.boxShadow = "none";
+        }
+        if (iwInner) {
+          iwInner.style.padding = "0";
+          iwInner.style.overflow = "visible";
+        }
+        if (closeBtn) {
+          closeBtn.style.opacity = "0.9";
+          closeBtn.style.right = "8px";
+          closeBtn.style.top = "8px";
+          closeBtn.style.borderRadius = "50%";
+          closeBtn.style.boxShadow = "0 2px 8px rgba(0,0,0,0.25)";
+        }
+        const tails = document.querySelectorAll("div[style*='transform: rotate(45deg)']");
+        tails.forEach((t) => {
+          t.style.background = "#0b1220";
+          t.style.boxShadow = "0 6px 20px rgba(0,0,0,0.35)";
+        });
+      } catch (e) {}
+    });
+  }
+
+  async function recordActivityPing() {
+    /**Send activity ping to backend for radar tracking*/
+    if (!userPosition) {
+      console.error("User position not available for activity ping");
+      return;
+    }
+
+    try {
+      console.log("Recording activity ping from:", userPosition);
+      const response = await fetch("/api/activity/ping", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          lat: userPosition.lat,
+          lng: userPosition.lng,
+          activity_type: "ping",
+          device_motion: 30 + Math.random() * 40 // Simulate some device motion (0-100)
+        })
+      });
+      console.log("Activity ping response:", response.status);
+    } catch (e) {
+      console.error("Failed to record activity ping:", e);
+    }
+  }
+
+  async function recordActivityPingWithPosition(position) {
+    /**Send activity ping with explicit position*/
+    if (!position) return;
+
+    try {
+      console.log("Recording activity ping from:", position);
+      const posLat = typeof position.lat === 'function' ? position.lat() : position.lat;
+      const posLng = typeof position.lng === 'function' ? position.lng() : position.lng;
+        console.log("Activity ping with lat:", posLat, "lng:", posLng);
+      
+      const response = await fetch("/api/activity/ping", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          lat: posLat,
+          lng: posLng,
+          activity_type: "ping",
+          device_motion: 30 + Math.random() * 40
+        })
+      });
+      console.log("Activity ping response:", response.status);
+    } catch (e) {
+      console.error("Failed to record activity ping:", e);
+    }
+  }
+
+  async function updateRadarHeatmap() {
+    /**Fetch and display the availability heatmap*/
+    if (!userPosition) {
+      console.error("User position not available for radar");
+      return;
+    }
+
+    try {
+      console.log("Updating radar heatmap from position:", userPosition);
+      const resp = await fetch("/api/radar/heatmap", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          user_lat: userPosition.lat,
+          user_lng: userPosition.lng,
+          radius_km: currentRadiusKm,
+          window_min: 120
+        })
+      });
+
+      if (!resp.ok) {
+        console.error("Heatmap API error:", resp.status);
+        return;
+      }
+
+      const data = await resp.json();
+      console.log("Heatmap data received:", data);
+      if (!data.ok || !Array.isArray(data.heatmap_points)) {
+        console.error("Invalid heatmap data:", data);
+        return;
+      }
+      const statusEl = document.getElementById("map-status");
+      if (statusEl && typeof data.total_active_nearby === 'number') {
+        statusEl.innerText = `Radar: ${data.total_active_nearby} active nearby`;
+      }
+
+      // Clear old layers
+      clearRadarHeatmap();
+      clearRadarMarkers();
+      clearRadarCircles();
+
+      // Create heatmap data for Google Maps
+      const heatmapData = data.heatmap_points.map(point => ({
+        location: new google.maps.LatLng(point.lat, point.lng),
+        weight: point.weight * 100 // Scale weight for heatmap
+      }));
+
+      // Force fallback circles so everyone is visible without billing
+      let heatmapRendered = false;
+
+      // Fallback: draw soft circles if heatmap not available
+      if (!heatmapRendered) {
+        data.heatmap_points.forEach((point, idx) => {
+          const baseColor = point.is_helper ? "#3b82f6" : "#8b5cf6"; // blue or purple
+          const opacity = Math.min(0.65, 0.28 + point.weight * 0.35);
+          const radiusMeters = 600 + point.weight * 1400; // ~0.6km - 2km
+          const center = jitterLatLng(point.lat, point.lng, 40, idx);
+          const circle = new google.maps.Circle({
+            strokeOpacity: 0,
+            fillColor: baseColor,
+            fillOpacity: opacity,
+            center,
+            radius: radiusMeters,
+            map: map,
+            zIndex: 1
+          });
+          radarCircles.push(circle);
+        });
+      }
+
+      // Add markers for top active users
+      data.heatmap_points.slice(0, 15).forEach((point, idx) => {
+        const color = point.is_helper ? "#3b82f6" : "#a78bfa";
+        const jittered = jitterLatLng(point.lat, point.lng, 25, idx + 7);
+        const marker = new google.maps.Marker({
+          position: jittered,
+          map: map,
+          title: `${point.name} (Activity: ${point.activity_count})`,
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 7 + point.weight * 8,
+            fillColor: color,
+            fillOpacity: 0.9,
+            strokeColor: "#0f172a",
+            strokeWeight: 1,
+          },
+          zIndex: 2,
+          label: {
+            text: point.is_helper ? "H" : "M",
+            color: "#ffffff",
+            fontSize: "10px",
+            fontWeight: "700",
+          },
+        });
+
+        const infoContent = `
+          <div style="background: #0b1220; color: #e5e7eb; padding: 8px 10px; border-radius: 10px; min-width: 180px; font-size: 13px; line-height: 1.35;">
+            <p style="margin: 0 0 4px 0; font-weight: 800; color: #f8fafc;">${point.name}</p>
+            <p style="margin: 0 0 4px 0; font-weight: 600; color: ${point.is_helper ? "#60a5fa" : "#c084fc"};">
+              ${point.is_helper ? "🔵 Verified Helper" : "👤 Community Member"}
+            </p>
+            <p style="margin: 0; color: #34d399; font-weight: 700; font-size: 12px;">
+              Activity: ${point.activity_count} events
+            </p>
+          </div>
+        `;
+
+        marker.addListener("click", () => {
+          const infoWindow = new google.maps.InfoWindow({
+            content: infoContent,
+            ariaLabel: point.name
+          });
+          styleInfoWindow(infoWindow);
+          infoWindow.open(map, marker);
+        });
+
+        radarMarkers.push(marker);
+      });
+
+      // Fit bounds on first render after enabling radar
+      try {
+        if (!radarDidFit && Array.isArray(data.heatmap_points) && data.heatmap_points.length) {
+          const b = new google.maps.LatLngBounds();
+          data.heatmap_points.slice(0, 15).forEach((p, i) => {
+            const jp = jitterLatLng(p.lat, p.lng, 25, i + 13);
+            b.extend(new google.maps.LatLng(jp.lat, jp.lng));
+          });
+          if (userPosition) b.extend(new google.maps.LatLng(userPosition.lat, userPosition.lng));
+          map.fitBounds(b, 80);
+          radarDidFit = true;
+        }
+      } catch (e) {}
+    } catch (e) {
+      console.error("Failed to update radar heatmap:", e);
+    }
+  }
+
+  async function updateRadarHeatmapWithPosition(position) {
+    /**Fetch and display heatmap with explicit position*/
+    if (!position) return;
+
+    try {
+      console.log("Updating radar heatmap from position:", position);
+      // Handle both {lat, lng} objects and Google Maps LatLng objects
+      const posLat = typeof position.lat === 'function' ? position.lat() : position.lat;
+      const posLng = typeof position.lng === 'function' ? position.lng() : position.lng;
+      
+      console.log("Heatmap request with lat:", posLat, "lng:", posLng);
+      
+      const resp = await fetch("/api/radar/heatmap", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          user_lat: posLat,
+          user_lng: posLng,
+          radius_km: currentRadiusKm,
+          window_min: 120
+        })
+      });
+
+      if (!resp.ok) {
+        console.error("Heatmap API error:", resp.status);
+        return;
+      }
+
+      const data = await resp.json();
+      console.log("Heatmap data received:", data);
+      if (!data.ok || !Array.isArray(data.heatmap_points)) {
+        console.error("Invalid heatmap data:", data);
+        return;
+      }
+      const statusEl = document.getElementById("map-status");
+      if (statusEl && typeof data.total_active_nearby === 'number') {
+        statusEl.innerText = `Radar: ${data.total_active_nearby} active nearby`;
+      }
+
+      // Clear old layers
+      clearRadarHeatmap();
+      clearRadarMarkers();
+      clearRadarCircles();
+
+      // Create heatmap data for Google Maps
+      const heatmapData = data.heatmap_points.map(point => ({
+        location: new google.maps.LatLng(point.lat, point.lng),
+        weight: point.weight * 100
+      }));
+
+      // Force fallback circles so everyone is visible without billing
+      let heatmapRendered = false;
+
+      // Fallback: draw soft circles if heatmap not available
+      if (!heatmapRendered) {
+        data.heatmap_points.forEach((point, idx) => {
+          const baseColor = point.is_helper ? "#3b82f6" : "#8b5cf6";
+          const opacity = Math.min(0.65, 0.28 + point.weight * 0.35);
+          const radiusMeters = 600 + point.weight * 1400;
+          const center = jitterLatLng(point.lat, point.lng, 40, idx + 3);
+          const circle = new google.maps.Circle({
+            strokeOpacity: 0,
+            fillColor: baseColor,
+            fillOpacity: opacity,
+            center,
+            radius: radiusMeters,
+            map: map,
+            zIndex: 1
+          });
+          radarCircles.push(circle);
+        });
+      }
+
+      // Add markers for top active users
+      data.heatmap_points.slice(0, 15).forEach((point, idx) => {
+        const color = point.is_helper ? "#3b82f6" : "#a78bfa";
+        const jittered = jitterLatLng(point.lat, point.lng, 25, idx + 17);
+        const marker = new google.maps.Marker({
+          position: jittered,
+          map: map,
+          title: `${point.name} (Activity: ${point.activity_count})`,
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 7 + point.weight * 8,
+            fillColor: color,
+            fillOpacity: 0.9,
+            strokeColor: "#0f172a",
+            strokeWeight: 1
+          },
+          zIndex: 2,
+          label: {
+            text: point.is_helper ? "H" : "M",
+            color: "#ffffff",
+            fontSize: "10px",
+            fontWeight: "700",
+          },
+        });
+
+        const infoContent = `
+          <div style="background: #0b1220; color: #e5e7eb; padding: 8px 10px; border-radius: 10px; min-width: 180px; font-size: 13px; line-height: 1.35;">
+            <p style="margin: 0 0 4px 0; font-weight: 800; color: #f8fafc;">${point.name}</p>
+            <p style="margin: 0 0 4px 0; font-weight: 600; color: ${point.is_helper ? "#60a5fa" : "#c084fc"};">
+              ${point.is_helper ? "🔵 Verified Helper" : "👤 Community Member"}
+            </p>
+            <p style="margin: 0; color: #34d399; font-weight: 700; font-size: 12px;">
+              Activity: ${point.activity_count} events
+            </p>
+          </div>
+        `;
+
+        marker.addListener("click", () => {
+          const infoWindow = new google.maps.InfoWindow({
+            content: infoContent,
+            ariaLabel: point.name
+          });
+          styleInfoWindow(infoWindow);
+          infoWindow.open(map, marker);
+        });
+
+        radarMarkers.push(marker);
+      });
+
+      // Fit bounds on first render after enabling radar
+      try {
+        if (!radarDidFit && Array.isArray(data.heatmap_points) && data.heatmap_points.length) {
+          radarDidFit = true;
+        }
+      } catch (e) {}
+    } catch (e) {
+      console.error("Failed to update radar heatmap:", e);
+    }
+  }
+
+  function toggleRadar() {
+    /**Toggle the availability radar on/off*/
+    console.log("toggleRadar called, current state:", radarEnabled);
+    const btn = document.getElementById("radar-toggle-btn");
+    radarEnabled = !radarEnabled;
+    console.log("New radar state:", radarEnabled);
+
+    if (radarEnabled) {
+      radarDidFit = false;
+        // Expand radius and window for clearer demo coverage
+        currentRadiusKm = 8;
+        const radiusLbl = document.getElementById("radius-label");
+        if (radiusLbl) radiusLbl.textContent = `${currentRadiusKm} km`;
+      console.log("Turning radar ON");
+      
+      // Use map center as fallback if geolocation not available
+      const rawPos = userPosition || map.getCenter();
+      console.log("Radar raw position:", rawPos);
+
+      if (!rawPos) {
+        console.error("Cannot activate radar - no position available");
+        radarEnabled = false;
+        return;
+      }
+      // Normalize to plain {lat, lng}
+      const normLat = typeof rawPos.lat === "function" ? rawPos.lat() : rawPos.lat;
+      const normLng = typeof rawPos.lng === "function" ? rawPos.lng() : rawPos.lng;
+      const radarPosition = { lat: normLat, lng: normLng };
+
+      btn.classList.add("ring-2", "ring-purple-300", "scale-105");
+      btn.innerHTML = `
+        <svg class="w-4 h-4 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+        </svg>
+        Radar: ON
+      `;
+
+      // Update immediately and then every 3 seconds
+      console.log("Starting radar updates from position:", radarPosition);
+      console.log("Position details - lat:", radarPosition.lat, "lng:", radarPosition.lng);
+
+      updateRadarHeatmapWithPosition(radarPosition);
+      recordActivityPingWithPosition(radarPosition);
+      radarRefreshInterval = setInterval(() => {
+        console.log("Refreshing radar...");
+        const raw = userPosition || map.getCenter();
+        const cLat = typeof raw.lat === "function" ? raw.lat() : raw.lat;
+        const cLng = typeof raw.lng === "function" ? raw.lng() : raw.lng;
+        const currentPos = { lat: cLat, lng: cLng };
+        updateRadarHeatmapWithPosition(currentPos);
+        recordActivityPingWithPosition(currentPos);
+      }, 3000);
+    } else {
+        // Restore default radius
+        currentRadiusKm = 3;
+        const radiusLbl = document.getElementById("radius-label");
+        if (radiusLbl) radiusLbl.textContent = `${currentRadiusKm} km`;
+      console.log("Turning radar OFF");
+      btn.classList.remove("ring-2", "ring-purple-300", "scale-105");
+      btn.innerHTML = `
+        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+        </svg>
+        Availability Radar
+      `;
+
+      if (radarRefreshInterval) {
+        clearInterval(radarRefreshInterval);
+        radarRefreshInterval = null;
+      }
+      clearRadarHeatmap();
+      clearRadarMarkers();
+      clearRadarCircles();
+
+      const statusEl = document.getElementById("map-status");
+      if (statusEl) statusEl.innerText = "Radar off. Click to activate.";
+    }
+  }
+
   function initMap() {
     const defaultCenter = { lat: 23.75, lng: 90.38 }; // Dhaka-ish
 
@@ -607,6 +1122,9 @@ block content %}
         map.setZoom(14);
       }
     });
+
+    // Radar toggle button
+    document.getElementById("radar-toggle-btn").addEventListener("click", toggleRadar);
 
     // Filter buttons
     document.querySelectorAll(".filter-btn").forEach((btn) => {
@@ -936,7 +1454,7 @@ block content %}
 <script
   async
   defer
-  src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}&callback=initMap"
+  src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}&libraries=visualization&callback=initMap"
 ></script>
 
 {% endblock %}

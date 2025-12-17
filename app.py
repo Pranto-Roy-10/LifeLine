@@ -9,6 +9,15 @@ import string
 
 
 from reputation_service import analyze_review_quality, calculate_reputation_points
+
+# Load environment variables from .env if present
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+    print("[Env] Loaded .env environment variables")
+except Exception:
+    # dotenv is optional; continue if not installed
+    pass
 from smart_suggestion_service import (
     SmartSuggestionService, WeatherService, LocationMatcher, DemandAnalyzer
 )
@@ -334,6 +343,20 @@ class EmotionalPing(db.Model):
     user = db.relationship("User", backref="emotional_pings")
 
 
+class UserActivity(db.Model):
+    """Tracks API pings and activity for availability radar."""
+    __tablename__ = "user_activity"
+    id = db.Column(db.Integer, primary_key=True)
+    
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+    lat = db.Column(db.Float, nullable=True)
+    lng = db.Column(db.Float, nullable=True)
+    activity_type = db.Column(db.String(50), nullable=False)  # "ping", "motion", "request_view", "chat"
+    device_motion = db.Column(db.Float, nullable=True)  # motion intensity 0-100
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+    
+    user = db.relationship("User", backref="activities")
 
 
 def get_trusted_helpers_for_ping(sender_id):
@@ -3206,6 +3229,231 @@ def api_sos_status(request_id):
         }
     )
 
+
+# ==================== AVAILABILITY RADAR ENDPOINTS ====================
+
+@app.route("/api/activity/ping", methods=["POST"])
+@login_required
+def api_activity_ping():
+    """Record a user activity ping for availability radar."""
+    user = current_user()
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
+    
+    data = request.get_json(silent=True) or {}
+    
+    # Extract location and activity info
+    lat = data.get("lat")
+    lng = data.get("lng")
+    activity_type = data.get("activity_type", "ping")  # ping, motion, request_view, chat
+    device_motion = data.get("device_motion")  # 0-100 intensity
+    
+    try:
+        if lat is not None:
+            lat = float(lat)
+        if lng is not None:
+            lng = float(lng)
+        if device_motion is not None:
+            device_motion = float(device_motion)
+    except (TypeError, ValueError):
+        pass
+    
+    # Update user's last known location
+    if lat is not None and lng is not None:
+        user.lat = lat
+        user.lng = lng
+    
+    # Record the activity
+    activity = UserActivity(
+        user_id=user.id,
+        lat=lat,
+        lng=lng,
+        activity_type=activity_type,
+        device_motion=device_motion
+    )
+    db.session.add(activity)
+    db.session.commit()
+    
+    return jsonify({"ok": True, "activity_id": activity.id})
+
+
+@app.route("/api/radar/heatmap", methods=["POST"])
+@login_required
+def api_radar_heatmap():
+    """Get availability heatmap data for the human availability radar."""
+    user = current_user()
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
+    
+    data = request.get_json(silent=True) or {}
+    
+    # Get user's location and radius
+    user_lat = data.get("user_lat") or user.lat
+    user_lng = data.get("user_lng") or user.lng
+    radius_km = float(data.get("radius_km", 3))
+    
+    if user_lat is None or user_lng is None:
+        return jsonify({"error": "User location not available"}), 400
+    
+    # Get activities from the recent time window (default 5 minutes, overrideable)
+    try:
+        window_min = int(data.get("window_min", 5))
+    except Exception:
+        window_min = 5
+    cutoff_time = datetime.utcnow() - timedelta(minutes=window_min)
+    
+    activities = UserActivity.query.filter(
+        UserActivity.created_at >= cutoff_time,
+        UserActivity.lat.isnot(None),
+        UserActivity.lng.isnot(None),
+        UserActivity.user_id != user.id  # Exclude self
+    ).all()
+    
+    # Build heatmap points with activity density
+    heatmap_points = []
+    active_users = {}  # Track unique users and their activity level
+    
+    for activity in activities:
+        # Check if within radius
+        dist = haversine_distance_km(user_lat, user_lng, activity.lat, activity.lng)
+        if dist > radius_km:
+            continue
+        
+        user_id = activity.user_id
+        if user_id not in active_users:
+            active_user = User.query.get(user_id)
+            if not active_user:
+                continue
+            active_users[user_id] = {
+                "user_id": user_id,
+                "name": active_user.name,
+                "lat": activity.lat,
+                "lng": activity.lng,
+                "activity_count": 0,
+                "motion_avg": 0,
+                "last_activity": activity.created_at,
+                "is_helper": active_user.is_trusted_helper
+            }
+        
+        # Update activity metrics
+        user_data = active_users[user_id]
+        user_data["activity_count"] += 1
+        if activity.device_motion:
+            user_data["motion_avg"] = (user_data["motion_avg"] + activity.device_motion) / 2
+        user_data["last_activity"] = max(user_data["last_activity"], activity.created_at)
+    
+    # Convert to list and create heatmap points
+    for user_id, user_data in active_users.items():
+        # Calculate intensity based on activity frequency and recency
+        activity_intensity = min(100, user_data["activity_count"] * 15)  # 15 points per activity
+        
+        # Boost intensity for device motion
+        if user_data["motion_avg"] > 20:
+            activity_intensity = min(100, activity_intensity + user_data["motion_avg"] / 2)
+        
+        # Decay intensity based on recency (older activities count less)
+        age_seconds = (datetime.utcnow() - user_data["last_activity"]).total_seconds()
+        recency_factor = max(0.3, 1 - (age_seconds / 300))  # Decay over 5 minutes
+        activity_intensity *= recency_factor
+        
+        heatmap_points.append({
+            "lat": user_data["lat"],
+            "lng": user_data["lng"],
+            "weight": activity_intensity / 100,  # Normalize to 0-1 for heatmap
+            "user_id": user_id,
+            "name": user_data["name"],
+            "is_helper": user_data["is_helper"],
+            "activity_count": user_data["activity_count"]
+        })
+    
+    return jsonify({
+        "ok": True,
+        "heatmap_points": heatmap_points,
+        "total_active_nearby": len(heatmap_points),
+        "helpers_nearby": sum(1 for p in heatmap_points if p["is_helper"])
+    })
+
+
+@app.route("/api/radar/active-users", methods=["POST"])
+@login_required
+def api_radar_active_users():
+    """Get list of active nearby users for the radar."""
+    user = current_user()
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
+    
+    data = request.get_json(silent=True) or {}
+    
+    user_lat = data.get("user_lat") or user.lat
+    user_lng = data.get("user_lng") or user.lng
+    radius_km = float(data.get("radius_km", 3))
+    
+    if user_lat is None or user_lng is None:
+        return jsonify({"error": "User location not available"}), 400
+    
+    # Get activities from last 10 minutes
+    cutoff_time = datetime.utcnow() - timedelta(minutes=10)
+    
+    recent_activities = db.session.query(
+        UserActivity.user_id,
+        func.max(UserActivity.created_at).label("last_activity"),
+        func.avg(UserActivity.lat).label("avg_lat"),
+        func.avg(UserActivity.lng).label("avg_lng"),
+        func.count(UserActivity.id).label("activity_count"),
+        func.avg(UserActivity.device_motion).label("avg_motion")
+    ).filter(
+        UserActivity.created_at >= cutoff_time,
+        UserActivity.user_id != user.id
+    ).group_by(UserActivity.user_id).all()
+    
+    active_users = []
+    for record in recent_activities:
+        user_id = record[0]
+        last_activity = record[1]
+        avg_lat = record[2]
+        avg_lng = record[3]
+        activity_count = record[4]
+        avg_motion = record[5] or 0
+        
+        if avg_lat is None or avg_lng is None:
+            continue
+        
+        # Check distance
+        dist = haversine_distance_km(user_lat, user_lng, avg_lat, avg_lng)
+        if dist > radius_km:
+            continue
+        
+        # Get user info
+        u = User.query.get(user_id)
+        if not u:
+            continue
+        
+        # Calculate availability score (0-100)
+        recency = max(0, 100 - (datetime.utcnow() - last_activity).total_seconds() / 3)
+        activity_score = min(100, activity_count * 20)
+        motion_score = min(100, avg_motion * 2) if avg_motion else 0
+        availability_score = int((recency + activity_score + motion_score) / 3)
+        
+        active_users.append({
+            "user_id": user_id,
+            "name": u.name,
+            "lat": avg_lat,
+            "lng": avg_lng,
+            "distance_km": round(dist, 2),
+            "availability_score": availability_score,
+            "activity_count": activity_count,
+            "is_helper": u.is_trusted_helper,
+            "last_activity_ago_secs": int((datetime.utcnow() - last_activity).total_seconds())
+        })
+    
+    # Sort by availability score (descending)
+    active_users.sort(key=lambda x: x["availability_score"], reverse=True)
+    
+    return jsonify({
+        "ok": True,
+        "active_users": active_users[:50]  # Return top 50
+    })
+
 @app.route("/api/conversations/<int:conv_id>/messages")
 @login_required
 def api_get_messages(conv_id):
@@ -3775,6 +4023,10 @@ def get_weather():
         fallback_lat = float(os.getenv("DEFAULT_LAT", "23.8103"))
         fallback_lng = float(os.getenv("DEFAULT_LNG", "90.4125"))
 
+        # Detect environment to report data source to UI
+        ow_key = os.getenv("OPENWEATHER_API_KEY", "")
+        demo_weather_flag = os.getenv("DEMO_WEATHER", "0") == "1"
+
         lat = request.args.get("lat", type=float)
         lng = request.args.get("lng", type=float)
 
@@ -3795,10 +4047,14 @@ def get_weather():
                 "humidity": None,
                 "wind_speed": None,
             }
-            return jsonify({"success": False, "weather": demo}), 200
-        
+            source = "demo" if demo_weather_flag else "unavailable"
+            return jsonify({"success": False, "source": source, "weather": demo}), 200
+
+        # Determine source: live OpenWeather if key is present, else demo/unknown
+        source = "openweathermap" if ow_key else ("demo" if demo_weather_flag else "unknown")
         return jsonify({
             "success": True,
+            "source": source,
             "weather": conditions,
             "raw_data": weather_data
         }), 200
