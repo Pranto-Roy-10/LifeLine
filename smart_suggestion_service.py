@@ -59,13 +59,13 @@ class WeatherService:
             }
             response = requests.get(WeatherService.BASE_URL, params=params, timeout=5)
             if response.status_code == 401 and demo_weather:
-                # Demo fallback when key invalid
+                # Demo fallback when key invalid or unauthorized
                 return {
-                    "weather": [{"main": "Rain", "description": "scattered showers"}],
-                    "main": {"temp": 28.0, "feels_like": 30.0, "humidity": 78},
-                    "wind": {"speed": 2.5},
-                    "visibility": 7000,
-                    "rain": {"1h": 0.4},
+                    "weather": [{"main": "Rain", "description": "light rain (demo)"}],
+                    "main": {"temp": 29.0, "feels_like": 31.0, "humidity": 75},
+                    "wind": {"speed": 3.0},
+                    "visibility": 8000,
+                    "rain": {"1h": 0.6},
                 }
             response.raise_for_status()
             return response.json()
@@ -259,7 +259,11 @@ class RecommendationEngine:
         weather_conditions: Dict[str, Any],
         time_period: str,
         distance_km: float,
-        user_skills: Optional[List[str]] = None
+        user_skills: Optional[List[str]] = None,
+        trending_counts: Optional[Dict[str, int]] = None,
+        weather_suggestions: Optional[List[str]] = None,
+        time_suggestions: Optional[List[str]] = None,
+        temp_category: Optional[str] = None
     ) -> float:
         """
         Calculate relevance score (0-100) for a request
@@ -287,6 +291,11 @@ class RecommendationEngine:
         if "rain" in weather_condition or "rain" in description:
             if any(w in category for w in ["umbrella", "waterproof", "ride", "delivery"]):
                 weather_match_score = 25
+
+        # General weather-to-category mapping
+        if weather_suggestions:
+            if any(category == w.lower() for w in weather_suggestions):
+                weather_match_score = max(weather_match_score, 18)
         
         # Temperature-based matches
         temp = weather_conditions.get("temp")
@@ -296,6 +305,12 @@ class RecommendationEngine:
         elif temp and temp < 10:
             if any(w in category for w in ["blanket", "heater", "warm", "clothes"]):
                 weather_match_score = 20
+
+        # Humidity-driven heat discomfort
+        humidity = weather_conditions.get("humidity")
+        if temp and humidity and temp > 30 and humidity > 70:
+            if any(w in category for w in ["water", "beverage", "fan", "cooling"]):
+                weather_match_score = max(weather_match_score, 18)
         
         score += weather_match_score
         
@@ -304,6 +319,11 @@ class RecommendationEngine:
             request.get("time_window", ""), time_period
         )
         score += time_alignment
+
+        # Time-of-day category alignment (max 8 points)
+        if time_suggestions:
+            if any(category == t.lower() for t in time_suggestions):
+                score += 8
         
         # Status freshness (max 10 points) - newer requests are more relevant
         created_at = request.get("created_at", 0)
@@ -311,6 +331,19 @@ class RecommendationEngine:
             age_hours = (datetime.utcnow().timestamp() - created_at) / 3600
             freshness = max(0, 10 - (age_hours / 24))
             score += freshness
+
+        # Expiry urgency (max 10 points) - about to expire soon
+        expires_at = request.get("expires_at")
+        if expires_at:
+            hours_to_expiry = (expires_at - datetime.utcnow().timestamp()) / 3600
+            if hours_to_expiry > 0:
+                score += max(0, 10 - max(0, hours_to_expiry - 2))  # heavier boost in final hours
+
+        # Trending boost (max ~10 points)
+        if trending_counts:
+            trend_count = trending_counts.get(category, 0)
+            if trend_count:
+                score += min(10, 6 + min(trend_count, 4))
         
         # Cap score at 100
         return min(100, score)
@@ -364,9 +397,21 @@ class SmartSuggestionService:
             # 1. Fetch weather data
             weather_data = WeatherService.get_weather(user_lat, user_lng)
             weather_conditions = WeatherService.extract_conditions(weather_data)
+            temp_category = DemandAnalyzer.categorize_temperature(weather_conditions.get("temp"))
+            weather_suggestions = DemandAnalyzer.get_weather_suggestions(weather_conditions.get("condition", ""))
             
             # 2. Get time period
             time_period = DemandAnalyzer.get_time_period()
+            time_suggestions = DemandAnalyzer.get_time_suggestions(time_period)
+
+            # 2b. Get trending categories (lightweight summary)
+            trending = SmartSuggestionService.get_trending_categories(
+                db=db,
+                Request=Request,
+                hours=24,
+                limit=5
+            )
+            trending_counts = {t.get("category", "").lower(): t.get("count", 0) for t in trending}
             
             # 3. Get nearby requests
             nearby_requests = LocationMatcher.get_nearby_requests(
@@ -381,13 +426,24 @@ class SmartSuggestionService:
                 score = RecommendationEngine.calculate_relevance_score(
                     req, weather_conditions, time_period,
                     req.get("distance_km", 0),
-                    user_skills
+                    user_skills,
+                    trending_counts=trending_counts,
+                    weather_suggestions=weather_suggestions,
+                    time_suggestions=time_suggestions,
+                    temp_category=temp_category
                 )
                 
                 explanation = ""
                 if include_explanation:
                     explanation = SmartSuggestionService._generate_explanation(
-                        req, weather_conditions, time_period, score
+                        req,
+                        weather_conditions,
+                        time_period,
+                        score,
+                        weather_suggestions,
+                        time_suggestions,
+                        trending_counts,
+                        temp_category
                     )
                 
                 scored_requests.append({
@@ -424,42 +480,59 @@ class SmartSuggestionService:
         request: Dict[str, Any],
         weather_conditions: Dict[str, Any],
         time_period: str,
-        score: float
+        score: float,
+        weather_suggestions: Optional[List[str]] = None,
+        time_suggestions: Optional[List[str]] = None,
+        trending_counts: Optional[Dict[str, int]] = None,
+        temp_category: Optional[str] = None
     ) -> str:
-        """Generate human-readable explanation for suggestion"""
-        reasons = []
-        
-        # Weather reason
-        weather = weather_conditions.get("condition", "")
-        if weather:
-            category = request.get("category", "").lower()
-            if "rain" in weather.lower() and any(w in category for w in ["umbrella", "waterproof", "ride", "delivery"]):
-                # Natural language explanation aligned with UI example
-                reasons.append("It’s going to rain. Someone nearby requested umbrella delivery.")
-        
-        # Distance reason
+        """Generate a concise, smart explanation without weather focus."""
+        parts = []
+
+        category = (request.get("category") or "").lower()
         distance = request.get("distance_km", 0)
-        if distance < 1:
-            reasons.append("Very close to your location")
-        elif distance < 3:
-            reasons.append(f"Only {distance}km away")
-        
-        # Urgency reason
-        urgency = request.get("urgency", "").lower()
+        urgency = (request.get("urgency") or "").lower()
+        time_window = (request.get("time_window") or "").lower()
+
+        # Urgency-driven reason
         if urgency == "emergency":
-            reasons.append("Marked as emergency")
+            parts.append("Emergency request")
         elif urgency == "high":
-            reasons.append("High urgency")
-        
-        # Time reason
-        time_window = request.get("time_window", "").lower()
-        if time_period in time_window:
-            reasons.append(f"Needed {time_period}")
-        
-        if not reasons:
-            reasons.append("Good match for you")
-        
-        return " • ".join(reasons)
+            parts.append("High priority")
+
+        # Distance reason
+        if distance is not None:
+            if distance < 0.5:
+                parts.append("Very close to you")
+            elif distance < 2:
+                parts.append(f"{distance}km away")
+
+        # Time alignment
+        if time_period and time_period in time_window:
+            parts.append(f"Needed this {time_period}")
+
+        # Expiry pressure
+        expires_at = request.get("expires_at")
+        if expires_at:
+            hours_left = (expires_at - datetime.utcnow().timestamp()) / 3600
+            if hours_left > 0 and hours_left < 6:
+                parts.append("Expiring soon")
+
+        # Trending signal
+        if trending_counts and trending_counts.get(category, 0) > 0:
+            trend_count = trending_counts.get(category, 0)
+            if trend_count == 1:
+                parts.append("Trending need")
+            elif trend_count > 1:
+                parts.append(f"Popular request ({trend_count} similar)")
+
+        if not parts:
+            parts.append("Good match nearby")
+
+        sentence = ". ".join(parts)
+        if not sentence.endswith("."):
+            sentence += "."
+        return sentence
     
     @staticmethod
     def get_trending_categories(
