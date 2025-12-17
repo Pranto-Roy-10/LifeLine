@@ -175,7 +175,8 @@ class User(db.Model):
     phone = db.Column(db.String(20))
     emergency_number = db.Column(db.String(30), nullable=True)
     dob = db.Column(db.String(20))  # or Date type if you prefer
-    
+
+    impact_stories = db.relationship('ImpactStory', back_populates='user', cascade='all, delete-orphan')
 
     fcm_token = db.Column(db.String(512), nullable=True)
 
@@ -326,7 +327,7 @@ class ImpactStory(db.Model):
     body = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    user = db.relationship("User", backref="impact_stories")
+    user = db.relationship("User", back_populates="impact_stories")
 
 
 # ------------------ MODEL: Emotional Ping ------------------
@@ -612,17 +613,14 @@ class Offer(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    request_id = db.Column(db.Integer, db.ForeignKey("requests.id"), nullable=True)
     title = db.Column(db.String(255))
     body = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-
-
-    user = db.relationship("User", backref="impact_stories")
-
     # Relationships
-    request = db.relationship("Request", backref=db.backref("offers", cascade="all, delete-orphan"))
-    helper = db.relationship("User", backref="sent_offers")   
+    user = db.relationship("User", foreign_keys=[user_id], backref="offers")
+    request = db.relationship("Request", backref=db.backref("offers", cascade="all, delete-orphan"))   
 
 
 class SOSResponse(db.Model):
@@ -1307,44 +1305,43 @@ def logout():
 
 
 # Quick SOS trigger used by the header form (templates/base.html -> url_for('trigger_sos'))
-@app.route("/trigger_sos", methods=["POST"])
-def trigger_sos():
+#@app.route("/trigger_sos", methods=["POST"])
+#def trigger_sos():
     """Create a simple emergency request and notify nearby trusted helpers.
     This is a lightweight fallback so templates that call `trigger_sos` won't fail.
     """
-    user = current_user()
-    if user is None:
-        user = get_emergency_user()
-        login_user(user)
+    #user = current_user()
+    #if user is None:
+        #user = get_emergency_user()
+        #login_user(user)
 
-    title = "Emergency Help Requested"
-    description = "SOS triggered from UI"
-    expires_at = datetime.utcnow() + timedelta(minutes=60)
+    #title = "Emergency Help Requested"
+    #description = "SOS triggered from UI"
+    #expires_at = datetime.utcnow() + timedelta(minutes=60)
 
-    req = Request(
-        user_id=user.id,
-        title=title,
-        category="emergency",
-        description=description,
-        is_offer=False,
-        expires_at=expires_at,
-    )
-    db.session.add(req)
-    db.session.commit()
+    #req = Request(
+        #user_id=user.id,
+        #title=title,
+        #category="emergency",
+        #description=description,
+        #is_offer=False,
+        #expires_at=expires_at,)
+    #db.session.add(req)
+    #db.session.commit()
 
     # Notify a small set of trusted helpers (best-effort)
-    try:
-        helpers = User.query.filter(User.is_trusted_helper == True, User.id != user.id).limit(10).all()
-        for h in helpers:
-            try:
-                send_push_to_user(h, "Emergency nearby", f"{user.name} needs help: {title}", data={"request_id": req.id})
-            except Exception:
-                pass
-    except Exception:
-        db.session.rollback()
+    #try:
+        #helpers = User.query.filter(User.is_trusted_helper == True, User.id != user.id).limit(10).all()
+        #for h in helpers:
+            #try:
+                #send_push_to_user(h, "Emergency nearby", f"{user.name} needs help: {title}", data={"request_id": req.id})
+            #except Exception:
+                #pass
+    #except Exception:
+        #db.session.rollback()
 
-    flash("SOS triggered — local helpers notified.", "success")
-    return redirect(url_for("home"))
+    #flash("SOS triggered — local helpers notified.", "success")
+    #return redirect(url_for("home"))
 
 # ---------- OTP / EMAIL HELPERS & ROUTES ----------
 OTP_TTL_SECONDS = 120          # OTP valid for 2 minutes
@@ -1381,7 +1378,7 @@ def build_otp_email_html(user, code):
 
 @app.route("/emotional_ping")
 @login_required
-def emotional_ping():
+def emotional_ping_placeholder():
     return render_template("emotional_ping.html")
 
 @app.route("/emotional")
@@ -2401,20 +2398,6 @@ def can_help():
 
     return redirect(url_for("list_requests", mode="offer" if req_obj.is_offer else "need"))
 
-@app.route("/debug/fcm-users")
-def debug_fcm_users():
-    users = User.query.all()
-    data = []
-    for u in users:
-        tokens = [t.token for t in u.fcm_tokens.all()]  # relationship
-        data.append({
-            "id": u.id,
-            "email": u.email,
-            "is_trusted_helper": bool(u.is_trusted_helper),
-            "token_count": len(tokens),
-            "tokens_preview": [tok[:20] + "..." for tok in tokens[:3]],  # show first 3 previews
-        })
-    return jsonify(data)
 
 
 @app.route("/requests/offers/<int:offer_id>/accept", methods=["POST"])
@@ -2564,20 +2547,29 @@ def list_requests():
     user = current_user()
     offered_ids = {r.id for r in Request.query.filter(Request.helper_id == user.id).all()}
 
+    sos_responded_ids = set()
+    if user:
+        my_sos = SOSResponse.query.filter_by(helper_id=user.id).all()
+        sos_responded_ids = {r.request_id for r in my_sos}
+
+    sos_response_counts = {}
+    try:
+        rows = (
+            db.session.query(SOSResponse.request_id, func.count(SOSResponse.id))
+            .group_by(SOSResponse.request_id)
+            .all()
+        )
+        sos_response_counts = {int(rid): int(cnt) for rid, cnt in rows}
+    except Exception:
+        sos_response_counts = {}
+
     return render_template(
         "list_requests.html",
         requests=requests_list,
         mode=mode,
-
-
-        offered_ids=offered_ids,
-
         offered_ids=offered_ids,  # <--- Pass this to the HTML
         sos_responded_ids=sos_responded_ids,
         sos_response_counts=sos_response_counts,
-
-        offered_ids=offered_ids,
-
     )
 
 
@@ -2601,6 +2593,10 @@ def make_offer(request_id):
     req.status = "claimed"  # or "in_progress"
     db.session.commit()
 
+    flash("You have offered to help! The requester will be notified.", "success")
+    return redirect(url_for("list_requests"))
+
+
 @app.route("/debug/fcm-users")
 def debug_fcm_users():
     users = User.query.all()
@@ -2616,24 +2612,20 @@ def debug_fcm_users():
         })
     return jsonify(data)
 
-
-    flash("You have offered to help! The requester will be notified.", "success")
-    return redirect(url_for("list_requests"))
-
-@app.route("/accept_offer/<int:offer_id>", methods=["POST"])
-@login_required
-def accept_offer(offer_id):
+#@app.route("/accept_offer/<int:offer_id>", methods=["POST"])
+#@login_required
+#def accept_offer(offer_id):
     # Since there's no Offer model, this might be a placeholder
     # For now, assume offer_id is request_id or something
     # But in dashboard, it's offer.id, but offers don't exist
     # Perhaps this route is not needed, or I need to implement offers
     # For now, I'll make it a placeholder
-    flash("Accept offer functionality not implemented yet.", "error")
-    return redirect(url_for("dashboard"))
+    #flash("Accept offer functionality not implemented yet.", "error")
+    #return redirect(url_for("dashboard"))
 
 @app.route("/complete_request/<int:request_id>", methods=["POST"])
 @login_required
-def complete_request(request_id):
+def complete_request_placeholder(request_id):
     user = current_user()
     req = Request.query.get_or_404(request_id)
 
@@ -2655,8 +2647,12 @@ def complete_request(request_id):
 @app.route("/events")
 @login_required
 def list_events():
+    # Only show non-completed events
     events = Event.query.filter_by(completed=False).all()
-    if not events:
+    
+    # Create sample events only if NO events exist at all (including completed ones)
+    all_events_count = Event.query.count()
+    if all_events_count == 0:
         # Add some sample events
         sample_events = [
             {
@@ -2700,7 +2696,9 @@ def list_events():
             )
             db.session.add(event)
         db.session.commit()
-        events = Event.query.all()
+        # Reload only non-completed events
+        events = Event.query.filter_by(completed=False).all()
+    
     return render_template("events.html", events=events)
 
 
@@ -2778,14 +2776,17 @@ def complete_event(event_id):
     event = Event.query.get_or_404(event_id)
     user = current_user()
 
-    # Creator OR helper can complete
-    if event.creator_id != user.id and user.role != "helper":
-        flash("You are not allowed to complete this event.", "danger")
-        return redirect(url_for("list_events"))
+    # Creator OR any user who showed interest can complete
+    if event.creator_id != user.id:
+        # Check if user showed interest in this event
+        interest = EventInterest.query.filter_by(event_id=event_id, user_id=user.id).first()
+        if not interest:
+            flash("You are not allowed to complete this event.", "danger")
+            return redirect(url_for("list_events"))
 
     if event.completed:
         flash("Event already completed.", "info")
-        return redirect(url_for("dashboard"))
+        return redirect(url_for("list_events"))
 
     event.completed = True
     event.completed_at = datetime.utcnow()
@@ -2825,33 +2826,6 @@ def update_impact_from_event(event, user):
 
     db.session.add(impact)
     db.session.commit()
-
-
-
-    sos_responded_ids = set()
-    if user:
-        my_sos = SOSResponse.query.filter_by(helper_id=user.id).all()
-        sos_responded_ids = {r.request_id for r in my_sos}
-
-    sos_response_counts = {}
-    try:
-        rows = (
-            db.session.query(SOSResponse.request_id, func.count(SOSResponse.id))
-            .group_by(SOSResponse.request_id)
-            .all()
-        )
-        sos_response_counts = {int(rid): int(cnt) for rid, cnt in rows}
-    except Exception:
-        sos_response_counts = {}
-
-    return render_template(
-        "list_requests.html",
-        requests=requests_list,
-        mode=mode,
-        offered_ids=offered_ids,  # <--- Pass this to the HTML
-        sos_responded_ids=sos_responded_ids,
-        sos_response_counts=sos_response_counts,
-    )
 
 
 # ------------------ CHAT PAGES & API ------------------
@@ -2986,11 +2960,6 @@ def api_nearby_requests():
     except Exception as e:
         print(f"[API] Error in api_nearby_requests: {e}")
         return jsonify({"error": str(e)}), 500
-
-<<<<<<< HEAD
-=======
-
->>>>>>> 52309700888cf76114c080b53109095291fab29d
 
 @app.route("/dashboard")
 @login_required
@@ -3422,8 +3391,6 @@ def api_impact_by_category():
     values = [int(r[1]) for r in rows]
     return jsonify({"labels": labels, "values": values})
 
-
-<<<<<<< HEAD
 # 6) Create an impact story
 @app.route("/api/impact/story", methods=["POST"])
 @login_required
@@ -3566,30 +3533,6 @@ def impact():
         items=items,
         carbon=carbon
     )
-
-
-@app.route("/emotional")
-def emotional_ping():
-    user = current_user()
-    if not user:
-        # quick guest flow: use Emergency Guest
-        user = get_emergency_user()
-        login_user(user)
-    # find a trusted helper (listener)
-    listener = User.query.filter(User.is_trusted_helper == True, User.id != user.id).first()
-    if not listener:
-        # create or get a generic listener account
-        listener = User.query.filter_by(email="listener@lifeline.local").first()
-        if not listener:
-            listener = User(email="listener@lifeline.local", name="Listener")
-            listener.is_trusted_helper = True
-            # set random password
-            listener.password_hash = generate_password_hash(os.urandom(12).hex())
-            db.session.add(listener)
-            db.session.commit()
-
-    conv = get_or_create_conversation(user.id, listener.id)
-    return redirect(url_for('chat_with_user', other_user_id=listener.id))
 
 
 @app.route("/api/user/location", methods=["POST"])
@@ -3894,151 +3837,6 @@ def api_sos_status(request_id):
             "should_call": should_call,
             "seconds_remaining": seconds_remaining,
         }
-    )
-
-
-
-# 6) Create an impact story
-@app.route("/api/impact/story", methods=["POST"])
-@login_required
-def api_impact_story_create():
-    user = current_user()
-    data = request.get_json(silent=True) or {}
-    title = (data.get("title") or "").strip()
-    body = (data.get("body") or "").strip()
-    if not title or not body:
-        return jsonify({"error": "title and body required"}), 400
-    s = ImpactStory(user_id=user.id, title=title[:255], body=body)
-    db.session.add(s)
-    db.session.commit()
-    return jsonify({"id": s.id, "created_at": int(s.created_at.timestamp())}), 201
-
-
-# 7) List impact stories (pagination)
-@app.route("/api/impact/stories", methods=["GET"])
-@login_required
-def api_impact_stories():
-    page = int(request.args.get("page", 1))
-    per_page = int(request.args.get("per_page", 10))
-    q = ImpactStory.query.order_by(ImpactStory.created_at.desc())
-    total = q.count()
-    items = q.offset((page - 1) * per_page).limit(per_page).all()
-    stories = [{
-        "id": it.id,
-        "title": it.title,
-        "body": it.body,
-        "author_name": it.user.name if it.user else None,
-        "created_at": int(it.created_at.timestamp())
-    } for it in items]
-    return jsonify({"total": total, "page": page, "per_page": per_page, "stories": stories})
-
-
-# 8) Community-wide impact summary
-@app.route("/api/community/impact", methods=["GET"])
-def api_community_impact():
-    # Total hours volunteered across all users
-    total_hours = db.session.query(func.coalesce(func.sum(func.julianday(Request.completed_at) - func.julianday(Request.created_at)), 0.0)).filter(
-        Request.status == "completed",
-        Request.completed_at != None
-    ).scalar() or 0.0
-    total_hours = float(total_hours) * 24  # Convert days to hours
-
-    # Total items shared
-    total_items = Resource.query.count()
-
-    # Total carbon saved (estimate: each ride share saves 2.5 kg CO2)
-    ride_requests = Request.query.filter(Request.category == "ride", Request.status == "completed").count()
-    total_carbon = ride_requests * 2.5
-
-    # Total people helped
-    total_helped = db.session.query(func.count(func.distinct(Request.user_id))).filter(
-        Request.status == "completed",
-        Request.completed_at != None,
-        Request.user_id != None
-    ).scalar() or 0
-
-    return jsonify({
-        "total_hours": round(total_hours, 1),
-        "total_items": total_items,
-        "total_carbon": round(total_carbon, 1),
-        "total_helped": total_helped
-    })
-
-
-# 9) Community impact over time (monthly data for graphs)
-@app.route("/api/community/impact-over-time", methods=["GET"])
-def api_community_impact_over_time():
-    months = int(request.args.get("months", 6))
-    end_date = datetime.utcnow()
-    start_date = end_date - timedelta(days=months*30)
-
-    # Monthly hours
-    monthly_data = db.session.query(
-        func.strftime('%Y-%m', Request.completed_at).label('month'),
-        func.coalesce(func.sum(func.julianday(Request.completed_at) - func.julianday(Request.created_at)), 0.0).label('hours')
-    ).filter(
-        Request.status == "completed",
-        Request.completed_at >= start_date,
-        Request.completed_at <= end_date
-    ).group_by(func.strftime('%Y-%m', Request.completed_at)).order_by(func.strftime('%Y-%m', Request.completed_at)).all()
-
-    labels = []
-    hours_data = []
-    for row in monthly_data:
-        labels.append(row.month)
-        hours_data.append(round(float(row.hours) * 24, 1))  # Convert to hours
-
-    # Fill missing months with 0
-    current = start_date.replace(day=1)
-    while current <= end_date:
-        month_str = current.strftime('%Y-%m')
-        if month_str not in labels:
-            labels.append(month_str)
-            hours_data.append(0.0)
-        current += timedelta(days=32)
-        current = current.replace(day=1)
-
-    # Sort by month
-    combined = sorted(zip(labels, hours_data), key=lambda x: x[0])
-    labels, hours_data = zip(*combined) if combined else ([], [])
-
-    return jsonify({
-        "labels": list(labels),
-        "hours": list(hours_data)
-    })
-
-@app.route("/impact")
-@login_required
-def impact_dashboard():
-    return render_template("impact.html")
-
-
-@app.route("/impact")
-@login_required
-def impact():
-    user = current_user()
-
-    if user.role == "helper":
-        # Helper sees ONLY their own impact
-        logs = ImpactLog.query.filter_by(helper_id=user.id).all()
-        title = "Your Volunteer Impact"
-    else:
-        # Normal users see COMMUNITY impact
-        logs = ImpactLog.query.all()
-        title = "Community Impact"
-
-    labels = [l.created_at.strftime("%b %Y") for l in logs]
-    hours = [l.hours for l in logs]
-    items = [l.items for l in logs]
-    carbon = [l.carbon for l in logs]
-
-    return render_template(
-        "impact.html",
-        title=title,
-        labels=labels,
-        hours=hours,
-        items=items,
-        carbon=carbon
     )
 
 
