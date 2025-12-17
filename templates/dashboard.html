@@ -17,6 +17,27 @@ block content %}
           ⭐ {{ stats.badge }}
         </p>
 
+
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center">
+        <div>
+            <h1 class="text-3xl font-bold mb-1">Welcome back, {{ user.name }} 👋</h1>
+            <p class="text-slate-400">Here’s your impact summary</p>
+            <p class="mt-2 text-sm font-semibold italic {{ stats.badge_color }} bg-slate-900/50 inline-block px-3 py-1 rounded-full border border-slate-800">
+                ⭐ {{ stats.badge }}
+            </p>
+        </div>
+        <div class="mt-4 md:mt-0">
+            <a href="{{ url_for('need_help') }}" class="bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-lg font-medium mr-2 transition">
+                Request Help
+            </a>
+            <a href="{{ url_for('can_help') }}" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium mr-2 transition">
+                Offer Help
+            </a>
+            <a href="{{ url_for('create_event') }}" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium mr-2 transition">
+                Create Event
+            </a>
+        </div>
+
         {% if user.is_trusted_helper %}
         <p
           class="text-sm font-semibold text-emerald-300 bg-emerald-900/50 inline-block px-3 py-1 rounded-full border border-emerald-800"
@@ -32,6 +53,7 @@ block content %}
         </a>
         {% endif %}
       </div>
+
     </div>
 
     <div class="mt-4 md:mt-0 space-x-2">
@@ -457,6 +479,65 @@ block content %}
           </div>
           {% endfor %}
         </div>
+
+    </div>
+
+    <!-- My Events Section -->
+    <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-6">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-bold text-white flex items-center gap-2">
+                <span class="bg-indigo-500 w-2 h-6 rounded-full"></span>
+                My Events
+            </h2>
+            <a href="{{ url_for('list_events') }}" class="text-sm text-slate-400 hover:text-white transition">View All →</a>
+        </div>
+
+        {% if user_events %}
+            <div class="space-y-4">
+                {% for event in user_events %}
+                    <div class="bg-slate-950 border border-slate-800 p-4 rounded-xl">
+                        <div class="flex justify-between items-start mb-2">
+                            <div>
+                                <h3 class="font-semibold text-lg text-slate-200">{{ event.title }}</h3>
+                                <p class="text-sm text-slate-400">{{ event.area }} • {{ event.date.strftime('%B %d, %Y') }}</p>
+                            </div>
+                            <span class="text-xs font-bold px-2 py-1 rounded uppercase 
+                                {% if event.completed %} bg-green-900 text-green-300
+                                {% else %} bg-blue-900 text-blue-300 {% endif %}">
+                                {% if event.completed %}Completed{% else %}Active{% endif %}
+                            </span>
+                        </div>
+                        <p class="text-sm text-slate-500 mb-3">{{ event.description }}</p>
+                        {% if not event.completed %}
+                            <form action="{{ url_for('complete_event', event_id=event.id) }}" method="POST" class="inline">
+                                <button type="submit" class="px-3 py-1 text-xs rounded bg-emerald-600 hover:bg-emerald-700 text-white transition">
+                                    ✅ Mark Completed
+                                </button>
+                            </form>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p class="text-slate-500 italic">You haven't created any events yet.</p>
+            <a href="{{ url_for('create_event') }}" class="mt-2 inline-block text-sm text-indigo-400 hover:underline">Create your first event →</a>
+        {% endif %}
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-6">
+            <p class="text-slate-400">People Helped</p>
+            <h2 class="text-4xl font-bold text-emerald-400 mt-3">{{ stats.helped }}</h2>
+        </div>
+        <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-6">
+            <p class="text-slate-400">Total Hours</p>
+            <h2 class="text-4xl font-bold text-emerald-400 mt-3">{{ stats.total_hours }}h</h2>
+        </div>
+        <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-6">
+            <p class="text-slate-400">Trust Score</p>
+            <div class="w-full bg-slate-700 h-3 rounded-full mt-4">
+                <div class="bg-emerald-400 h-3 rounded-full" style="width: {{ stats.trust }}%"></div>
+
         {% endif %} {% if pending_offers %}
         <div>
           <p class="text-xs font-bold text-slate-500 uppercase mb-2">
@@ -474,6 +555,7 @@ block content %}
                 {% if offer.request.is_offer %} You requested this {% else %}
                 You offered help {% endif %}
               </span>
+
             </div>
             <span class="text-xs bg-slate-800 text-slate-500 px-2 py-1 rounded"
               >Pending</span
