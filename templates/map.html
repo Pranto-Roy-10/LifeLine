@@ -301,7 +301,11 @@ block content %}
     `;
   }
 
+  const sosRespondInFlight = new Set();
+
   async function respondToSOS(requestId) {
+    if (sosRespondInFlight.has(requestId)) return;
+    sosRespondInFlight.add(requestId);
     try {
       const send = async (payload) => {
         const resp = await fetch(`/api/sos/${requestId}/respond`, {
@@ -331,24 +335,28 @@ block content %}
         focusOnRequest(requestId);
       };
 
-      if (!navigator.geolocation) {
-        await send({});
-        return;
-      }
+      // Respond immediately so UX isn't blocked on geolocation.
+      await send({});
 
+      // Best-effort: attach a location shortly after responding.
+      if (!navigator.geolocation) return;
       navigator.geolocation.getCurrentPosition(
         async (pos) => {
-          await send({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+          try {
+            await send({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+          } catch (e) {}
         },
         async () => {
-          // If blocked, still respond (server may use last-known helper location)
-          await send({});
+          // Ignore geolocation errors.
         },
-        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+        { enableHighAccuracy: false, timeout: 1500, maximumAge: 60000 }
       );
     } catch (e) {
       console.error(e);
       alert("Failed to respond to SOS");
+    } finally {
+      // Allow re-try after a short moment.
+      setTimeout(() => sosRespondInFlight.delete(requestId), 1500);
     }
   }
   window.respondToSOS = respondToSOS;

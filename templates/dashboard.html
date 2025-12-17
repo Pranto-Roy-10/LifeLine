@@ -1,340 +1,675 @@
-{% extends "base.html" %}
-{% block title %}Dashboard – LifeLine{% endblock %}
-
-{% block content %}
-<div class="w-full min-h-screen bg-slate-950 text-slate-100 px-6 md:px-12 py-10 space-y-8">
-
-    <div class="flex flex-col md:flex-row justify-between items-start md:items-center">
-        <div>
-            <h1 class="text-3xl font-bold mb-1">Welcome back, {{ user.name }} 👋</h1>
-            <p class="text-slate-400">Here's your impact summary</p>
-            <p class="mt-2 text-sm font-semibold italic {{ stats.badge_color }} bg-slate-900/50 inline-block px-3 py-1 rounded-full border border-slate-800">
-                ⭐ {{ stats.badge }}
-            </p>
-        </div>
-        <div class="mt-4 md:mt-0">
-            <a href="{{ url_for('need_help') }}" class="bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-lg font-medium mr-2 transition">
-                Request Help
-            </a>
-            <a href="{{ url_for('can_help') }}" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium mr-2 transition">
-                Offer Help
-            </a>
-            <a href="{{ url_for('create_event') }}" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium mr-2 transition">
-                Create Event
-            </a>
-        </div>
+{% extends "base.html" %} {% block title %}Dashboard – LifeLine{% endblock %} {%
+block content %}
+<div
+  class="w-full min-h-screen bg-slate-950 text-slate-100 px-6 md:px-12 py-10 space-y-8"
+>
+  {% if sos_review_req and sos_review_helper %}
+  <div class="bg-slate-900/60 border border-emerald-500/30 rounded-2xl p-6">
+    <div
+      class="flex flex-col md:flex-row md:items-center md:justify-between gap-3"
+    >
+      <div>
+        <h2 class="text-xl font-bold text-white">Complete SOS & Review</h2>
+        <p class="text-slate-400 text-sm mt-1">
+          <span class="text-rose-300 font-semibold">SOS:</span>
+          {{ sos_review_req.title }}
+          <span class="text-slate-600">•</span>
+          <span class="text-emerald-300 font-semibold">Responder:</span>
+          {{ sos_review_helper.name }}
+        </p>
+      </div>
+      <a
+        href="{{ url_for('chat_with_user', other_user_id=sos_review_helper.id) }}"
+        class="inline-flex items-center justify-center px-3 py-2 rounded-lg font-medium transition border bg-slate-900/40 border-slate-700 text-slate-200 hover:bg-slate-900/60"
+      >
+        Chat
+      </a>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
-        <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-6">
-            <h2 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                <span class="bg-indigo-500 w-2 h-6 rounded-full"></span>
-                My Posts & Incoming Requests
-            </h2>
-
-            {% set my_posts = user.requests | selectattr("status", "in", ["open", "in_progress", "claimed"]) | list %}
-            
-            {% if my_posts|length == 0 %}
-                <p class="text-slate-500 italic">You haven't posted anything yet.</p>
-            {% else %}
-                <div class="space-y-4">
-                    {% for req in my_posts %}
-                        <div class="bg-slate-950 border border-slate-800 p-4 rounded-xl">
-                            
-                            <div class="flex justify-between items-start mb-2">
-                                <div>
-                                    <h3 class="font-semibold text-lg text-slate-200">{{ req.title }}</h3>
-                                    <span class="text-xs text-slate-500 uppercase">{{ req.category }}</span>
-                                </div>
-                                <span class="text-xs font-bold px-2 py-1 rounded uppercase 
-                                    {% if req.status == 'open' %} bg-blue-900 text-blue-300
-                                    {% else %} bg-amber-900 text-amber-300 {% endif %}">
-                                    {{ req.status }}
-                                </span>
-                            </div>
-
-                            {% if req.status == 'open' %}
-                                <div class="mt-3 bg-slate-900 p-3 rounded-lg">
-                                    <p class="text-xs text-slate-400 uppercase font-bold mb-2">
-                                        {% if req.is_offer %}
-                                            People requesting this item:
-                                        {% else %}
-                                            People offering to help:
-                                        {% endif %}
-                                    </p>
-
-                                    {% if req.offers|length == 0 %}
-                                        <p class="text-sm text-slate-500">Waiting for responses...</p>
-                                    {% else %}
-                                        <ul class="space-y-2">
-                                            {% for offer in req.offers %}
-                                                {% if offer.status == 'pending' %}
-                                                <li class="flex items-center justify-between bg-slate-800 p-2 rounded border border-slate-700">
-                                                    <div class="flex items-center gap-2">
-                                                        <img src="{{ offer.helper.profile_photo or url_for('static', filename='uploads/profile_photos/default.png') }}" class="w-6 h-6 rounded-full">
-                                                        <span class="text-sm text-slate-200">{{ offer.helper.name }}</span>
-                                                    </div>
-                                                    <div class="flex gap-2">
-                                                        <a href="{{ url_for('chat_with_user', other_user_id=offer.helper_id) }}" class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded">Chat</a>
-                                                        <form action="{{ url_for('accept_offer', offer_id=offer.id) }}" method="POST">
-                                                            <button type="submit" class="text-xs bg-emerald-600 hover:bg-emerald-500 text-white px-2 py-1 rounded">
-                                                                Accept
-                                                            </button>
-                                                        </form>
-                                                    </div>
-                                                </li>
-                                                {% endif %}
-                                            {% endfor %}
-                                        </ul>
-                                    {% endif %}
-                                </div>
-
-                            {% elif req.status in ['in_progress', 'claimed'] %}
-                                <div class="mt-3 bg-amber-900/10 border border-amber-900/30 p-3 rounded-lg">
-                                    <p class="text-sm text-amber-200 mb-2">
-                                        Connected with: <strong>{{ req.helper.name if req.helper else 'Unknown' }}</strong>
-                                    </p>
-
-                                    {% if req.is_offer == False %} 
-                                        <form action="{{ url_for('complete_request', request_id=req.id) }}" method="POST" class="space-y-3">
-                                            
-                                            <div>
-                                                <label class="block text-xs text-slate-400 mb-1">Rate Service</label>
-                                                <div class="flex gap-2">
-                                                    {% for i in range(1, 6) %}
-                                                        <label class="cursor-pointer">
-                                                            <input type="radio" name="rating" value="{{ i }}" class="sr-only peer" {% if i==5 %}checked{% endif %}>
-                                                            <span class="text-slate-600 peer-checked:text-yellow-400 text-xl hover:text-yellow-300 transition">★</span>
-                                                        </label>
-                                                    {% endfor %}
-                                                </div>
-                                            </div>
-
-                                            <div>
-                                                <label class="block text-xs text-slate-400 mb-1">Duration (Hours)</label>
-                                                <input type="number" name="hours" step="0.5" min="0.5" value="1" 
-                                                       class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-                                                       placeholder="e.g. 2.5">
-                                            </div>
-
-                                            <textarea name="comment" rows="2" placeholder="How did they help?" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm focus:outline-none focus:border-emerald-500"></textarea>
-                                            
-                                            <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold py-2 rounded transition">
-                                                Mark Complete & Review
-                                            </button>
-                                        </form>
-                                    {% else %}
-                                        <p class="text-xs text-slate-400 italic">
-                                            Waiting for {{ req.helper.name }} to confirm receipt.
-                                        </p>
-                                    {% endif %}
-                                </div>
-                            {% endif %}
-                        </div>
-                    {% endfor %}
-                </div>
-            {% endif %}
+    <form
+      action="{{ url_for('complete_sos', request_id=sos_review_req.id, helper_id=sos_review_helper.id) }}"
+      method="POST"
+      class="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3"
+    >
+      <div class="md:col-span-1">
+        <label class="block text-xs text-slate-400 mb-1">Rating</label>
+        <div class="flex gap-2">
+          {% for i in range(1, 6) %}
+          <label class="cursor-pointer">
+            <input type="radio" name="rating" value="{{ i }}" class="sr-only
+            peer" {% if i==5 %}checked{% endif %}>
+            <span
+              class="text-slate-600 peer-checked:text-yellow-400 text-xl hover:text-yellow-300 transition"
+              >★</span
+            >
+          </label>
+          {% endfor %}
         </div>
+      </div>
+      <div class="md:col-span-1">
+        <label class="block text-xs text-slate-400 mb-1"
+          >Duration (Hours)</label
+        >
+        <input
+          type="number"
+          name="hours"
+          step="0.5"
+          min="0.5"
+          value="1"
+          class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-white focus:outline-none focus:border-emerald-500"
+        />
+      </div>
+      <div class="md:col-span-1">
+        <label class="block text-xs text-slate-400 mb-1">Comment</label>
+        <input
+          type="text"
+          name="comment"
+          placeholder="How did they help?"
+          class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-white focus:outline-none focus:border-emerald-500"
+        />
+      </div>
+      <div class="md:col-span-3">
+        <button
+          type="submit"
+          class="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold py-2 rounded transition"
+        >
+          Mark SOS Complete & Review
+        </button>
+      </div>
+    </form>
+  </div>
+  {% endif %}
 
-        <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-6">
-            <h2 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                <span class="bg-emerald-500 w-2 h-6 rounded-full"></span>
-                My Activity (Sent)
-            </h2>
-            
-            {% set active_engagements = user.helped_requests | selectattr("status", "in", ["in_progress", "claimed"]) | list %}
-            {% set pending_offers = user.sent_offers | selectattr("status", "equalto", "pending") | list %}
-
-            {% if active_engagements|length == 0 and pending_offers|length == 0 %}
-                <p class="text-slate-500 italic">You aren't interacting with anyone else's posts right now.</p>
-                <a href="{{ url_for('list_requests') }}" class="mt-4 block text-center text-sm text-emerald-400 hover:underline">Browse Map</a>
-            {% else %}
-                <div class="space-y-4">
-                    
-                    {% if active_engagements %}
-                        <div>
-                            <p class="text-xs font-bold text-emerald-400 uppercase mb-2">In Progress</p>
-                            {% for task in active_engagements %}
-                                <div class="bg-slate-950 border border-emerald-900/30 p-4 rounded-xl relative overflow-hidden mb-2">
-                                    <div class="absolute left-0 top-0 bottom-0 w-1 bg-emerald-500"></div>
-                                    <h3 class="font-semibold">{{ task.title }}</h3>
-                                    <p class="text-sm text-slate-400 mb-2">{{ task.category }} • Posted by {{ task.user.name }}</p>
-                                    
-                                    <div class="flex gap-2 mb-3">
-                                        <a href="{{ url_for('chat_with_user', other_user_id=task.user_id) }}" class="flex-1 bg-slate-800 hover:bg-slate-700 text-center py-2 rounded text-sm transition">
-                                            Chat
-                                        </a>
-                                    </div>
-
-                                    {% if task.is_offer == True %}
-                                        <div class="bg-slate-900 p-3 rounded border border-slate-700">
-                                            <p class="text-xs text-slate-300 mb-2 font-bold">Did you receive the help/item?</p>
-                                            <form action="{{ url_for('complete_request', request_id=task.id) }}" method="POST" class="space-y-3">
-                                                
-                                                <div>
-                                                    <div class="flex gap-2">
-                                                        {% for i in range(1, 6) %}
-                                                            <label class="cursor-pointer">
-                                                                <input type="radio" name="rating" value="{{ i }}" class="sr-only peer" {% if i==5 %}checked{% endif %}>
-                                                                <span class="text-slate-600 peer-checked:text-yellow-400 text-lg hover:text-yellow-300 transition">★</span>
-                                                            </label>
-                                                        {% endfor %}
-                                                    </div>
-                                                </div>
-
-                                                <div>
-                                                    <label class="block text-xs text-slate-400 mb-1">Time Spent / Value (Hours)</label>
-                                                    <input type="number" name="hours" step="0.5" min="0.5" value="1" 
-                                                           class="w-full bg-slate-800 border border-slate-600 rounded p-2 text-xs text-white focus:outline-none focus:border-emerald-500">
-                                                </div>
-
-                                                <textarea name="comment" rows="1" placeholder="Review {{ task.user.name }}..." class="w-full bg-slate-800 border border-slate-600 rounded p-2 text-xs focus:outline-none"></textarea>
-                                                
-                                                <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-2 rounded transition">
-                                                    Mark Received & Review
-                                                </button>
-                                            </form>
-                                        </div>
-                                    {% else %}
-                                        <p class="text-xs text-slate-500 italic">Waiting for {{ task.user.name }} to mark this complete.</p>
-                                    {% endif %}
-
-                                </div>
-                            {% endfor %}
-                        </div>
-                    {% endif %}
-
-                    {% if pending_offers %}
-                        <div>
-                            <p class="text-xs font-bold text-slate-500 uppercase mb-2">Pending Requests/Offers</p>
-                            {% for offer in pending_offers %}
-                                <div class="flex justify-between items-center bg-slate-950/50 p-3 rounded border border-dashed border-slate-800 mb-2">
-                                    <div class="flex flex-col">
-                                        <span class="text-sm text-slate-300 font-semibold">{{ offer.request.title }}</span>
-                                        <span class="text-xs text-slate-500">
-                                            {% if offer.request.is_offer %}
-                                                You requested this
-                                            {% else %}
-                                                You offered help
-                                            {% endif %}
-                                        </span>
-                                    </div>
-                                    <span class="text-xs bg-slate-800 text-slate-500 px-2 py-1 rounded">Pending</span>
-                                </div>
-                            {% endfor %}
-                        </div>
-                    {% endif %}
-                </div>
-            {% endif %}
-        </div>
-    </div>
-
-    <!-- My Events Section -->
-    <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-6">
-        <div class="flex justify-between items-center mb-4">
-            <h2 class="text-xl font-bold text-white flex items-center gap-2">
-                <span class="bg-indigo-500 w-2 h-6 rounded-full"></span>
-                My Events
-            </h2>
-            <a href="{{ url_for('list_events') }}" class="text-sm text-slate-400 hover:text-white transition">View All →</a>
-        </div>
-
-        {% if user_events %}
-            <div class="space-y-4">
-                {% for event in user_events %}
-                    <div class="bg-slate-950 border border-slate-800 p-4 rounded-xl">
-                        <div class="flex justify-between items-start mb-2">
-                            <div>
-                                <h3 class="font-semibold text-lg text-slate-200">{{ event.title }}</h3>
-                                <p class="text-sm text-slate-400">{{ event.area }} • {{ event.date.strftime('%B %d, %Y') }}</p>
-                            </div>
-                            <span class="text-xs font-bold px-2 py-1 rounded uppercase 
-                                {% if event.completed %} bg-green-900 text-green-300
-                                {% else %} bg-blue-900 text-blue-300 {% endif %}">
-                                {% if event.completed %}Completed{% else %}Active{% endif %}
-                            </span>
-                        </div>
-                        <p class="text-sm text-slate-500 mb-3">{{ event.description }}</p>
-                        {% if not event.completed %}
-                            <form action="{{ url_for('complete_event', event_id=event.id) }}" method="POST" class="inline">
-                                <button type="submit" class="px-3 py-1 text-xs rounded bg-emerald-600 hover:bg-emerald-700 text-white transition">
-                                    ✅ Mark Completed
-                                </button>
-                            </form>
-                        {% endif %}
-                    </div>
-                {% endfor %}
-            </div>
-        {% else %}
-            <p class="text-slate-500 italic">You haven't created any events yet.</p>
-            <a href="{{ url_for('create_event') }}" class="mt-2 inline-block text-sm text-indigo-400 hover:underline">Create your first event →</a>
-        {% endif %}
-    </div>
-
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-6">
-            <p class="text-slate-400">People Helped</p>
-            <h2 class="text-4xl font-bold text-emerald-400 mt-3">{{ stats.helped }}</h2>
-        </div>
-        <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-6">
-            <p class="text-slate-400">Total Hours</p>
-            <h2 class="text-4xl font-bold text-emerald-400 mt-3">{{ stats.total_hours }}h</h2>
-        </div>
-        <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-6">
-            <p class="text-slate-400">Trust Score</p>
-            <div class="w-full bg-slate-700 h-3 rounded-full mt-4">
-                <div class="bg-emerald-400 h-3 rounded-full" style="width: {{ stats.trust }}%"></div>
-            </div>
-            <p class="mt-3 text-slate-300">{{ stats.trust }}% <span class="text-xs text-slate-500">(Verified Reviews)</span></p>
-        </div>
-    </div>
-    
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div class="bg-[#0D1529] p-8 rounded-3xl shadow-lg text-center border border-white/5 flex flex-col items-center justify-center">
-            <h2 class="text-xl font-bold mb-4">Your Kindness Score</h2>
-            <div class="relative w-40 h-40">
-                <svg class="w-40 h-40 transform -rotate-90">
-                    <circle cx="80" cy="80" r="70" stroke="#1A2337" stroke-width="12" fill="none" />
-                    <circle cx="80" cy="80" r="70" stroke="#32D48E" stroke-width="12" fill="none" stroke-dasharray="439" stroke-dashoffset="{{ 439 - (stats.kindness / 200) * 439 }}" stroke-linecap="round"/>
-                </svg>
-                <div class="absolute inset-0 flex items-center justify-center">
-                    <span class="text-3xl font-bold">{{ stats.kindness }}</span>
-                </div>
-            </div>
-            <p class="mt-3 text-white/70 text-sm">Earn points by helping & getting 5★ reviews!</p>
-        </div>
-        <div class="bg-[#0D1529] p-8 rounded-3xl shadow-lg border border-white/5">
-            <h2 class="text-xl font-bold mb-6">Your Progress Over Time</h2>
-            <canvas id="trustChart" height="150"></canvas>
-        </div>
-    </div>
-
+  <div
+    class="flex flex-col md:flex-row justify-between items-start md:items-center"
+  >
     <div>
-        <div class="flex justify-between items-center mb-4">
-            <h2 class="text-2xl font-bold">Recent Help History</h2>
-            <a href="/history" class="text-sm text-slate-400 hover:text-white transition">View All →</a>
-        </div>
-        {% if history %}
-            <div class="space-y-4">
-                {% for item in history %}
-                    <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 flex justify-between items-center">
-                        <div>
-                            <p class="text-lg font-semibold text-slate-200">{{ item.title }}</p>
-                            <p class="text-slate-400 text-sm">{{ item.category }} • {{ item.date }}</p>
-                        </div>
-                        <div class="text-right">
-                            <span class="block text-emerald-400 font-bold">+{{ item.hours }} hrs</span>
-                        </div>
-                    </div>
-                {% endfor %}
-            </div>
-        {% else %}
-            <div class="bg-slate-900/30 border border-dashed border-slate-800 rounded-xl p-8 text-center">
-                <p class="text-slate-500">You haven't completed any help requests yet.</p>
-            </div>
-        {% endif %}
+      <h1 class="text-3xl font-bold mb-1">Welcome back, {{ user.name }} 👋</h1>
+      <p class="text-slate-400">Here's your impact summary</p>
+      <p
+        class="mt-2 text-sm font-semibold italic {{ stats.badge_color }} bg-slate-900/50 inline-block px-3 py-1 rounded-full border border-slate-800"
+      >
+        ⭐ {{ stats.badge }}
+      </p>
     </div>
+    <div class="mt-4 md:mt-0">
+      <a
+        href="{{ url_for('need_help') }}"
+        class="inline-flex items-center justify-center px-4 py-2 rounded-lg font-medium mr-2 transition border bg-slate-900/40 border-rose-500/30 text-rose-200 hover:bg-slate-900/60 hover:border-rose-400/50"
+      >
+        Request Help
+      </a>
+      <a
+        href="{{ url_for('can_help') }}"
+        class="inline-flex items-center justify-center px-4 py-2 rounded-lg font-medium mr-2 transition border bg-slate-900/40 border-emerald-500/30 text-emerald-200 hover:bg-slate-900/60 hover:border-emerald-400/50"
+      >
+        Offer Help
+      </a>
+      <a
+        href="{{ url_for('emotional') }}"
+        class="inline-flex items-center justify-center px-4 py-2 rounded-lg font-medium mr-2 transition border bg-slate-900/40 border-cyan-500/30 text-cyan-200 hover:bg-slate-900/60 hover:border-cyan-400/50"
+      >
+        Emotional Ping
+      </a>
+      <a
+        href="{{ url_for('create_event') }}"
+        class="inline-flex items-center justify-center px-4 py-2 rounded-lg font-medium transition border bg-slate-900/40 border-indigo-500/30 text-indigo-200 hover:bg-slate-900/60 hover:border-indigo-400/50"
+      >
+        Create Event
+      </a>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-6">
+      <p class="text-slate-400">People Helped</p>
+      <h2
+        id="people-helped-val"
+        class="text-4xl font-bold text-emerald-400 mt-3"
+      >
+        {{ stats.helped }}
+      </h2>
+    </div>
+    <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-6">
+      <p class="text-slate-400">Total Hours</p>
+      <h2 id="total-hours-val" class="text-4xl font-bold text-emerald-400 mt-3">
+        {{ stats.total_hours }}h
+      </h2>
+    </div>
+    <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-6">
+      <p class="text-slate-400">Trust Score</p>
+      <div class="w-full bg-slate-700 h-3 rounded-full mt-4">
+        <div
+          id="trust-bar"
+          class="bg-emerald-400 h-3 rounded-full"
+          style="width: {{ stats.trust }}%"
+        ></div>
+      </div>
+      <p class="mt-3 text-slate-300">
+        <span id="trust-score-val">{{ stats.trust }}</span>%
+        <span class="text-xs text-slate-500">(Verified Reviews)</span>
+      </p>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div
+      class="bg-slate-900/80 p-8 rounded-3xl shadow-lg text-center border border-slate-800 flex flex-col items-center justify-center"
+    >
+      <h2 class="text-xl font-bold mb-4">Your Kindness Score</h2>
+      <div class="relative w-40 h-40">
+        <svg class="w-40 h-40 transform -rotate-90">
+          <circle
+            cx="80"
+            cy="80"
+            r="70"
+            stroke="#1e293b"
+            stroke-width="12"
+            fill="none"
+          />
+          <circle
+            cx="80"
+            cy="80"
+            r="70"
+            stroke="#34d399"
+            stroke-width="12"
+            fill="none"
+            stroke-dasharray="439"
+            stroke-dashoffset="{{ 439 - (stats.kindness / 200) * 439 }}"
+            stroke-linecap="round"
+          />
+        </svg>
+        <div class="absolute inset-0 flex items-center justify-center">
+          <span id="kindness-score-val" class="text-3xl font-bold"
+            >{{ stats.kindness }}</span
+          >
+        </div>
+      </div>
+      <p class="mt-3 text-white/70 text-sm">
+        Earn points by helping & getting 5★ reviews!
+      </p>
+    </div>
+    <div
+      class="bg-slate-900/80 p-8 rounded-3xl shadow-lg border border-slate-800"
+    >
+      <h2 class="text-xl font-bold mb-6">Your Progress Over Time</h2>
+      <div class="w-full" style="height: 260px">
+        <canvas id="trustChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-6">
+      <h2 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
+        <span class="bg-indigo-500 w-2 h-6 rounded-full"></span>
+        My Posts & Incoming Requests
+      </h2>
+
+      {% set my_posts = user.requests | selectattr("status", "in", ["open",
+      "in_progress", "claimed"]) | list %} {% if my_posts|length == 0 %}
+      <p class="text-slate-500 italic">You haven't posted anything yet.</p>
+      {% else %}
+      <div class="space-y-4">
+        {% for req in my_posts %}
+        <div class="bg-slate-950 border border-slate-800 p-4 rounded-xl">
+          <div class="flex justify-between items-start mb-2">
+            <div>
+              <h3 class="font-semibold text-lg text-slate-200">
+                {{ req.title }}
+              </h3>
+              <span class="text-xs text-slate-500 uppercase"
+                >{{ req.category }}</span
+              >
+            </div>
+            <span
+              class="text-xs font-bold px-2 py-1 rounded uppercase {% if req.status == 'open' %} bg-blue-900 text-blue-300 {% else %} bg-amber-900 text-amber-300 {% endif %}"
+            >
+              {{ req.status }}
+            </span>
+          </div>
+
+          {% if req.status == 'open' %}
+          <div class="mt-3 bg-slate-900 p-3 rounded-lg">
+            {% if (req.category or '')|lower == 'sos' %}
+            <p class="text-xs text-slate-400 uppercase font-bold mb-2">
+              People responding to your SOS:
+            </p>
+            {% if req.sos_responses|length == 0 %}
+            <p class="text-sm text-slate-500">Waiting for responders...</p>
+            {% else %}
+            <ul class="space-y-2">
+              {% for r in req.sos_responses %}
+              <li class="bg-slate-800 p-3 rounded border border-slate-700">
+                <div class="flex items-center justify-between gap-2">
+                  <div class="flex items-center gap-2">
+                    {% set _hp = r.helper.profile_photo if r.helper and
+                    r.helper.profile_photo and r.helper.profile_photo !=
+                    'default.png' else None %}
+                    <img
+                      src="{{ _hp or url_for('static', filename='uploads/profile_photos/default.png') }}"
+                      class="w-6 h-6 rounded-full"
+                    />
+                    <span class="text-sm text-slate-200 font-semibold"
+                      >{{ r.helper.name }}</span
+                    >
+                  </div>
+                  <a
+                    href="{{ url_for('chat_with_user', other_user_id=r.helper_id) }}"
+                    class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded"
+                    >Chat</a
+                  >
+                </div>
+
+                <form
+                  action="{{ url_for('complete_sos', request_id=req.id, helper_id=r.helper_id) }}"
+                  method="POST"
+                  class="mt-3 space-y-2"
+                >
+                  <div class="flex gap-2">
+                    {% for i in range(1, 6) %}
+                    <label class="cursor-pointer">
+                      <input type="radio" name="rating" value="{{ i }}"
+                      class="sr-only peer" {% if i==5 %}checked{% endif %}>
+                      <span
+                        class="text-slate-600 peer-checked:text-yellow-400 text-lg hover:text-yellow-300 transition"
+                        >★</span
+                      >
+                    </label>
+                    {% endfor %}
+                  </div>
+                  <div>
+                    <label class="block text-xs text-slate-400 mb-1"
+                      >Duration (Hours)</label
+                    >
+                    <input
+                      type="number"
+                      name="hours"
+                      step="0.5"
+                      min="0.5"
+                      value="1"
+                      class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                  <textarea
+                    name="comment"
+                    rows="2"
+                    placeholder="How did they help?"
+                    class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm focus:outline-none focus:border-emerald-500"
+                  ></textarea>
+                  <button
+                    type="submit"
+                    class="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold py-2 rounded transition"
+                  >
+                    Mark SOS Complete & Review
+                  </button>
+                </form>
+              </li>
+              {% endfor %}
+            </ul>
+            {% endif %} {% else %}
+            <p class="text-xs text-slate-400 uppercase font-bold mb-2">
+              {% if req.is_offer %} People requesting this item: {% else %}
+              People offering to help: {% endif %}
+            </p>
+
+            {% if req.offers|length == 0 %}
+            <p class="text-sm text-slate-500">Waiting for responses...</p>
+            {% else %}
+            <ul class="space-y-2">
+              {% for offer in req.offers %} {% if offer.status == 'pending' %}
+              <li
+                class="flex items-center justify-between bg-slate-800 p-2 rounded border border-slate-700"
+              >
+                <div class="flex items-center gap-2">
+                  {% set _hp = offer.helper.profile_photo if offer.helper and
+                  offer.helper.profile_photo and offer.helper.profile_photo !=
+                  'default.png' else None %}
+                  <img
+                    src="{{ _hp or url_for('static', filename='uploads/profile_photos/default.png') }}"
+                    class="w-6 h-6 rounded-full"
+                  />
+                  <span class="text-sm text-slate-200"
+                    >{{ offer.helper.name }}</span
+                  >
+                </div>
+                <div class="flex gap-2">
+                  <a
+                    href="{{ url_for('chat_with_user', other_user_id=offer.helper_id) }}"
+                    class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded"
+                    >Chat</a
+                  >
+                  <form
+                    action="{{ url_for('accept_offer', offer_id=offer.id) }}"
+                    method="POST"
+                  >
+                    <button
+                      type="submit"
+                      class="text-xs bg-emerald-600 hover:bg-emerald-500 text-white px-2 py-1 rounded"
+                    >
+                      Accept
+                    </button>
+                  </form>
+                </div>
+              </li>
+              {% endif %} {% endfor %}
+            </ul>
+            {% endif %} {% endif %}
+          </div>
+
+          {% elif req.status in ['in_progress', 'claimed'] %}
+          <div
+            class="mt-3 bg-amber-900/10 border border-amber-900/30 p-3 rounded-lg"
+          >
+            <p class="text-sm text-amber-200 mb-2">
+              Connected with:
+              <strong
+                >{{ req.helper.name if req.helper else 'Unknown' }}</strong
+              >
+            </p>
+
+            {% if req.is_offer == False %}
+            <form
+              action="{{ url_for('complete_request', request_id=req.id) }}"
+              method="POST"
+              class="space-y-3"
+            >
+              <div>
+                <label class="block text-xs text-slate-400 mb-1"
+                  >Rate Service</label
+                >
+                <div class="flex gap-2">
+                  {% for i in range(1, 6) %}
+                  <label class="cursor-pointer">
+                    <input type="radio" name="rating" value="{{ i }}"
+                    class="sr-only peer" {% if i==5 %}checked{% endif %}>
+                    <span
+                      class="text-slate-600 peer-checked:text-yellow-400 text-xl hover:text-yellow-300 transition"
+                      >★</span
+                    >
+                  </label>
+                  {% endfor %}
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-xs text-slate-400 mb-1"
+                  >Duration (Hours)</label
+                >
+                <input
+                  type="number"
+                  name="hours"
+                  step="0.5"
+                  min="0.5"
+                  value="1"
+                  class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                  placeholder="e.g. 2.5"
+                />
+              </div>
+
+              <textarea
+                name="comment"
+                rows="2"
+                placeholder="How did they help?"
+                class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm focus:outline-none focus:border-emerald-500"
+              ></textarea>
+
+              <button
+                type="submit"
+                class="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold py-2 rounded transition"
+              >
+                Mark Complete & Review
+              </button>
+            </form>
+            {% else %}
+            <p class="text-xs text-slate-400 italic">
+              Waiting for {{ req.helper.name }} to confirm receipt.
+            </p>
+            {% endif %}
+          </div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-6">
+      <h2 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
+        <span class="bg-emerald-500 w-2 h-6 rounded-full"></span>
+        My Activity (Sent)
+      </h2>
+
+      {% set active_engagements = user.helped_requests | selectattr("status",
+      "in", ["in_progress", "claimed"]) | list %} {% set pending_offers =
+      user.sent_offers | selectattr("status", "equalto", "pending") | list %} {%
+      if active_engagements|length == 0 and pending_offers|length == 0 %}
+      <p class="text-slate-500 italic">
+        You aren't interacting with anyone else's posts right now.
+      </p>
+      <a
+        href="{{ url_for('list_requests') }}"
+        class="mt-4 block text-center text-sm text-emerald-400 hover:underline"
+        >Browse Map</a
+      >
+      {% else %}
+      <div class="space-y-4">
+        {% if active_engagements %}
+        <div>
+          <p class="text-xs font-bold text-emerald-400 uppercase mb-2">
+            In Progress
+          </p>
+          {% for task in active_engagements %}
+          <div
+            class="bg-slate-950 border border-emerald-900/30 p-4 rounded-xl relative overflow-hidden mb-2"
+          >
+            <div
+              class="absolute left-0 top-0 bottom-0 w-1 bg-emerald-500"
+            ></div>
+            <h3 class="font-semibold">{{ task.title }}</h3>
+            <p class="text-sm text-slate-400 mb-2">
+              {{ task.category }} • Posted by {{ task.user.name }}
+            </p>
+
+            <div class="flex gap-2 mb-3">
+              <a
+                href="{{ url_for('chat_with_user', other_user_id=task.user_id) }}"
+                class="flex-1 bg-slate-800 hover:bg-slate-700 text-center py-2 rounded text-sm transition"
+              >
+                Chat
+              </a>
+            </div>
+
+            {% if task.is_offer == True %}
+            <div class="bg-slate-900 p-3 rounded border border-slate-700">
+              <p class="text-xs text-slate-300 mb-2 font-bold">
+                Did you receive the help/item?
+              </p>
+              <form
+                action="{{ url_for('complete_request', request_id=task.id) }}"
+                method="POST"
+                class="space-y-3"
+              >
+                <div>
+                  <div class="flex gap-2">
+                    {% for i in range(1, 6) %}
+                    <label class="cursor-pointer">
+                      <input type="radio" name="rating" value="{{ i }}"
+                      class="sr-only peer" {% if i==5 %}checked{% endif %}>
+                      <span
+                        class="text-slate-600 peer-checked:text-yellow-400 text-lg hover:text-yellow-300 transition"
+                        >★</span
+                      >
+                    </label>
+                    {% endfor %}
+                  </div>
+                </div>
+
+                <div>
+                  <label class="block text-xs text-slate-400 mb-1"
+                    >Time Spent / Value (Hours)</label
+                  >
+                  <input
+                    type="number"
+                    name="hours"
+                    step="0.5"
+                    min="0.5"
+                    value="1"
+                    class="w-full bg-slate-800 border border-slate-600 rounded p-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                <textarea
+                  name="comment"
+                  rows="1"
+                  placeholder="Review {{ task.user.name }}..."
+                  class="w-full bg-slate-800 border border-slate-600 rounded p-2 text-xs focus:outline-none"
+                ></textarea>
+
+                <button
+                  type="submit"
+                  class="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-2 rounded transition"
+                >
+                  Mark Received & Review
+                </button>
+              </form>
+            </div>
+            {% else %}
+            <p class="text-xs text-slate-500 italic">
+              Waiting for {{ task.user.name }} to mark this complete.
+            </p>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %} {% if pending_offers %}
+        <div>
+          <p class="text-xs font-bold text-slate-500 uppercase mb-2">
+            Pending Requests/Offers
+          </p>
+          {% for offer in pending_offers %}
+          <div
+            class="flex justify-between items-center bg-slate-950/50 p-3 rounded border border-dashed border-slate-800 mb-2"
+          >
+            <div class="flex flex-col">
+              <span class="text-sm text-slate-300 font-semibold"
+                >{{ offer.request.title }}</span
+              >
+              <span class="text-xs text-slate-500">
+                {% if offer.request.is_offer %} You requested this {% else %}
+                You offered help {% endif %}
+              </span>
+            </div>
+            <span class="text-xs bg-slate-800 text-slate-500 px-2 py-1 rounded"
+              >Pending</span
+            >
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- My Events Section -->
+  <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-6">
+    <div class="flex justify-between items-center mb-4">
+      <h2 class="text-xl font-bold text-white flex items-center gap-2">
+        <span class="bg-indigo-500 w-2 h-6 rounded-full"></span>
+        My Events
+      </h2>
+      <a
+        href="{{ url_for('list_events') }}"
+        class="text-sm text-slate-400 hover:text-white transition"
+        >View All →</a
+      >
+    </div>
+
+    {% if user_events %}
+    <div class="space-y-4">
+      {% for event in user_events %}
+      <div class="bg-slate-950 border border-slate-800 p-4 rounded-xl">
+        <div class="flex justify-between items-start mb-2">
+          <div>
+            <h3 class="font-semibold text-lg text-slate-200">
+              {{ event.title }}
+            </h3>
+            <p class="text-sm text-slate-400">
+              {{ event.area }} • {{ event.date.strftime('%B %d, %Y') }}
+            </p>
+          </div>
+          <span
+            class="text-xs font-bold px-2 py-1 rounded uppercase {% if event.completed %} bg-green-900 text-green-300 {% else %} bg-blue-900 text-blue-300 {% endif %}"
+          >
+            {% if event.completed %}Completed{% else %}Active{% endif %}
+          </span>
+        </div>
+        <p class="text-sm text-slate-500 mb-3">{{ event.description }}</p>
+        {% if not event.completed %}
+        <form
+          action="{{ url_for('complete_event', event_id=event.id) }}"
+          method="POST"
+          class="inline"
+        >
+          <button
+            type="submit"
+            class="px-3 py-1 text-xs rounded bg-emerald-600 hover:bg-emerald-700 text-white transition"
+          >
+            ✅ Mark Completed
+          </button>
+        </form>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-slate-500 italic">You haven't created any events yet.</p>
+    <a
+      href="{{ url_for('create_event') }}"
+      class="mt-2 inline-block text-sm text-indigo-400 hover:underline"
+      >Create your first event →</a
+    >
+    {% endif %}
+  </div>
+
+  <div>
+    <div class="flex justify-between items-center mb-4">
+      <h2 class="text-2xl font-bold">Recent Help History</h2>
+      <a
+        href="/history"
+        class="text-sm text-slate-400 hover:text-white transition"
+        >View All →</a
+      >
+    </div>
+    {% if history %}
+    <div class="space-y-4">
+      {% for item in history %}
+      <div
+        class="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 flex justify-between items-center"
+      >
+        <div>
+          <p class="text-lg font-semibold text-slate-200">{{ item.title }}</p>
+          <p class="text-slate-400 text-sm">
+            {{ item.category }} • {{ item.date }}
+          </p>
+        </div>
+        <div class="text-right">
+          <span class="block text-emerald-400 font-bold"
+            >+{{ item.hours }} hrs</span
+          >
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div
+      class="bg-slate-900/30 border border-dashed border-slate-800 rounded-xl p-8 text-center"
+    >
+      <p class="text-slate-500">You haven't completed any help requests yet.</p>
+    </div>
+    {% endif %}
+  </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -347,25 +682,27 @@
   } | tojson }}
 </script>
 <script>
-  const chartDataEl = document.getElementById("dashboard-chart-data");
-  let dashboardData = null;
-  try {
-    dashboardData = chartDataEl ? JSON.parse(chartDataEl.textContent) : null;
-  } catch (e) {
-    dashboardData = null;
+  function readDashboardData() {
+    const chartDataEl = document.getElementById("dashboard-chart-data");
+    if (!chartDataEl) return null;
+    try {
+      return JSON.parse(chartDataEl.textContent);
+    } catch (e) {
+      return null;
+    }
   }
 
-  const trustBarFill = document.getElementById("dashboard-trust-bar-fill");
-  if (
-    trustBarFill &&
-    dashboardData &&
-    typeof dashboardData.trust_percent === "number"
-  ) {
-    trustBarFill.style.width = `${dashboardData.trust_percent}%`;
-  }
+  function initDashboardChart() {
+    const dashboardData = readDashboardData();
+    const ctx = document.getElementById("trustChart");
+    if (!ctx || !dashboardData) return;
 
-  const ctx = document.getElementById("trustChart");
-  if (ctx && dashboardData) {
+    // If Chart.js hasn't loaded yet (slow CDN), retry shortly.
+    if (typeof Chart === "undefined") {
+      setTimeout(initDashboardChart, 150);
+      return;
+    }
+
     new Chart(ctx, {
       type: "line",
       data: {
@@ -376,8 +713,8 @@
             data: dashboardData.trust,
             borderWidth: 3,
             tension: 0.4,
-            borderColor: "#32D48E",
-            backgroundColor: "rgba(50, 212, 142, 0.1)",
+            borderColor: "#34d399",
+            backgroundColor: "rgba(52, 211, 153, 0.12)",
             fill: true,
           },
           {
@@ -385,14 +722,15 @@
             data: dashboardData.kindness,
             borderWidth: 3,
             tension: 0.4,
-            borderColor: "#1F8AF2",
-            backgroundColor: "rgba(31, 138, 242, 0.1)",
+            borderColor: "#60a5fa",
+            backgroundColor: "rgba(96, 165, 250, 0.10)",
             fill: true,
           },
         ],
       },
       options: {
         responsive: true,
+        maintainAspectRatio: false,
         plugins: { legend: { labels: { color: "#94a3b8" } } },
         scales: {
           x: { ticks: { color: "#94a3b8" }, grid: { color: "#1e293b" } },
@@ -401,5 +739,40 @@
       },
     });
   }
+
+  // Lightweight polling so counts/scores update without manual refresh.
+  async function refreshDashboardSummary() {
+    try {
+      const resp = await fetch("/api/dashboard/summary", { cache: "no-store" });
+      if (!resp.ok) return;
+      const data = await resp.json();
+
+      const helpedEl = document.getElementById("people-helped-val");
+      const hoursEl = document.getElementById("total-hours-val");
+      const trustEl = document.getElementById("trust-score-val");
+      const kindnessEl = document.getElementById("kindness-score-val");
+      const trustBar = document.getElementById("trust-bar");
+
+      if (helpedEl && typeof data.people_helped === "number")
+        helpedEl.textContent = String(data.people_helped);
+      if (hoursEl && typeof data.total_hours === "number")
+        hoursEl.textContent = `${data.total_hours}h`;
+      if (trustEl && typeof data.trust_score === "number")
+        trustEl.textContent = String(data.trust_score);
+      if (kindnessEl && typeof data.kindness_score === "number")
+        kindnessEl.textContent = String(data.kindness_score);
+      if (trustBar && typeof data.trust_score === "number")
+        trustBar.style.width = `${data.trust_score}%`;
+    } catch (e) {
+      // ignore transient network errors
+    }
+  }
+
+  // Run after the page finishes loading so the canvas is ready.
+  window.addEventListener("load", () => {
+    initDashboardChart();
+    refreshDashboardSummary();
+    setInterval(refreshDashboardSummary, 8000);
+  });
 </script>
 {% endblock %}

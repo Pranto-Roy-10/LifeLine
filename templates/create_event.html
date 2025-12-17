@@ -1,0 +1,104 @@
+{% extends "base.html" %} {% block title %}Create Event – LifeLine{% endblock %}
+{% block content %}
+<div class="w-full flex justify-center mt-10 px-4">
+  <div
+    class="w-full max-w-xl bg-slate-800 border border-slate-700 p-8 rounded-2xl shadow-xl"
+  >
+    <h1 class="text-3xl font-bold text-emerald-400 mb-2">
+      Create community event
+    </h1>
+    <p class="text-xs text-slate-400 mb-6">
+      Add the title, date and approximate location. Nearby users will be
+      notified.
+    </p>
+
+    <form
+      action="{{ url_for('create_event') }}"
+      method="POST"
+      class="space-y-5"
+    >
+      <div>
+        <label class="block text-slate-300 mb-1">Title</label>
+        <input
+          type="text"
+          name="title"
+          required
+          class="w-full px-4 py-3 rounded-lg bg-slate-700 text-white border border-slate-600 focus:ring focus:ring-emerald-400 outline-none"
+        />
+      </div>
+
+      <div>
+        <label class="block text-slate-300 mb-1">Description</label>
+        <textarea
+          name="description"
+          rows="4"
+          class="w-full px-4 py-3 rounded-lg bg-slate-700 text-white border border-slate-600 focus:ring focus:ring-emerald-400 outline-none"
+        ></textarea>
+      </div>
+
+      <div>
+        <label class="block text-slate-300 mb-1">Event type</label>
+        <select
+          name="event_type"
+          required
+          class="w-full px-4 py-3 rounded-lg bg-slate-700 text-white border border-slate-600 focus:ring focus:ring-emerald-400 outline-none"
+        >
+          <option value="cleanup">Cleanup</option>
+          <option value="donation">Donation</option>
+          <option value="repair">Repair / Checkup</option>
+        </select>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-slate-300 mb-1">Date</label>
+          <input
+            type="date"
+            name="date"
+            required
+            class="w-full px-4 py-3 rounded-lg bg-slate-700 text-white border border-slate-600 focus:ring focus:ring-emerald-400 outline-none"
+          />
+        </div>
+        <div>
+          <label class="block text-slate-300 mb-1">Area</label>
+          <input
+            type="text"
+            name="area"
+            required
+            class="w-full px-4 py-3 rounded-lg bg-slate-700 text-white border border-slate-600 focus:ring focus:ring-emerald-400 outline-none"
+          />
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-slate-300 mb-1">Latitude</label>
+          <input
+            type="number"
+            step="any"
+            name="lat"
+            required
+            class="w-full px-4 py-3 rounded-lg bg-slate-700 text-white border border-slate-600 focus:ring focus:ring-emerald-400 outline-none"
+          />
+        </div>
+        <div>
+          <label class="block text-slate-300 mb-1">Longitude</label>
+          <input
+            type="number"
+            step="any"
+            name="lng"
+            required
+            class="w-full px-4 py-3 rounded-lg bg-slate-700 text-white border border-slate-600 focus:ring focus:ring-emerald-400 outline-none"
+          />
+        </div>
+      </div>
+
+      <button
+        class="w-full mt-4 bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-semibold px-6 py-3 rounded-lg transition"
+      >
+        Create event
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}

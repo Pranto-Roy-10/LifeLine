@@ -217,6 +217,12 @@ class User(db.Model):
         else:
             return "Newbie", "text-slate-400"
 
+    @property
+    def sent_offers(self):
+        # Backwards-compatible alias for templates.
+        # Offer model currently backrefs helper->offers.
+        return getattr(self, "offers", [])
+
         
 class Payment(db.Model):
     __tablename__ = "payments"
@@ -428,6 +434,41 @@ def send_fcm_to_user(target_user, title, body, data=None):
         apns=messaging.APNSConfig(headers={"apns-priority": "10"}),
     )
 
+    # Some firebase_admin versions don't implement send_multicast().
+    if not hasattr(messaging, "send_multicast"):
+        success_count = 0
+        bad_tokens = []
+        for tok in tokens:
+            msg = messaging.Message(
+                notification=messaging.Notification(title=title, body=body),
+                data=data_payload,
+                token=tok,
+                android=messaging.AndroidConfig(priority="high"),
+                apns=messaging.APNSConfig(headers={"apns-priority": "10"}),
+            )
+            try:
+                messaging.send(msg)
+                success_count += 1
+            except Exception as e:
+                # Best-effort token cleanup for known invalid token errors.
+                code = getattr(e, "code", None)
+                if code in ("INVALID_ARGUMENT", "UNREGISTERED"):
+                    bad_tokens.append(tok)
+
+        if bad_tokens:
+            try:
+                FCMToken.query.filter(FCMToken.token.in_(bad_tokens)).delete(synchronize_session=False)
+                db.session.commit()
+                print(f"[FCM] Cleaned up {len(bad_tokens)} expired tokens for user {target_user.id}.")
+            except Exception:
+                try:
+                    db.session.rollback()
+                except Exception:
+                    pass
+
+        print(f"[FCM] Sent {success_count}/{len(tokens)} notifications (fallback mode)")
+        return success_count > 0
+
     try:
         response = messaging.send_multicast(message)
 
@@ -474,6 +515,63 @@ def send_fcm_to_trusted_helpers(title, body, data=None, exclude_user_id=None):
     except Exception as e:
         print("[FCM] Error in send_fcm_to_trusted_helpers:", e)
         return 0
+
+
+def push_notification(user_id=None, type=None, message=None, link=None, *args, **kwargs):
+    """Persist a notification for the bell stack.
+
+    Supports both keyword-style calls:
+      push_notification(user_id=1, type="sos", message="...", link="...")
+
+    And legacy positional calls:
+      push_notification(1, "system", "...")
+    """
+    # Legacy positional support
+    if args:
+        # If caller did push_notification(user_id, type, message, link?)
+        if user_id is None and len(args) >= 1:
+            user_id = args[0]
+        if type is None and len(args) >= 2:
+            type = args[1]
+        if message is None and len(args) >= 3:
+            message = args[2]
+        if link is None and len(args) >= 4:
+            link = args[3]
+
+    # Be permissive with common alternate kw names
+    if user_id is None:
+        user_id = kwargs.get("user") or kwargs.get("uid")
+
+    if type is None:
+        type = kwargs.get("kind")
+
+    if message is None:
+        message = kwargs.get("body")
+
+    try:
+        if isinstance(user_id, str) and user_id.isdigit():
+            user_id = int(user_id)
+
+        if not user_id or not type or not message:
+            return False
+
+        n = Notification(
+            user_id=int(user_id),
+            type=str(type),
+            message=str(message)[:255],
+            link=str(link)[:255] if link else None,
+            is_read=False,
+        )
+        db.session.add(n)
+        db.session.commit()
+        return True
+    except Exception as e:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        print(f"[NOTIF] Error saving notification: {e}")
+        return False
 
     
 # --- 1. NEARBY HELP REQUEST ---
@@ -577,6 +675,77 @@ def send_fcm_for_sos(from_user):
         return False
 
 
+def build_flagged_map_for_requests(requests_list):
+    """Compute AI risk flags for templates (need_help/list_requests).
+
+    Returns a dict keyed by request id.
+    """
+    try:
+        from behavior_verifier_service import verify_request_behavior
+    except Exception:
+        return {}
+
+    if not requests_list:
+        return {}
+
+    now = datetime.utcnow()
+    window_start = now - timedelta(days=30)
+
+    user_ids = {r.user_id for r in requests_list if getattr(r, "user_id", None) is not None}
+    if not user_ids:
+        return {}
+
+    recent_by_user = {uid: [] for uid in user_ids}
+    try:
+        recent_rows = (
+            Request.query.filter(Request.user_id.in_(list(user_ids)), Request.created_at >= window_start)
+            .order_by(Request.created_at.desc())
+            .limit(500)
+            .all()
+        )
+        for rr in recent_rows:
+            recent_by_user.setdefault(rr.user_id, []).append(rr)
+    except Exception:
+        recent_by_user = {uid: [] for uid in user_ids}
+
+    flagged_map = {}
+    for r in requests_list:
+        try:
+            # Do not compute or show AI flags for SOS posts
+            if (getattr(r, "category", "") or "").lower() == "sos":
+                continue
+
+            u = getattr(r, "user", None)
+            if u is None:
+                u = User.query.get(r.user_id)
+            if u is None:
+                continue
+
+            recent_same_user = [x for x in recent_by_user.get(r.user_id, []) if x.id != r.id][:25]
+            res = verify_request_behavior(
+                user=u,
+                title=getattr(r, "title", "") or "",
+                description=getattr(r, "description", "") or "",
+                category=getattr(r, "category", "") or "",
+                contact_info=getattr(r, "contact_info", "") or "",
+                recent_same_user_requests=recent_same_user,
+            )
+            if not res or not res.get("is_flagged"):
+                continue
+
+            reasons_list = res.get("reasons") or []
+            reasons_text = "; ".join([str(x) for x in reasons_list if x])
+            flagged_map[int(r.id)] = {
+                "risk_score": int(res.get("risk_score") or 0),
+                "reasons": reasons_text,
+                "matched_request_id": res.get("matched_request_id"),
+            }
+        except Exception:
+            continue
+
+    return flagged_map
+
+
 def get_trusted_helpers_within_radius_km(center_lat, center_lng, radius_km, exclude_user_id=None):
     q = User.query.filter(User.is_trusted_helper == True)  # noqa: E712
     if exclude_user_id is not None:
@@ -606,21 +775,50 @@ class FCMToken(db.Model):
     # The token string itself, must be unique across all tokens
     token = db.Column(db.String(255), unique=True, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class Notification(db.Model):
+    __tablename__ = "notifications"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    type = db.Column(db.String(50), nullable=False)
+    message = db.Column(db.String(255), nullable=False)
+    link = db.Column(db.String(255), nullable=True)
+    is_read = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship("User", backref="notifications")
+
+    def to_dict(self):
+        try:
+            ts = self.created_at.strftime("%b %d") if self.created_at else ""
+        except Exception:
+            ts = ""
+        return {
+            "id": self.id,
+            "type": self.type,
+            "message": self.message,
+            "link": self.link,
+            "is_read": bool(self.is_read),
+            "created_at": ts,
+        }
     
     
 class Offer(db.Model):
     __tablename__ = "offers"
 
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
-    request_id = db.Column(db.Integer, db.ForeignKey("requests.id"), nullable=True)
-    title = db.Column(db.String(255))
-    body = db.Column(db.Text)
+    request_id = db.Column(db.Integer, db.ForeignKey("requests.id"), nullable=False)
+    helper_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    status = db.Column(db.String(20), default="pending")
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     # Relationships
-    user = db.relationship("User", foreign_keys=[user_id], backref="offers")
-    request = db.relationship("Request", backref=db.backref("offers", cascade="all, delete-orphan"))   
+    helper = db.relationship("User", foreign_keys=[helper_id], backref="offers")
+    request = db.relationship(
+        "Request", backref=db.backref("offers", cascade="all, delete-orphan")
+    )
 
 
 class SOSResponse(db.Model):
@@ -760,24 +958,35 @@ class ResourceWantedItem(db.Model):
 
 # ------------------ IMPACT ANALYTICS ------------------
 def calculate_impact(user_id):
-    completed = Request.query.filter_by(
-        helper_id=user_id,
-        status="completed"
-    ).all()
+    # Use persisted review hours for accuracy (user-entered duration).
+    reviews = Review.query.filter(Review.helper_id == user_id).all()
 
-    hours = sum(
-        ((r.completed_at - r.created_at).total_seconds() / 3600)
-        for r in completed if r.completed_at
-    )
+    hours = 0.0
+    for rv in reviews:
+        if getattr(rv, "is_flagged_fake", False):
+            continue
+        try:
+            hours += float(getattr(rv, "duration_hours", 0.0) or 0.0)
+        except Exception:
+            pass
 
     items = Resource.query.filter_by(user_id=user_id).count()
 
-    rides = [r for r in completed if r.category == "ride"]
-    carbon = len(rides) * 2.5
+    # Carbon estimate: keep prior logic, but derive ride count from requests linked to reviews.
+    ride_request_ids = [rv.request_id for rv in reviews if getattr(rv, "request_id", None) is not None]
+    rides_count = 0
+    if ride_request_ids:
+        try:
+            rides_count = (
+                Request.query.filter(Request.id.in_(ride_request_ids), Request.category == "ride").count()
+            )
+        except Exception:
+            rides_count = 0
+    carbon = int(rides_count) * 2.5
 
     return {
-        "helped": len(completed),
-        "hours": round(hours, 1),
+        "helped": len([rv for rv in reviews if not getattr(rv, "is_flagged_fake", False)]),
+        "hours": round(float(hours), 1),
         "items": items,
         "carbon": round(carbon, 1)
     }
@@ -963,6 +1172,51 @@ def get_notification_count(user: User) -> int:
     if not user:
         return 0
     return Notification.query.filter_by(user_id=user.id, is_read=False).count()
+
+
+@app.route("/api/notifications", methods=["GET"])
+def api_notifications():
+    """Return recent notifications for the navbar bell.
+
+    Must always return JSON (not redirects), so guests get an empty list.
+    """
+    user = current_user()
+    if not user:
+        return jsonify([])
+
+    rows = (
+        Notification.query.filter_by(user_id=user.id)
+        .order_by(Notification.created_at.desc())
+        .limit(30)
+        .all()
+    )
+    return jsonify([n.to_dict() for n in rows])
+
+
+@app.route("/api/notifications/read", methods=["POST"])
+def api_notifications_mark_all_read():
+    user = current_user()
+    if not user:
+        return jsonify({"ok": True})
+
+    try:
+        Notification.query.filter_by(user_id=user.id, is_read=False).update(
+            {"is_read": True}, synchronize_session=False
+        )
+        db.session.commit()
+        return jsonify({"ok": True})
+    except Exception as e:
+        db.session.rollback()
+        print(f"[NOTIF] mark-all-read error: {e}")
+        return jsonify({"ok": False}), 500
+
+
+@app.route("/api/notification-count", methods=["GET"])
+def api_notification_count():
+    user = current_user()
+    if not user:
+        return jsonify({"count": 0})
+    return jsonify({"count": get_notification_count(user)})
     
 
 
@@ -1059,40 +1313,63 @@ def send_event_notification(user, event):
 
 # ------------------ COMPLETE REQUEST ------------------
 def update_user_scores(user):
-    """Recompute and store user's trust_score and kindness_score based on completed requests."""
+    """Recompute and store user's trust_score and kindness_score.
+
+    Logic:
+    - Only REVIEWS RECEIVED (Review.helper_id == user.id) affect this user's score.
+    - Reviews the user writes (Review.reviewer_id == user.id) do NOT increase their score.
+    - Uses user-entered Review.duration_hours for hour totals.
+    """
     if not user:
         return
 
-    # Count completed helps where user was helper
-    helped_count = Request.query.filter(
-        Request.helper_id == user.id,
-        Request.status == "completed",
-        Request.completed_at != None
-    ).count()
+    try:
+        reviews = (
+            Review.query.filter(Review.helper_id == user.id)
+            .order_by(Review.created_at.desc())
+            .all()
+        )
+    except Exception:
+        reviews = []
 
-
-    # Sum total hours volunteered
-    rows = Request.query.filter(
-        Request.helper_id == user.id,
-        Request.status == "completed",
-        Request.completed_at != None
-    ).all()
-
+    verified_count = 0
     total_hours = 0.0
-    for r in rows:
-        if r.created_at and r.completed_at:
-            total_hours += max(0, (r.completed_at - r.created_at).total_seconds() / 3600.0)
-    total_hours = round(total_hours, 2)
+    total_points = 0
 
-    # Simple scoring (tweak if Module-1 has other rules)
-    trust_score = min(100, helped_count * 5)           # example: +5 trust per complete
-    kindness_score = helped_count * 10 + int(total_hours * 2) + trust_score
+    for rv in reviews:
+        flagged = bool(getattr(rv, "is_flagged_fake", False))
+        if not flagged:
+            verified_count += 1
+            try:
+                total_hours += float(getattr(rv, "duration_hours", 0.0) or 0.0)
+            except Exception:
+                pass
 
-    # Save to DB
+        try:
+            rating_val = int(getattr(rv, "rating", 0) or 0)
+        except Exception:
+            rating_val = 0
+
+        try:
+            pts = int(calculate_reputation_points(rating_val, flagged) or 0)
+        except Exception:
+            pts = 0
+        total_points += int(pts)
+
+    total_hours = round(float(total_hours), 2)
+    trust_score = min(100, int(verified_count) * 5)
+    kindness_score = int(total_points) + int(total_hours * 2) + int(trust_score)
+
     user.trust_score = int(trust_score)
     user.kindness_score = int(kindness_score)
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
 
 
 def send_push_to_user(user: User, title: str, body: str, data: dict | None = None):
@@ -1384,7 +1661,7 @@ def emotional_ping_placeholder():
 @app.route("/emotional")
 @login_required
 def emotional():
-    return redirect(url_for("emotional_ping"))
+    return redirect(url_for("emotional_ping_placeholder"))
 
 
 
@@ -1394,57 +1671,62 @@ from datetime import datetime
 @app.route("/api/emotional_ping", methods=["POST"])
 @login_required
 def api_emotional_ping():
+    user = current_user()
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    data = request.get_json(silent=True) or {}
+    mood = data.get("mood")
+    message = data.get("message")
+
+    if not mood:
+        return jsonify({"error": "Mood is required"}), 400
+
+    # 1) Save ping first. If this succeeds, return success even if notifications fail.
     try:
-        user = current_user()
-        if not user:
-            return jsonify({"error": "Unauthorized"}), 401
-
-        data = request.get_json(silent=True) or {}
-        mood = data.get("mood")
-        message = data.get("message")
-
-        if not mood:
-            return jsonify({"error": "Mood is required"}), 400
-
-        # 1️⃣ Save ping
-        ping = EmotionalPing(
-            user_id=user.id,
-            mood=mood,
-            message=message
-        )
+        ping = EmotionalPing(user_id=user.id, mood=mood, message=message)
         db.session.add(ping)
         db.session.commit()
-
-        # 2️⃣ Notify trusted helpers (BELL)
-        helpers = get_trusted_helpers_for_ping(user.id)
-
-        for helper in helpers:
-            push_notification(
-                user_id=helper.id,
-                type="emotional_ping",
-                message=f"{user.name} is feeling {mood}",
-                link=url_for("emotional_ping")
-            )
-
-            # 3️⃣ Optional FCM push
-            if helper.fcm_tokens.count() > 0:
-                send_fcm_to_user(
-                    helper,
-                    title="New Emotional Ping 💙",
-                    body=f"{user.name} is feeling {mood}",
-                    data={
-                        "type": "EMOTIONAL_PING",
-                        "sender_id": str(user.id),
-                        "ping_id": str(ping.id)
-                    }
-                )
-
-        return jsonify({"message": "Ping sent"}), 200
-
     except Exception as e:
-        db.session.rollback()
-        print("EMOTIONAL_PING POST ERROR:", e)
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        print("EMOTIONAL_PING SAVE ERROR:", e)
         return jsonify({"error": "Failed to send ping"}), 500
+
+    # 2) Best-effort notifications (never fail the request)
+    try:
+        helpers = get_trusted_helpers_for_ping(user.id)
+        for helper in helpers:
+            try:
+                push_notification(
+                    user_id=helper.id,
+                    type="emotional_ping",
+                    message=f"{user.name} is feeling {mood}",
+                    link=url_for("emotional_ping_placeholder"),
+                )
+            except Exception as e:
+                print("EMOTIONAL_PING NOTIF SAVE ERROR:", e)
+
+            try:
+                if helper.fcm_tokens.count() > 0:
+                    send_fcm_to_user(
+                        helper,
+                        title="New Emotional Ping 💙",
+                        body=f"{user.name} is feeling {mood}",
+                        data={
+                            "type": "EMOTIONAL_PING",
+                            "sender_id": str(user.id),
+                            "ping_id": str(ping.id),
+                        },
+                    )
+            except Exception as e:
+                print("EMOTIONAL_PING FCM ERROR:", e)
+    except Exception as e:
+        print("EMOTIONAL_PING NOTIFY ERROR:", e)
+
+    return jsonify({"message": "Ping sent", "ping_id": ping.id}), 200
     
 @app.route("/api/emotional_ping/<int:ping_id>/listen", methods=["POST"])
 @login_required
@@ -2104,6 +2386,7 @@ def need_help():
     - If not logged in     -> use Emergency Guest user (quick help)
     """
     user = current_user()
+    can_post = True
     if user:
         can_post = check_post_limit(user)
     if request.method == "POST":
@@ -2212,6 +2495,8 @@ def need_help():
         .all()
     )
 
+    flagged_map = build_flagged_map_for_requests(posts)
+
     total_need = Request.query.filter(
         Request.is_offer == False,
         Request.expires_at > now,
@@ -2237,6 +2522,7 @@ def need_help():
         categories=categories,
         can_post=can_post,
         google_maps_key=GOOGLE_MAPS_API_KEY,
+        flagged_map=flagged_map,
     )
 
 # I Can Help – login required
@@ -2343,60 +2629,6 @@ def can_help():
         categories=categories,
         google_maps_key=GOOGLE_MAPS_API_KEY,
     )
-
-
-
-    # Cannot offer help to your own post
-    if req_obj.user_id == user.id:
-        flash("You cannot reply to your own post.", "error")
-        return redirect(url_for("list_requests", mode="offer" if req_obj.is_offer else "need"))
-
-    # Request must be open
-    if req_obj.status != "open":
-        flash("This post is no longer active.", "error")
-        return redirect(url_for("list_requests", mode="offer" if req_obj.is_offer else "need"))
-
-    # Already contacted?
-    existing_offer = Offer.query.filter_by(request_id=req_obj.id, helper_id=user.id).first()
-    if existing_offer:
-        flash("You have already contacted this person.", "info")
-        return redirect(url_for("list_requests", mode="offer" if req_obj.is_offer else "need"))
-
-    # --- FIX: Force new offers to always be 'pending' ---
-    new_offer = Offer(
-        request_id=req_obj.id,
-        helper_id=user.id,
-        status="pending"
-    )
-    db.session.add(new_offer)
-    db.session.commit()
-        # Push: notify the owner of this request
-    try:
-        title = "New response on your LifeLine post"
-        if req_obj.is_offer:
-            body = f"{user.name} is interested in your offer: “{req_obj.title}”"
-        else:
-            body = f"{user.name} offered help on: “{req_obj.title}”"
-
-        send_fcm_to_user(
-            req_obj.user_id,
-            title=title,
-            body=body,
-            data={
-                "type": "REQUEST_REPLY",
-                "request_id": req_obj.id,
-                "from_user_id": user.id,
-            },
-        )
-    except Exception as e:
-        print("[FCM] Failed to send offer notification:", e)
-
-    # Auto-start chat
-    get_or_create_conversation(req_obj.user_id, user.id)
-
-    flash("Your offer has been sent!", "success")
-
-    return redirect(url_for("list_requests", mode="offer" if req_obj.is_offer else "need"))
 
 
 
@@ -2544,8 +2776,17 @@ def list_requests():
 
     requests_list = q.order_by(Request.created_at.desc()).all()
 
+    flagged_map = build_flagged_map_for_requests(requests_list)
+
     user = current_user()
-    offered_ids = {r.id for r in Request.query.filter(Request.helper_id == user.id).all()}
+    try:
+        offered_ids = {
+            int(o.request_id)
+            for o in Offer.query.filter_by(helper_id=user.id).all()
+            if getattr(o, "request_id", None) is not None
+        }
+    except Exception:
+        offered_ids = set()
 
     sos_responded_ids = set()
     if user:
@@ -2570,6 +2811,7 @@ def list_requests():
         offered_ids=offered_ids,  # <--- Pass this to the HTML
         sos_responded_ids=sos_responded_ids,
         sos_response_counts=sos_response_counts,
+        flagged_map=flagged_map,
     )
 
 
@@ -2581,20 +2823,55 @@ def make_offer(request_id):
 
     if req.status != "open" or req.helper_id is not None:
         flash("This request is no longer available.", "error")
-        return redirect(url_for("list_requests"))
+        return redirect(request.referrer or url_for("list_requests"))
 
     if req.user_id == user.id:
         flash("You cannot offer help on your own request.", "error")
-        return redirect(url_for("list_requests"))
+        return redirect(request.referrer or url_for("list_requests"))
 
+    if req.category and str(req.category).lower() == "sos":
+        flash("SOS posts can't be responded to using offers.", "error")
+        return redirect(request.referrer or url_for("list_requests"))
 
-    # Assign the helper
-    req.helper_id = user.id
-    req.status = "claimed"  # or "in_progress"
+    # Previous logic: create an Offer row (do not auto-assign helper_id)
+    existing_offer = Offer.query.filter_by(request_id=req.id, helper_id=user.id).first()
+    if existing_offer:
+        flash("You have already contacted this person.", "info")
+        return redirect(request.referrer or url_for("list_requests"))
+
+    new_offer = Offer(request_id=req.id, helper_id=user.id, status="pending")
+    db.session.add(new_offer)
     db.session.commit()
 
-    flash("You have offered to help! The requester will be notified.", "success")
-    return redirect(url_for("list_requests"))
+    # Push: notify the owner of this request (best-effort)
+    try:
+        title = "New response on your LifeLine post"
+        if req.is_offer:
+            body = f"{user.name} is interested in your offer: “{req.title}”"
+        else:
+            body = f"{user.name} offered help on: “{req.title}”"
+
+        send_fcm_to_user(
+            req.user_id,
+            title=title,
+            body=body,
+            data={
+                "type": "REQUEST_REPLY",
+                "request_id": req.id,
+                "from_user_id": user.id,
+            },
+        )
+    except Exception as e:
+        print("[FCM] Failed to send offer notification:", e)
+
+    # Auto-start chat (best-effort)
+    try:
+        get_or_create_conversation(req.user_id, user.id)
+    except Exception:
+        pass
+
+    flash("Your offer has been sent!", "success")
+    return redirect(request.referrer or url_for("list_requests", mode="offer" if req.is_offer else "need"))
 
 
 @app.route("/debug/fcm-users")
@@ -2653,6 +2930,7 @@ def list_events():
     # Create sample events only if NO events exist at all (including completed ones)
     all_events_count = Event.query.count()
     if all_events_count == 0:
+        user = current_user()
         # Add some sample events
         sample_events = [
             {
@@ -2685,7 +2963,7 @@ def list_events():
         ]
         for e in sample_events:
             event = Event(
-                creator_id=1,  # Assume user 1 exists
+                creator_id=user.id,
                 title=e["title"],
                 description=e["description"],
                 event_type=e["event_type"],
@@ -2754,8 +3032,26 @@ def event_interest(event_id):
 @app.route("/events/map")
 @login_required
 def events_map():
-    events = Event.query.all()
-    return render_template("events_map.html", events=events, google_maps_key=GOOGLE_MAPS_API_KEY)
+    events = Event.query.filter_by(completed=False).all()
+    events_data = []
+    for e in events:
+        events_data.append(
+            {
+                "id": e.id,
+                "title": e.title,
+                "area": getattr(e, "area", None),
+                "event_type": getattr(e, "event_type", None),
+                "lat": getattr(e, "lat", None),
+                "lng": getattr(e, "lng", None),
+            }
+        )
+
+    return render_template(
+        "events_map.html",
+        events=events,
+        events_data=events_data,
+        google_maps_key=GOOGLE_MAPS_API_KEY or "",
+    )
 
 
 @app.route("/events/<int:event_id>/notify", methods=["POST"])
@@ -2972,30 +3268,43 @@ def dashboard():
     # Badge label + Tailwind color class
     badge, badge_color = user.calculate_badge()
 
-    # All completed helps where this user was the helper
-    completed_q = Request.query.filter(
-        Request.helper_id == user.id,
-        Request.status == "completed",
-        Request.completed_at != None
-    ).order_by(Request.completed_at.desc())
+    # All reviews received for this user as helper/provider.
+    reviews_q = Review.query.filter(Review.helper_id == user.id).order_by(Review.created_at.desc())
+    reviews = reviews_q.all()
 
-    helped_count = completed_q.count()
+    helped_count = sum(1 for rv in reviews if not getattr(rv, "is_flagged_fake", False))
 
-    # Compute total hours + build small recent history list
+    # Compute total hours from user-entered durations (verified reviews only).
     total_hours = 0.0
-    history = []
+    for rv in reviews:
+        if getattr(rv, "is_flagged_fake", False):
+            continue
+        try:
+            total_hours += float(getattr(rv, "duration_hours", 0.0) or 0.0)
+        except Exception:
+            pass
 
-    for r in completed_q.limit(5).all():
-        hours = 0.0
-        if r.created_at and r.completed_at:
-            hours = max(0.0, (r.completed_at - r.created_at).total_seconds() / 3600.0)
-        total_hours += hours
+    # Recent history from reviews (more accurate than created_at/completed_at deltas).
+    history = []
+    for rv in reviews[:5]:
+        req = None
+        try:
+            req = Request.query.get(rv.request_id)
+        except Exception:
+            req = None
+
+        title = req.title if req and getattr(req, "title", None) else "Help"
+        category = req.category if req and getattr(req, "category", None) else "General"
+        try:
+            hrs = float(getattr(rv, "duration_hours", 0.0) or 0.0)
+        except Exception:
+            hrs = 0.0
 
         history.append({
-            "title": r.title,
-            "category": r.category or "General",
-            "hours": round(hours, 2),
-            "date": r.completed_at.strftime("%b %d, %Y") if r.completed_at else "",
+            "title": title,
+            "category": category,
+            "hours": round(float(hrs), 2),
+            "date": rv.created_at.strftime("%b %d, %Y") if getattr(rv, "created_at", None) else "",
         })
 
     total_hours = round(total_hours, 2)
@@ -3010,10 +3319,69 @@ def dashboard():
         "kindness": user.kindness_score or 0,
     }
 
-    # Simple chart data (can be upgraded later)
-    chart_labels = ["Today"]
-    chart_trust = [stats["trust"]]
-    chart_kindness = [stats["kindness"]]
+    # Chart data: render a multi-day timeline so the graph doesn't collapse to a single point.
+    # We build a 14-day series with cumulative trust/kindness based on completed requests.
+    chart_labels = []
+    chart_trust = []
+    chart_kindness = []
+
+    # Build daily aggregates from reviews received.
+    # This keeps the graph consistent with update_user_scores() and the new hour logic.
+    daily_verified_count = {}
+    daily_hours = {}
+    daily_points = {}
+    for rv in reviews:
+        if not getattr(rv, "created_at", None):
+            continue
+        day_key = rv.created_at.strftime("%Y-%m-%d")
+        if not getattr(rv, "is_flagged_fake", False):
+            daily_verified_count[day_key] = int(daily_verified_count.get(day_key, 0)) + 1
+            try:
+                daily_hours[day_key] = float(daily_hours.get(day_key, 0.0)) + float(getattr(rv, "duration_hours", 0.0) or 0.0)
+            except Exception:
+                pass
+        try:
+            rating_val = int(getattr(rv, "rating", 0) or 0)
+        except Exception:
+            rating_val = 0
+        try:
+            pts = int(
+                calculate_reputation_points(
+                    rating_val,
+                    bool(getattr(rv, "is_flagged_fake", False)),
+                )
+                or 0
+            )
+        except Exception:
+            pts = 0
+        daily_points[day_key] = int(daily_points.get(day_key, 0)) + int(pts)
+
+    # Build last 14 days, inclusive.
+    end_day = datetime.utcnow().date()
+    start_day = end_day - timedelta(days=13)
+
+    cum_verified = 0
+    cum_hours = 0.0
+    cum_points = 0
+    for i in range(14):
+        d = start_day + timedelta(days=i)
+        key = d.strftime("%Y-%m-%d")
+        cum_verified += int(daily_verified_count.get(key, 0) or 0)
+        cum_hours += float(daily_hours.get(key, 0.0) or 0.0)
+        cum_points += int(daily_points.get(key, 0) or 0)
+
+        trust_score = min(100, int(cum_verified) * 5)
+        kindness_score = int(cum_points) + int(cum_hours * 2) + int(trust_score)
+
+        chart_labels.append(d.strftime("%b %d"))
+        chart_trust.append(int(trust_score))
+        chart_kindness.append(int(kindness_score))
+
+    # Keep last point aligned with stored scores.
+    if chart_trust:
+        chart_trust[-1] = int(stats["trust"])
+    if chart_kindness:
+        chart_kindness[-1] = int(stats["kindness"])
 
     # Get events where user showed interest OR events they created
     interested_event_ids = [ei.event_id for ei in EventInterest.query.filter_by(user_id=user.id).all()]
@@ -3026,6 +3394,42 @@ def dashboard():
         )
     ).filter_by(completed=False).order_by(Event.date.desc()).limit(5).all()
 
+    # Optional: coming from List Requests -> finish an SOS and review a specific responder.
+    sos_review_req = None
+    sos_review_helper = None
+    try:
+        sos_review_request_id = int(request.args.get("sos_review_request_id") or 0)
+        sos_review_helper_id = int(request.args.get("sos_review_helper_id") or 0)
+    except Exception:
+        sos_review_request_id = 0
+        sos_review_helper_id = 0
+
+    if sos_review_request_id and sos_review_helper_id:
+        try:
+            candidate = Request.query.get(sos_review_request_id)
+        except Exception:
+            candidate = None
+
+        if (
+            candidate
+            and candidate.user_id == user.id
+            and (candidate.category or "").lower() == "sos"
+            and candidate.status in ["open", "in_progress", "claimed"]
+        ):
+            try:
+                resp = SOSResponse.query.filter_by(
+                    request_id=candidate.id, helper_id=sos_review_helper_id
+                ).first()
+            except Exception:
+                resp = None
+
+            if resp:
+                sos_review_req = candidate
+                try:
+                    sos_review_helper = User.query.get(sos_review_helper_id)
+                except Exception:
+                    sos_review_helper = None
+
     return render_template(
         "dashboard.html",
         user=user,
@@ -3035,6 +3439,8 @@ def dashboard():
         chart_trust=chart_trust,
         chart_kindness=chart_kindness,
         user_events=user_events,
+        sos_review_req=sos_review_req,
+        sos_review_helper=sos_review_helper,
     )
 
 # ------------------ API: Dashboard & Impact  ------------------
@@ -3047,20 +3453,18 @@ def api_dashboard_summary():
     # update scores (make sure values are fresh)
     update_user_scores(user)
 
-    # total hours volunteered (sum of completed requests where user was helper)
+    # total hours volunteered (use review duration for accuracy)
     total_hours = (
-        db.session.query(func.coalesce(func.sum(func.julianday(Request.completed_at) - func.julianday(Request.created_at)), 0.0))
-        .filter(Request.helper_id == user.id, Request.status == "completed", Request.completed_at != None)
+        db.session.query(func.coalesce(func.sum(Review.duration_hours), 0.0))
+        .filter(Review.helper_id == user.id, Review.is_flagged_fake == False)  # noqa: E712
         .scalar()
     )
-    # convert days to hours (julianday returns days)
-    total_hours = float(total_hours) * 24 if total_hours else 0.0
-    total_hours = round(total_hours, 2)
+    total_hours = round(float(total_hours or 0.0), 2)
 
-    # people helped: distinct requester count where helper == user (exclude null)
+    # people helped: distinct reviewers who left a (non-flagged) review for this helper
     people_helped = (
-        db.session.query(func.count(func.distinct(Request.user_id)))
-        .filter(Request.helper_id == user.id, Request.status == "completed", Request.completed_at != None, Request.user_id != None)
+        db.session.query(func.count(func.distinct(Review.reviewer_id)))
+        .filter(Review.helper_id == user.id, Review.is_flagged_fake == False)  # noqa: E712
         .scalar()
     ) or 0
 
@@ -3130,39 +3534,21 @@ def api_dashboard_impact_over_time():
         data.append(round(hours, 2))
     return jsonify({"labels": labels, "data": data})
 
-def update_user_location():
-    """
-    Updates the logged-in users live location.
-    Required for receiving 'nearby' help requests.
-    """
-    data = request.get_json() or {}
-    try:
-        lat = float(data.get("lat"))
-        lng = float(data.get("lng"))
-        
-        user = current_user()
-        user.lat = lat
-        user.lng = lng
-        db.session.commit()
-        
-        return jsonify({"ok": True})
-    except (TypeError, ValueError):
-        return jsonify({"error": "Invalid location data"}), 400
-    
 
-# In app.py
 # --- PLANS PAGE ---
 @app.route("/plans")
+@login_required
 def plans():
     user = current_user()
-
     latest_payment = None
-    if user is not None:
+    try:
         latest_payment = (
             Payment.query.filter_by(user_id=user.id)
             .order_by(Payment.created_at.desc())
             .first()
         )
+    except Exception:
+        latest_payment = None
 
     return render_template("plans.html", latest_payment=latest_payment)
 
@@ -3362,20 +3748,18 @@ def api_impact_summary():
 
     # resources shared count (Resource model exists)
     resources_shared = Resource.query.filter(Resource.user_id == user.id).count()
-    # hours volunteered (reuse query)
-    hours_vol = db.session.query(func.coalesce(func.sum(func.julianday(Request.completed_at) - func.julianday(Request.created_at)), 0.0)).filter(
-        Request.helper_id == user.id,
-        Request.status == "completed",
-        Request.completed_at != None
-    ).scalar() or 0.0
-    hours_vol = float(hours_vol) * 24
-    # helped people
-    helped_people = db.session.query(func.count(func.distinct(Request.user_id))).filter(
-        Request.helper_id == user.id,
-        Request.status == "completed",
-        Request.completed_at != None,
-        Request.user_id != None
-    ).scalar() or 0
+    # hours volunteered (use review duration for accuracy)
+    hours_vol = (
+        db.session.query(func.coalesce(func.sum(Review.duration_hours), 0.0))
+        .filter(Review.helper_id == user.id, Review.is_flagged_fake == False)  # noqa: E712
+        .scalar()
+    ) or 0.0
+    # helped people (distinct reviewers)
+    helped_people = (
+        db.session.query(func.count(func.distinct(Review.reviewer_id)))
+        .filter(Review.helper_id == user.id, Review.is_flagged_fake == False)  # noqa: E712
+        .scalar()
+    ) or 0
     # carbon saved estimate (example: each resource share counts as 0.5 "unit" saved)
     carbon_units = db.session.query(func.coalesce(func.sum(Resource.quantity), 0)).filter(Resource.user_id == user.id).scalar() or 0
     # convert to percent (arbitrary scale for UI)
@@ -3383,7 +3767,7 @@ def api_impact_summary():
 
     return jsonify({
         "resources_shared": int(resources_shared),
-        "hours_volunteered": round(hours_vol, 2),
+        "hours_volunteered": round(float(hours_vol), 2),
         "helped_people": int(helped_people),
         "carbon_saved_percent": carbon_saved_percent
     })
@@ -3491,12 +3875,6 @@ def api_community_impact_over_time():
         "items": list(items_data),
         "carbon": list(carbon_data)
     })
-
-@app.route("/impact")
-@login_required
-def impact_dashboard():
-    return render_template("impact.html")
-
 
 @app.route("/impact")
 @login_required
@@ -3666,7 +4044,10 @@ def trigger_sos():
 @app.route("/sos/<int:request_id>/accept/<int:helper_id>", methods=["POST"])
 @login_required
 def accept_sos_responder(request_id, helper_id):
-    """SOS owner selects a responder to connect with (enables chat/call + completion review flow)."""
+    """Legacy endpoint (disabled): SOS no longer requires an explicit 'accept' step.
+
+    Kept for backward compatibility with older UI builds.
+    """
     user = current_user()
     req_obj = Request.query.get_or_404(request_id)
 
@@ -3678,36 +4059,98 @@ def accept_sos_responder(request_id, helper_id):
         flash("Not an SOS request.", "error")
         return redirect(url_for("dashboard"))
 
-    if req_obj.status != "open":
-        flash("This SOS is no longer open.", "error")
-        return redirect(url_for("dashboard"))
+    flash(
+        "SOS no longer requires accepting a responder. Use Chat, then 'Mark SOS Complete & Review'.",
+        "info",
+    )
+    return redirect(url_for("dashboard"))
+
+
+@app.route("/sos/<int:request_id>/complete/<int:helper_id>", methods=["POST"])
+@login_required
+def complete_sos(request_id, helper_id):
+    """SOS owner marks SOS completed and leaves a review for a responder.
+
+    Unlike normal offers, SOS does not require an explicit 'accept' step.
+    """
+    user = current_user()
+    return_to = request.referrer or url_for("dashboard")
+    req_obj = Request.query.get_or_404(request_id)
+
+    if not user or req_obj.user_id != user.id:
+        flash("Unauthorized.", "error")
+        return redirect(return_to)
+
+    if (req_obj.category or "").lower() != "sos":
+        flash("Not an SOS request.", "error")
+        return redirect(return_to)
+
+    if req_obj.status not in ["open", "in_progress", "claimed"]:
+        flash("This SOS is not active.", "error")
+        return redirect(return_to)
+
+    if helper_id == user.id:
+        flash("You cannot review yourself.", "error")
+        return redirect(return_to)
 
     existing = SOSResponse.query.filter_by(request_id=req_obj.id, helper_id=helper_id).first()
     if not existing:
         flash("That user has not responded to this SOS.", "error")
-        return redirect(url_for("dashboard"))
+        return redirect(return_to)
 
     helper_user = User.query.get(helper_id)
     if not helper_user:
         flash("Responder not found.", "error")
-        return redirect(url_for("dashboard"))
+        return redirect(return_to)
 
+    # Get review data
+    try:
+        rating = int(request.form.get("rating", 5))
+    except Exception:
+        rating = 5
+    comment = request.form.get("comment", "")
+    try:
+        duration_input = float(request.form.get("hours", 1.0))
+    except Exception:
+        duration_input = 1.0
+    actual_hours = max(0.1, duration_input)
+
+    # Complete SOS
     req_obj.helper_id = helper_id
-    req_obj.status = "in_progress"
+    req_obj.status = "completed"
+    req_obj.completed_at = datetime.utcnow()
+
+    # AI analysis + create review
+    ai_result = analyze_review_quality(comment, rating)
+    review = Review(
+        request_id=req_obj.id,
+        reviewer_id=user.id,
+        helper_id=helper_id,
+        rating=rating,
+        comment=comment,
+        duration_hours=actual_hours,
+        sentiment_score=ai_result["sentiment_score"],
+        is_flagged_fake=ai_result["is_suspicious"],
+        flag_reason=ai_result["flag_reason"],
+    )
+    db.session.add(review)
     db.session.commit()
+
+    # Update helper reputation
+    update_user_scores(helper_user)
 
     try:
         push_notification(
             user_id=helper_id,
-            type="sos_connected",
-            message=f"✅ {user.name} accepted your SOS response. Please coordinate in chat.",
-            link=url_for("map_page", focus_request_id=req_obj.id),
+            type="sos_completed",
+            message=f"✅ {user.name} marked the SOS as completed and left you a review.",
+            link=url_for("dashboard"),
         )
     except Exception:
         pass
 
-    flash("Connected with the responder. You can chat/call and mark complete.", "success")
-    return redirect(url_for("dashboard"))
+    flash(f"SOS completed. {actual_hours} hours added to {helper_user.name}'s profile.", "success")
+    return redirect(return_to)
 
 
 @app.route("/api/sos/<int:request_id>/respond", methods=["POST"])
@@ -3725,10 +4168,6 @@ def api_sos_respond(request_id):
     if req_obj.user_id == user.id:
         return jsonify({"error": "Cannot respond to your own SOS"}), 400
 
-    existing = SOSResponse.query.filter_by(request_id=req_obj.id, helper_id=user.id).first()
-    if existing:
-        return jsonify({"ok": True, "already": True})
-
     data = request.get_json(silent=True) or {}
     responder_lat = None
     responder_lng = None
@@ -3744,6 +4183,23 @@ def api_sos_respond(request_id):
     if responder_lat is None or responder_lng is None:
         responder_lat = getattr(user, "lat", None)
         responder_lng = getattr(user, "lng", None)
+
+    existing = SOSResponse.query.filter_by(request_id=req_obj.id, helper_id=user.id).first()
+    if existing:
+        # If the client provides a fresh location later (after responding), update it.
+        updated = False
+        try:
+            if responder_lat is not None and responder_lng is not None:
+                existing.responder_lat = responder_lat
+                existing.responder_lng = responder_lng
+                db.session.commit()
+                updated = True
+        except Exception:
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
+        return jsonify({"ok": True, "already": True, "updated_location": updated})
 
     resp = SOSResponse(
         request_id=req_obj.id,
@@ -3833,8 +4289,8 @@ def api_sos_status(request_id):
 
 
 
-@app.route("/emotional")
-def emotional_ping():
+@app.route("/emotional-chat")
+def emotional_chat():
     user = current_user()
     if not user:
         # quick guest flow: use Emergency Guest
@@ -3924,9 +4380,10 @@ def api_translate():
 
 
 @app.route("/api/fcm/register", methods=["POST"])
-@login_required
 def api_register_fcm():
     user = current_user()
+    if not user:
+        return jsonify({"ok": False, "error": "login required"}), 401
     data = request.get_json() or {}
     token = (data.get("token") or "").strip()
 
@@ -4524,56 +4981,132 @@ def suggestions_page():
 
 # ------------------ MAIN ------------------
 if __name__ == "__main__":
+    debug_mode = os.getenv("FLASK_DEBUG", "0") == "1"
+
     with app.app_context():
         db.create_all()  # create tables if not exist
-        
-        # Migrate: Add image_url column to resource_wanted_items if it doesn't exist
+
+        # Lightweight SQLite schema guardrails for dev runs.
+        # Keeps the on-disk lifeline.db compatible with the current SQLAlchemy models.
         try:
             from sqlalchemy import inspect
+
             inspector = inspect(db.engine)
-            columns = [col['name'] for col in inspector.get_columns('resource_wanted_items')]
-            if 'image_url' not in columns:
+
+            # Ensure default profile photo exists to avoid noisy 404s.
+            try:
+                import base64
+
+                default_photo_path = os.path.join(app.config["UPLOAD_FOLDER"], "default.png")
+                if not os.path.exists(default_photo_path):
+                    # 1x1 transparent PNG
+                    png_b64 = (
+                        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB/"
+                        "alh8xkAAAAASUVORK5CYII="
+                    )
+                    os.makedirs(os.path.dirname(default_photo_path), exist_ok=True)
+                    with open(default_photo_path, "wb") as f:
+                        f.write(base64.b64decode(png_b64))
+                    print("✓ Created default profile photo")
+            except Exception as e:
+                print(f"Migration note (default profile photo): {e}")
+
+            # Add image_url to resource_wanted_items if missing
+            try:
+                rwi_cols = {col["name"] for col in inspector.get_columns("resource_wanted_items")}
+                if "image_url" not in rwi_cols:
+                    with db.engine.connect() as conn:
+                        conn.execute(db.text("ALTER TABLE resource_wanted_items ADD COLUMN image_url VARCHAR(300)"))
+                        conn.commit()
+                    print("✓ Added image_url column to resource_wanted_items")
+            except Exception as e:
+                print(f"Migration note (resource_wanted_items): {e}")
+
+            # Add missing User columns (prevents login/signup 500 on older DB files)
+            try:
+                user_cols = {col["name"] for col in inspector.get_columns("user")}
                 with db.engine.connect() as conn:
-                    conn.execute(db.text('ALTER TABLE resource_wanted_items ADD COLUMN image_url VARCHAR(300)'))
+                    if "role" not in user_cols:
+                        conn.execute(db.text("ALTER TABLE user ADD COLUMN role VARCHAR(20) DEFAULT 'user'"))
+                    if "fcm_token" not in user_cols:
+                        conn.execute(db.text("ALTER TABLE user ADD COLUMN fcm_token VARCHAR(512)"))
+                    if "is_premium" not in user_cols:
+                        conn.execute(db.text("ALTER TABLE user ADD COLUMN is_premium BOOLEAN DEFAULT 0"))
+                    if "premium_expiry" not in user_cols:
+                        conn.execute(db.text("ALTER TABLE user ADD COLUMN premium_expiry DATETIME"))
+                    if "is_admin" not in user_cols:
+                        conn.execute(db.text("ALTER TABLE user ADD COLUMN is_admin BOOLEAN DEFAULT 0"))
                     conn.commit()
-                print("✓ Added image_url column to resource_wanted_items")
+                print("✓ Ensured user auth/push columns exist")
+
+                # Create default admin (dev only)
+                admin = User.query.filter_by(email="admin@lifeline.com").first()
+                if not admin:
+                    admin = User(
+                        email="admin@lifeline.com",
+                        name="Super Admin",
+                        is_admin=True,
+                        is_trusted_helper=True,
+                    )
+                    admin.set_password("admin123")  # Change this!
+                    db.session.add(admin)
+                    db.session.commit()
+                    print("✓ Created default admin: admin@lifeline.com / admin123")
+            except Exception as e:
+                print(f"Migration note (user): {e}")
+
+            # Ensure offers table has expected columns (older DBs may be missing user_id)
+            try:
+                table_names = set(inspector.get_table_names())
+                if "offers" in table_names:
+                    offer_cols = {col["name"] for col in inspector.get_columns("offers")}
+                    with db.engine.connect() as conn:
+                        if "user_id" not in offer_cols:
+                            conn.execute(db.text("ALTER TABLE offers ADD COLUMN user_id INTEGER"))
+                            # Best-effort backfill to a safe value (admin user if present)
+                            conn.execute(db.text("UPDATE offers SET user_id = 1 WHERE user_id IS NULL"))
+                        if "helper_id" not in offer_cols:
+                            conn.execute(db.text("ALTER TABLE offers ADD COLUMN helper_id INTEGER"))
+                            # If user_id exists, treat it as helper_id for legacy rows
+                            conn.execute(
+                                db.text(
+                                    "UPDATE offers SET helper_id = COALESCE(helper_id, user_id, 1) WHERE helper_id IS NULL"
+                                )
+                            )
+                        if "status" not in offer_cols:
+                            conn.execute(
+                                db.text("ALTER TABLE offers ADD COLUMN status VARCHAR(20) DEFAULT 'pending'")
+                            )
+                            conn.execute(
+                                db.text("UPDATE offers SET status = 'pending' WHERE status IS NULL")
+                            )
+                        conn.commit()
+                    print("✓ Ensured offers columns exist")
+            except Exception as e:
+                print(f"Migration note (offers): {e}")
+
+            # Ensure notifications table matches Notification model
+            try:
+                table_names = set(inspector.get_table_names())
+                if "notifications" in table_names:
+                    notif_cols = {col["name"] for col in inspector.get_columns("notifications")}
+                    with db.engine.connect() as conn:
+                        if "type" not in notif_cols:
+                            conn.execute(db.text("ALTER TABLE notifications ADD COLUMN type VARCHAR(50)"))
+                        if "message" not in notif_cols:
+                            conn.execute(db.text("ALTER TABLE notifications ADD COLUMN message VARCHAR(255)"))
+                        if "link" not in notif_cols:
+                            conn.execute(db.text("ALTER TABLE notifications ADD COLUMN link VARCHAR(255)"))
+                        if "is_read" not in notif_cols:
+                            conn.execute(db.text("ALTER TABLE notifications ADD COLUMN is_read BOOLEAN DEFAULT 0"))
+                        if "created_at" not in notif_cols:
+                            conn.execute(db.text("ALTER TABLE notifications ADD COLUMN created_at DATETIME"))
+                        conn.commit()
+                    print("✓ Ensured notifications columns exist")
+            except Exception as e:
+                print(f"Migration note (notifications): {e}")
+
         except Exception as e:
             print(f"Migration note: {e}")
 
-    
-
-    socketio.run(app, debug=True)
-
-
-    socketio.run(app, debug=True)
-
-
-    
-
-    try:
-            inspector = inspect(db.engine)
-            cols = [c['name'] for c in inspector.get_columns('user')]
-            with db.engine.connect() as conn:
-                if 'is_premium' not in cols:
-                    conn.execute(db.text('ALTER TABLE user ADD COLUMN is_premium BOOLEAN DEFAULT 0'))
-                if 'premium_expiry' not in cols:
-                    conn.execute(db.text('ALTER TABLE user ADD COLUMN premium_expiry DATETIME'))
-                if 'is_admin' not in cols:
-                    conn.execute(db.text('ALTER TABLE user ADD COLUMN is_admin BOOLEAN DEFAULT 0'))
-                conn.commit()
-            print("✓ Added premium/admin columns")
-            
-            # --- CREATE DEFAULT ADMIN ---
-            admin = User.query.filter_by(email="admin@lifeline.com").first()
-            if not admin:
-                admin = User(email="admin@lifeline.com", name="Super Admin", is_admin=True, is_trusted_helper=True)
-                admin.set_password("admin123") # Change this!
-                db.session.add(admin)
-                db.session.commit()
-                print("✓ Created default admin: admin@lifeline.com / admin123")
-                
-    except Exception as e:
-            print(f"Migration error: {e}")    
-
-            debug_mode = os.getenv("FLASK_DEBUG", "0") == "1"
-            socketio.run(app, debug=debug_mode, use_reloader=False)
+    socketio.run(app, debug=debug_mode, use_reloader=False)
