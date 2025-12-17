@@ -1932,6 +1932,7 @@ def need_help():
     - If not logged in     -> use Emergency Guest user (quick help)
     """
     user = current_user()
+    can_post = True
     if user:
         can_post = check_post_limit(user)
     if request.method == "POST":
@@ -2119,6 +2120,7 @@ def need_help():
         categories=categories,
         can_post=can_post,
         google_maps_key=GOOGLE_MAPS_API_KEY,
+        flagged_map=flagged_map,
     )
 
 
@@ -2442,6 +2444,7 @@ def list_requests():
     # if mode == "all" -> no extra filter
 
     requests_list = q.order_by(Request.created_at.desc()).all()
+    
     # --- FLAG MAP for showing flagged badge on /requests ---
     req_ids = [r.id for r in requests_list]
     flags = RequestFlag.query.filter(RequestFlag.request_id.in_(req_ids)).all()
@@ -2457,7 +2460,8 @@ def list_requests():
         # Create a set of request_ids for easy checking
         offered_ids = {o.request_id for o in my_offers}
     # --- NEW LOGIC END ---
-    print("flagged_map sample:", list(flagged_map.items())[:5])
+    
+    # print("flagged_map sample:", list(flagged_map.items())[:5]) # Debugging
 
     sos_responded_ids = set()
     if user:
@@ -2479,10 +2483,12 @@ def list_requests():
         "list_requests.html",
         requests=requests_list,
         mode=mode,
-        offered_ids=offered_ids,  # <--- Pass this to the HTML
+        offered_ids=offered_ids,
         sos_responded_ids=sos_responded_ids,
         sos_response_counts=sos_response_counts,
+        flagged_map=flagged_map  # <--- THIS WAS MISSING
     )
+    
 
 # ------------------ CHAT PAGES & API ------------------
 @app.route("/chat/<int:other_user_id>")

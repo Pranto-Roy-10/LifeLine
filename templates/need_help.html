@@ -1,7 +1,7 @@
 {% extends "base.html" %} {% block title %}I Need Help{% endblock %} {% block
 content %}
 <div class="w-full max-w-7xl mx-auto px-6 py-10">
-  <div class="grid grid-cols-1 lg:grid-cols-3 gap-10">
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-10 items-start">
     <!-- 🟩 FORM CARD -->
     <div
       class="lg:col-span-2 bg-slate-800/60 backdrop-blur-md border border-slate-700 rounded-2xl p-8 shadow-xl"
@@ -234,7 +234,7 @@ content %}
     </div>
 
     <!-- 🟦 SIDEBAR (unchanged) -->
-    <div class="space-y-8">
+    <div class="space-y-8 lg:sticky lg:top-24 self-start">
       {{ super() }}
 
       <!-- Recent Need Help posts -->
@@ -245,31 +245,74 @@ content %}
           People who need help
         </h3>
 
-        <div class="space-y-3">
-          {% for post in posts %}
-          <div class="bg-slate-900/40 border border-slate-700 rounded-2xl p-4">
-            <div class="flex items-center justify-between">
-              <div class="font-semibold text-slate-100">{{ post.title }}</div>
-              <div class="text-[11px] text-slate-400">
-                {{ post.created_at.strftime("%Y-%m-%d %H:%M") if post.created_at
-                else "" }}
+        <div
+          class="space-y-3 lg:max-h-[calc(100vh-10rem)] lg:overflow-y-auto lg:pr-1"
+        >
+          {% for post in posts %} {% set is_sos = ((post.category or '')|lower
+          == 'sos') %}
+          <div class="rounded-2xl border border-slate-700 bg-slate-900/40 p-4">
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <div class="font-semibold text-slate-100 truncate">
+                  {{ post.title }}
+                </div>
+                <div class="mt-0.5 text-[11px] text-slate-400">
+                  {{ post.created_at.strftime("%Y-%m-%d %H:%M") if
+                  post.created_at else "" }}
+                </div>
               </div>
+              <button
+                type="button"
+                class="shrink-0 text-slate-400 hover:text-slate-200 transition"
+                aria-expanded="false"
+                aria-controls="sidebar-details-{{ post.id }}"
+                onclick="toggleNeedHelpSidebarDetails('{{ post.id }}', this)"
+                title="Expand"
+              >
+                <span
+                  id="sidebar-icon-{{ post.id }}"
+                  class="inline-block transition-transform duration-150"
+                >
+                  ▼
+                </span>
+              </button>
             </div>
 
-            <!-- chips row (this is where your “Other | Needs help” is) -->
-            <div class="mt-2 flex flex-wrap gap-2 text-[11px]">
+            <div class="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
               <span
-                class="px-2 py-1 rounded-full bg-slate-700 border border-slate-600 capitalize"
+                class="px-2 py-1 rounded-full border border-slate-600 text-slate-200 bg-slate-800/80"
               >
-                {{ post.category }}
+                {{ (post.category or 'Other')|capitalize }}
               </span>
+
+              {% if is_sos %}
               <span
-                class="px-2 py-1 rounded-full bg-emerald-500/10 border border-emerald-400/40 text-emerald-200"
+                class="px-2 py-1 rounded-full bg-rose-500/10 text-rose-300 border border-rose-500/40 font-bold"
+              >
+                🚨 SOS
+              </span>
+              {% endif %} {% if post.is_offer %}
+              <span
+                class="px-2 py-1 rounded-full bg-sky-500/10 text-sky-300 border border-sky-500/40"
+              >
+                Offer help
+              </span>
+              {% else %}
+              <span
+                class="px-2 py-1 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/40"
               >
                 Needs help
               </span>
+              {% endif %} {% if current_user and post.user_id == current_user.id
+              %}
+              <span
+                class="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 font-bold"
+              >
+                My Post
+              </span>
+              {% endif %}
             </div>
-            {# --- AI flags (scam / duplicate / both) for sidebar cards --- #}
+
             {% set flag = flagged_map.get(post.id) if flagged_map is defined and
             flagged_map else None %} {% set reasons = (flag.get('reasons') if
             flag is mapping else '') | default('', true) %} {% set reasons_l =
@@ -279,42 +322,74 @@ content %}
             in reasons_l) or ('contains scam' in reasons_l) %} {% if flag and
             (is_scam or is_duplicate) %} {% if is_scam and is_duplicate %}
             <div
-              class="mt-3 rounded-xl border border-sky-400/60 bg-sky-500/10 px-3 py-2"
+              class="mt-2 p-3 rounded-xl border border-sky-400/60 bg-sky-500/10"
             >
-              <div class="text-sky-200 text-sm font-semibold">
+              <p class="text-sky-200 text-sm font-semibold">
                 Potential scam + duplicate flagged by LifeLine AI
-              </div>
+              </p>
+              <p class="text-sky-200/80 text-xs mt-0.5">
+                recommended: Verify before offering help
+              </p>
             </div>
-
             {% elif is_duplicate %}
             <div
-              class="mt-3 rounded-xl border border-purple-400/60 bg-purple-500/10 px-3 py-2"
+              class="mt-2 p-3 rounded-xl border border-purple-400/60 bg-purple-500/10"
             >
-              <div class="text-purple-200 text-sm font-semibold">
-                Possible duplicate flagged by LifeLine AI
-              </div>
+              <p class="text-purple-200 text-sm font-semibold">
+                Possible duplicate scanned by LifeLine AI
+              </p>
             </div>
-
             {% elif is_scam %}
             <div
-              class="mt-3 rounded-xl border border-amber-400/60 bg-amber-500/10 px-3 py-2"
+              class="mt-3 p-3 rounded-xl border border-amber-400/60 bg-amber-500/10"
             >
-              <div class="text-amber-200 text-sm font-semibold">
+              <p class="text-amber-200 text-sm font-semibold">
                 Possible scam detected by LifeLine AI
-              </div>
-              <div class="text-amber-200/80 text-[12px] mt-0.5">
+              </p>
+              <p class="text-amber-200/80 text-xs mt-0.5">
                 recommended: Verify before offering help
-              </div>
+              </p>
             </div>
             {% endif %} {% endif %}
 
-            <div class="mt-2 text-[12px] text-slate-300 line-clamp-3">
+            <div class="mt-2 text-[12px] text-slate-300 line-clamp-2">
               {{ post.description }}
             </div>
 
+            <div
+              id="sidebar-details-{{ post.id }}"
+              class="hidden mt-3 border-t border-slate-800 pt-3 space-y-2 text-xs text-slate-200"
+            >
+              <p class="text-[12px] text-slate-300 whitespace-pre-line">
+                {{ post.description or "No details provided." }}
+              </p>
+
+              {% if post.landmark %}
+              <p class="text-[11px] text-slate-400">
+                <span class="font-semibold">Landmark:</span> {{ post.landmark }}
+              </p>
+              {% endif %} {% if post.time_window %}
+              <p class="text-[11px] text-slate-400">
+                <span class="font-semibold">When:</span> {{ post.time_window }}
+              </p>
+              {% endif %} {% if post.contact_method %}
+              <p class="text-[11px] text-slate-400">
+                <span class="font-semibold">Contact via:</span> {{
+                post.contact_method }}
+              </p>
+              {% endif %}
+            </div>
+
             <div class="mt-2 text-[11px] text-slate-400">
-              📍 {{ post.area or "Unknown" }} • Urgency: {{ post.urgency or
-              "Normal" }}
+              <span class="text-rose-400">📍</span>
+              {{ post.area or "Unknown" }}
+              <span class="text-slate-500">•</span>
+              Urgency:
+              <span
+                class="{% if post.urgency == 'emergency' %}text-rose-400 {% elif post.urgency == 'high' %}text-amber-300 {% elif post.urgency == 'normal' %}text-sky-300 {% else %}text-emerald-300{% endif %}"
+              >
+                {{ (post.urgency or 'normal')|capitalize }}
+              </span>
             </div>
           </div>
           {% endfor %}
@@ -323,6 +398,24 @@ content %}
     </div>
 
     <script>
+      function toggleNeedHelpSidebarDetails(id, btnEl) {
+        const details = document.getElementById(`sidebar-details-${id}`);
+        const icon = document.getElementById(`sidebar-icon-${id}`);
+        if (!details) return;
+
+        const willOpen = details.classList.contains("hidden");
+        details.classList.toggle("hidden");
+
+        if (icon) {
+          icon.classList.toggle("rotate-180", willOpen);
+        }
+
+        if (btnEl) {
+          btnEl.setAttribute("aria-expanded", willOpen ? "true" : "false");
+          btnEl.title = willOpen ? "Collapse" : "Expand";
+        }
+      }
+
       let helpMap, helpMarker;
 
       function initHelpMap() {
