@@ -1,0 +1,62 @@
+{% extends "base.html" %} {% block content %}
+
+<div class="container mt-4">
+  <div class="mb-6 text-center">
+    <h1 class="text-2xl md:text-3xl font-bold text-yellow-400 tracking-wide">
+      ⚠️ AI FLAGGED POSTS ⚠️
+    </h1>
+
+    <a
+      href="{{ url_for('need_help') }}"
+      class="inline-block mt-2 text-sm text-slate-400 hover:text-slate-200 underline"
+    >
+      ← Back to Need Help
+    </a>
+  </div>
+
+  {% if requests|length == 0 %}
+  <div class="alert alert-info">No flagged posts found.</div>
+  {% endif %} {% for r in requests %}
+  <div class="card mb-3">
+    <div class="card-body">
+      <div class="d-flex justify-content-between">
+        <h5
+          class="card-title mb-1"
+          style="display: flex; align-items: center; gap: 10px"
+        >
+          <span
+            style="
+              width: 28px;
+              height: 28px;
+              border-radius: 50%;
+              border: 1px solid #facc15;
+              color: #facc15;
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              font-weight: 700;
+              font-size: 14px;
+              flex-shrink: 0;
+            "
+          >
+            {{ loop.index }}
+          </span>
+          {{ r.title }}
+        </h5>
+        <span class="badge bg-warning text-dark">AI Flagged</span>
+      </div>
+
+      <p class="card-text mb-2">{{ r.description }}</p>
+
+      {% set meta = flagged_map.get(r.id) %} {% if meta %}
+      <div class="small text-muted">
+        <b>Risk:</b> {{ meta.risk }} / 100
+        <br />
+        <b>Reason:</b> {{ meta.reasons }}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

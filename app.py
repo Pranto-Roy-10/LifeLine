@@ -36,6 +36,7 @@ from flask_jwt_extended import (
 )
 from flask_socketio import SocketIO, emit, join_room, leave_room
 
+from behavior_verifier_service import verify_request_behavior
 
 
 
@@ -289,6 +290,17 @@ class Request(db.Model):
             except Exception:
                 d["distance_km"] = None
         return d
+
+class RequestFlag(db.Model):
+    __tablename__ = "request_flag"
+    id = db.Column(db.Integer, primary_key=True)
+    request_id = db.Column(db.Integer, db.ForeignKey('requests.id'), nullable=False, index=True)
+    risk_score = db.Column(db.Integer, nullable=False, default=0)
+    reasons = db.Column(db.Text, nullable=False, default="")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    request = db.relationship('Request', backref=db.backref('flags', lazy=True))
+
     
 class EmotionalPing(db.Model):
     __tablename__ = "emotional_pings"
@@ -1756,6 +1768,8 @@ def create_request():
     return redirect(url_for("list_requests"))
 
 
+
+
 @app.route("/need-help", methods=["GET", "POST"])
 def need_help():
     """
@@ -1798,64 +1812,90 @@ def need_help():
             return redirect(url_for("need_help"))
 
         # Decide which user will own this request
+        is_guest = False
         if user is None:
             user = get_emergency_user()
+            is_guest = True
+
+        # ----------- AI Behavior Verifier (RUN BEFORE SAVING) -----------
+        cutoff = datetime.utcnow() - timedelta(minutes=45)
+        recent_same_user = (
+    Request.query.filter(Request.user_id == user.id)
+    .order_by(Request.created_at.desc())
+    .limit(10)
+    .all()
+)
+
+        print("DEBUG recent_same_user:", [r.id for r in recent_same_user])
+
+
+        print("USING NEW VERIFIER ✅")
+
+        result = verify_request_behavior(
+            user=user,
+            title=title,
+            description=description_main,
+            category=category,
+            contact_info=contact_info,
+            recent_same_user_requests=recent_same_user
+        )
+        print("DEBUG recent ids:", [r.id for r in recent_same_user])
+        print("DEBUG verifier:", result)
+
+
+        # ✅ Block ONLY guest if scam-like content
+        if is_guest and result.get("should_block_guest"):
+            flash(
+                "Your request looks unsafe (scam-like content). Remove payment/OTP-related words and try again.",
+                "error",
+            )
+            return redirect(url_for("need_help"))
+        # ------------------------------------------------------------
 
         expires_at = datetime.utcnow() + timedelta(minutes=expiry_minutes)
 
         req = Request(
-        user_id=user.id,
-        title=title,
-        category=category,
-        description=description_main,
-        is_offer=False,
-        area=area or None,
-        landmark=landmark or None,
-        urgency=urgency or None,
-        time_window=time_window or None,
-        contact_method=contact_method or None,
-        contact_info=contact_info or None,
-        lat=lat,
-        lng=lng,
-        expires_at=expires_at,
+            user_id=user.id,
+            title=title,
+            category=category,
+            description=description_main,
+            is_offer=False,
+            area=area or None,
+            landmark=landmark or None,
+            urgency=urgency or None,
+            time_window=time_window or None,
+            contact_method=contact_method or None,
+            contact_info=contact_info or None,
+            lat=lat,
+            lng=lng,
+            expires_at=expires_at,
         )
         db.session.add(req)
         db.session.commit()
+        print("✅ SAVING FLAG FOR REQUEST", req.id, result)
 
-        db.session.add(req)
-        db.session.commit()
+        # Save flag record (non-blocking for normal users)
+        if result.get("is_flagged") or result.get("matched_request_id") is not None:
+            rf = RequestFlag(
+                request_id=req.id,
+                risk_score=int(result.get("risk_score", 0)),
+                reasons=" | ".join(result.get("reasons", [])),
+            )
+            db.session.add(rf)
+            db.session.commit()
+            # ✅ Alert logged-in users that their post got flagged
+        if (not is_guest) and (result.get("is_flagged") or result.get("matched_request_id") is not None):
+            flash("Your post looks suspicious, so it has been flagged by LifeLine AI.", "warning")
+
 
         # ---- Push notifications to helpers ----
         try:
             print(f"[FCM] Trigger nearby helpers for req {req.id}")
             send_fcm_for_need_request(req)
-
         except Exception as e:
             print("[FCM] nearby help push error:", e)
 
         # Fallback / additional broadcast: notify all trusted helpers with FCM tokens
-        try:
-            send_fcm_to_trusted_helpers(
-                title="Someone nearby needs help",
-                body=f"{user.name} posted: “{title}” (category: {category})",
-                data={
-                    "type": "NEED_HELP",
-                    "request_id": req.id,
-                    "category": category,
-                },
-            )
-        except Exception as e:
-            print("[FCM] Failed to broadcast need_help notification:", e)
-
-        # ---- Flash + redirect as before ----
-        if current_user():
-            flash("Your need request has been posted.", "success")
-        else:
-            flash("Your quick help request has been posted (as guest).", "success")
-
-        return redirect(url_for("need_help"))
-
-        #  Push: notify trusted helpers
         try:
             send_fcm_to_trusted_helpers(
                 title="Someone nearby needs help",
@@ -1907,14 +1947,23 @@ def need_help():
         .all()
     )
 
+    # --- FLAG MAP for showing flagged banner on /need-help ---
+    post_ids = [p.id for p in posts]
+    flags = RequestFlag.query.filter(RequestFlag.request_id.in_(post_ids)).all()
+    flagged_map = {f.request_id: {"risk": f.risk_score, "reasons": f.reasons} for f in flags}
+
+
     return render_template(
-        "need_help.html",
-        posts=posts,
-        total_need=total_need,
-        total_offer=total_offer,
-        categories=categories,
-        google_maps_key=GOOGLE_MAPS_API_KEY,
+    "need_help.html",
+    posts=posts,
+    total_need=total_need,
+    total_offer=total_offer,
+    categories=categories,
+    google_maps_key=GOOGLE_MAPS_API_KEY,
+    flagged_map=flagged_map,  
     )
+
+
 
 # I Can Help – login required
 @app.route("/can-help", methods=["GET", "POST"])
@@ -2235,6 +2284,10 @@ def list_requests():
     # if mode == "all" -> no extra filter
 
     requests_list = q.order_by(Request.created_at.desc()).all()
+    # --- FLAG MAP for showing flagged badge on /requests ---
+    req_ids = [r.id for r in requests_list]
+    flags = RequestFlag.query.filter(RequestFlag.request_id.in_(req_ids)).all()
+    flagged_map = {f.request_id: {"risk": f.risk_score, "reasons": f.reasons} for f in flags}
 
     # --- NEW LOGIC START ---
     # Find out which requests the current user has already offered to help with
@@ -2246,13 +2299,16 @@ def list_requests():
         # Create a set of request_ids for easy checking
         offered_ids = {o.request_id for o in my_offers}
     # --- NEW LOGIC END ---
+    print("flagged_map sample:", list(flagged_map.items())[:5])
 
     return render_template(
-        "list_requests.html",
-        requests=requests_list,
-        mode=mode,
-        offered_ids=offered_ids,  # <--- Pass this to the HTML
-    )
+    "list_requests.html",
+    requests=requests_list,
+    mode=mode,
+    offered_ids=offered_ids,
+    flagged_map=flagged_map,   # ✅ add this
+)
+
 
 # ------------------ CHAT PAGES & API ------------------
 @app.route("/chat/<int:other_user_id>")
