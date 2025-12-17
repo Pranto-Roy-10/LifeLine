@@ -1452,3 +1452,34 @@ body {
     margin-left: auto;
   }
 }
+/* 🔒 Fix Chrome autofill white background on dark inputs */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+textarea:-webkit-autofill:hover,
+textarea:-webkit-autofill:focus,
+select:-webkit-autofill,
+select:-webkit-autofill:hover,
+select:-webkit-autofill:focus {
+  -webkit-text-fill-color: #ffffff !important;
+  -webkit-box-shadow: 0 0 0px 1000px rgb(51 65 85) inset !important;
+  box-shadow: 0 0 0px 1000px rgb(51 65 85) inset !important;
+  transition: background-color 9999s ease-in-out 0s;
+}
+
+/* Keep dark inputs even after typing/autofill */
+input, textarea, select {
+  background-color: rgb(51 65 85); /* slate-700 */
+  color: white;
+  border-color: rgb(71 85 105);    /* slate-600 */
+}
+
+/* Chrome autofill fix */
+input:-webkit-autofill,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+  -webkit-text-fill-color: white !important;
+  -webkit-box-shadow: 0 0 0px 1000px rgb(51 65 85) inset !important;
+  transition: background-color 999999s ease-in-out 0s;
+}
