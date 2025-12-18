@@ -827,6 +827,21 @@ class ImpactLog(db.Model):
     helper = db.relationship("User", backref="impact_logs")
 
 
+# ------------------ NOTIFICATION MODEL ------------------
+class Notification(db.Model):
+    __tablename__ = "notifications"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    type = db.Column(db.String(50), nullable=False)  # sos, emotional_ping, chat, system, etc.
+    message = db.Column(db.Text, nullable=False)
+    link = db.Column(db.String(255), nullable=True)  # URL to redirect when clicked
+    is_read = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship("User", backref="notifications")
+
+
 # ------------------- EVENT NOTIFICATION HELPERS -------------------
 def notify_interested_users(event, message):
     interests = EventInterest.query.filter_by(event_id=event.id).all()
@@ -957,6 +972,24 @@ def create_jwt_for_user(user: User):
 def generate_otp_code():
     """Generate a 6-digit numeric OTP."""
     return "".join(random.choices(string.digits, k=6))
+
+
+def push_notification(user_id, type, message, link=None):
+    """Create a notification in the database for the bell icon."""
+    try:
+        notification = Notification(
+            user_id=user_id,
+            type=type,
+            message=message,
+            link=link
+        )
+        db.session.add(notification)
+        db.session.commit()
+        return notification
+    except Exception as e:
+        print(f"[NOTIFICATION] Error creating notification: {e}")
+        db.session.rollback()
+        return None
 
 
 def get_notification_count(user: User) -> int:
@@ -1833,10 +1866,11 @@ def accept_ping(ping_id):
 
     conv = get_or_create_conversation(ping.user_id, current_user().id)
 
-
     push_notification(
         user_id=ping.user_id,
-        message=f"{current_user.name} replied to your emotional ping"
+        type="emotional_reply",
+        message=f"{current_user().name} replied to your emotional ping",
+        link=url_for("chat_with_user", other_user_id=current_user().id)
     )
 
     return redirect(url_for("chat_with_user", other_user_id=ping.user_id))
