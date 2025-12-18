@@ -41,6 +41,7 @@ class WeatherService:
         if not key:
             if demo_weather:
                 return {
+                    "__source": "demo",
                     "weather": [{"main": "Rain", "description": "light rain"}],
                     "main": {"temp": 29.0, "feels_like": 31.0, "humidity": 75},
                     "wind": {"speed": 3.2},
@@ -68,11 +69,15 @@ class WeatherService:
                     "rain": {"1h": 0.6},
                 }
             response.raise_for_status()
-            return response.json()
+            data = response.json()
+            if isinstance(data, dict):
+                data["__source"] = "openweathermap"
+            return data
         except Exception as e:
             print(f"[WeatherService] Error fetching weather: {e}")
             if demo_weather:
                 return {
+                    "__source": "demo",
                     "weather": [{"main": "Clouds", "description": "demo cloudy"}],
                     "main": {"temp": 27.0, "feels_like": 29.0, "humidity": 70},
                     "wind": {"speed": 2.0},

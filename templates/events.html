@@ -35,6 +35,16 @@
         📅 {{ e.date.strftime('%B %d, %Y') }}
       </p>
 
+      <p class="text-gray-500 text-sm mt-2">
+        ⏱️ {{ e.created_at.strftime('%B %d, %Y') if e.created_at else 'Date unknown' }}
+        →
+        {% if e.completed %}
+          {{ (e.completed_at or e.date).strftime('%B %d, %Y') if (e.completed_at or e.date) else 'Date unknown' }}
+        {% else %}
+          In progress
+        {% endif %}
+      </p>
+
       <!-- Interest -->
       <form method="POST"
             action="{{ url_for('event_interest', event_id=e.id) }}"

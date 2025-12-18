@@ -206,13 +206,15 @@ block content %}
         My Posts & Incoming Requests
       </h2>
 
-      {% set my_posts = user.requests | selectattr("status", "in", ["open",
-      "in_progress", "claimed"]) | list %} {% if my_posts|length == 0 %}
+      {% if my_posts is not defined %}
+        {% set my_posts = user.requests | selectattr("status", "in", ["open", "in_progress", "claimed"]) | list %}
+      {% endif %}
+      {% if my_posts|length == 0 %}
       <p class="text-slate-500 italic">You haven't posted anything yet.</p>
       {% else %}
       <div class="space-y-4">
         {% for req in my_posts %}
-        <div class="bg-slate-950 border border-slate-800 p-4 rounded-xl">
+        <div id="review-request-{{ req.id }}" class="bg-slate-950 border border-slate-800 p-4 rounded-xl">
           <div class="flex justify-between items-start mb-2">
             <div>
               <h3 class="font-semibold text-lg text-slate-200">
@@ -440,9 +442,13 @@ block content %}
         My Activity (Sent)
       </h2>
 
-      {% set active_engagements = user.helped_requests | selectattr("status",
-      "in", ["in_progress", "claimed"]) | list %} {% set pending_offers =
-      user.sent_offers | selectattr("status", "equalto", "pending") | list %} {%
+      {% if active_engagements is not defined %}
+        {% set active_engagements = user.helped_requests | selectattr("status", "in", ["in_progress", "claimed"]) | list %}
+      {% endif %}
+      {% if pending_offers is not defined %}
+        {% set pending_offers = user.sent_offers | selectattr("status", "equalto", "pending") | list %}
+      {% endif %}
+      {%
       if active_engagements|length == 0 and pending_offers|length == 0 %}
       <p class="text-slate-500 italic">
         You aren't interacting with anyone else's posts right now.
@@ -461,6 +467,7 @@ block content %}
           </p>
           {% for task in active_engagements %}
           <div
+            id="review-request-{{ task.id }}"
             class="bg-slate-950 border border-emerald-900/30 p-4 rounded-xl relative overflow-hidden mb-2"
           >
             <div
@@ -598,6 +605,15 @@ block content %}
             <p class="text-sm text-slate-400">
               {{ event.area }} • {{ event.date.strftime('%B %d, %Y') }}
             </p>
+            <p class="text-xs text-slate-500">
+              ⏱️ {{ event.created_at.strftime('%B %d, %Y') if event.created_at else 'Date unknown' }}
+              →
+              {% if event.completed %}
+                {{ (event.completed_at or event.date).strftime('%B %d, %Y') if (event.completed_at or event.date) else 'Date unknown' }}
+              {% else %}
+                In progress
+              {% endif %}
+            </p>
           </div>
           <span
             class="text-xs font-bold px-2 py-1 rounded uppercase {% if event.completed %} bg-green-900 text-green-300 {% else %} bg-blue-900 text-blue-300 {% endif %}"
@@ -673,6 +689,7 @@ block content %}
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
 <script type="application/json" id="dashboard-chart-data">
   {{ {
     "labels": chart_labels,
@@ -703,6 +720,33 @@ block content %}
       return;
     }
 
+    // Build subtle gradients so flat lines still look nicer.
+    const canvasCtx = ctx.getContext("2d");
+    const gTrust = canvasCtx.createLinearGradient(0, 0, 0, ctx.height || 260);
+    gTrust.addColorStop(0, "rgba(52, 211, 153, 0.22)");
+    gTrust.addColorStop(1, "rgba(52, 211, 153, 0.02)");
+
+    const gKind = canvasCtx.createLinearGradient(0, 0, 0, ctx.height || 260);
+    gKind.addColorStop(0, "rgba(96, 165, 250, 0.18)");
+    gKind.addColorStop(1, "rgba(96, 165, 250, 0.02)");
+
+    // Smarter Y scaling: zoom into the actual score range so small changes are visible.
+    const trustVals = Array.isArray(dashboardData.trust) ? dashboardData.trust : [];
+    const kindVals = Array.isArray(dashboardData.kindness) ? dashboardData.kindness : [];
+    const allVals = [...trustVals, ...kindVals]
+      .map((v) => (typeof v === "number" ? v : Number(v)))
+      .filter((v) => Number.isFinite(v));
+    let suggestedMin = undefined;
+    let suggestedMax = undefined;
+    if (allVals.length) {
+      const vmin = Math.min(...allVals);
+      const vmax = Math.max(...allVals);
+      const span = Math.max(1, vmax - vmin);
+      const pad = Math.max(2, Math.ceil(span * 0.25));
+      suggestedMin = vmin - pad;
+      suggestedMax = vmax + pad;
+    }
+
     new Chart(ctx, {
       type: "line",
       data: {
@@ -713,28 +757,79 @@ block content %}
             data: dashboardData.trust,
             borderWidth: 3,
             tension: 0.4,
+            cubicInterpolationMode: "monotone",
             borderColor: "#34d399",
-            backgroundColor: "rgba(52, 211, 153, 0.12)",
+            backgroundColor: gTrust,
             fill: true,
+            pointRadius: 2,
+            pointHoverRadius: 6,
+            pointHitRadius: 12,
+            pointBackgroundColor: "#34d399",
+            pointBorderColor: "rgba(15, 23, 42, 0.8)",
+            pointBorderWidth: 2,
           },
           {
             label: "Kindness Score",
             data: dashboardData.kindness,
             borderWidth: 3,
             tension: 0.4,
+            cubicInterpolationMode: "monotone",
             borderColor: "#60a5fa",
-            backgroundColor: "rgba(96, 165, 250, 0.10)",
+            backgroundColor: gKind,
             fill: true,
+            pointRadius: 2,
+            pointHoverRadius: 6,
+            pointHitRadius: 12,
+            pointBackgroundColor: "#60a5fa",
+            pointBorderColor: "rgba(15, 23, 42, 0.8)",
+            pointBorderWidth: 2,
           },
         ],
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        plugins: { legend: { labels: { color: "#94a3b8" } } },
+        animation: { duration: 650 },
+        interaction: {
+          mode: "index",
+          intersect: false,
+        },
+        plugins: {
+          legend: {
+            labels: { color: "#94a3b8" },
+          },
+          tooltip: {
+            enabled: true,
+            mode: "index",
+            intersect: false,
+            callbacks: {
+              label: function (ctx) {
+                const val = ctx.parsed && typeof ctx.parsed.y === "number" ? ctx.parsed.y : ctx.raw;
+                return `${ctx.dataset.label}: ${val}`;
+              },
+            },
+          },
+          zoom: {
+            pan: { enabled: true, mode: "x" },
+            zoom: {
+              wheel: { enabled: true },
+              pinch: { enabled: true },
+              mode: "x",
+            },
+          },
+        },
+        hover: {
+          mode: "index",
+          intersect: false,
+        },
         scales: {
           x: { ticks: { color: "#94a3b8" }, grid: { color: "#1e293b" } },
-          y: { ticks: { color: "#94a3b8" }, grid: { color: "#1e293b" } },
+          y: {
+            ticks: { color: "#94a3b8" },
+            grid: { color: "#1e293b" },
+            suggestedMin,
+            suggestedMax,
+          },
         },
       },
     });
@@ -773,6 +868,25 @@ block content %}
     initDashboardChart();
     refreshDashboardSummary();
     setInterval(refreshDashboardSummary, 8000);
+
+    // If navigated here from list page to complete/review a specific request,
+    // scroll to the existing review form card.
+    try {
+      const params = new URLSearchParams(window.location.search || "");
+      const rid = params.get("review_request_id");
+      if (rid) {
+        const el = document.getElementById(`review-request-${rid}`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "start" });
+          el.classList.add("ring-2", "ring-emerald-500", "ring-offset-2", "ring-offset-slate-950");
+          setTimeout(() => {
+            el.classList.remove("ring-2", "ring-emerald-500", "ring-offset-2", "ring-offset-slate-950");
+          }, 4500);
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
   });
 </script>
 {% endblock %}

@@ -18,7 +18,10 @@ const events = [
     lat: {{ e.lat }},
     lng: {{ e.lng }},
     date: "{{ e.date.strftime('%B %d, %Y') }}",
-    area: "{{ e.area|escape }}"
+    area: "{{ e.area|escape }}",
+    created: "{{ e.created_at.strftime('%B %d, %Y') if e.created_at else '' }}",
+    completed: "{% if e.completed %}{{ (e.completed_at or e.date).strftime('%B %d, %Y') if (e.completed_at or e.date) else '' }}{% else %}{% endif %}",
+    isCompleted: {{ 'true' if e.completed else 'false' }}
   },
   {% endfor %}
 ];
@@ -48,7 +51,8 @@ function initMap() {
           <strong>${e.title}</strong><br>
           ${e.description}<br>
           📍 ${e.area}<br>
-          📅 ${e.date}
+          📅 ${e.date}<br>
+          ⏱️ ${e.created ? e.created : 'Date unknown'} → ${e.isCompleted ? (e.completed || e.date) : 'In progress'}
         </div>
       `
     });
@@ -59,7 +63,7 @@ function initMap() {
 </script>
 
 <script
-  src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAVtLNl7YZaPZeSnuA_5Gxm8VdtFXxreYo&callback=initMap"
+  src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}&callback=initMap"
   async defer>
 </script>
 

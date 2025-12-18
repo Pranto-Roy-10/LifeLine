@@ -230,21 +230,21 @@
         
         loadWeather: function(lat, lng) {
             // If location is missing, let backend choose fallback coordinates
-            const weatherUrl = (!lat || !lng)
+            const weatherUrl = (lat === null || lat === undefined || lng === null || lng === undefined)
                 ? '/api/weather'
                 : `/api/weather?lat=${lat}&lng=${lng}`;
             
             fetch(weatherUrl, { credentials: 'include' })
             .then(response => response.json())
             .then(data => {
-                if (data && data.weather) {
-                    this.displayWeather(data.weather);
-                    this.updateWeatherSourceBadge(data.source, data.success);
-                } else {
-                    this.updateWeatherSourceBadge('unavailable', false);
-                }
+                const weather = data && data.weather ? data.weather : null;
+                if (weather) this.displayWeather(weather);
+                this.updateWeatherSourceBadge((data && data.source) ? data.source : 'unavailable', !!(data && data.success));
             })
-            .catch(error => console.error('Error loading weather:', error));
+            .catch(error => {
+                console.error('Error loading weather:', error);
+                this.updateWeatherSourceBadge('unavailable', false);
+            });
         },
         
         displaySuggestions: function(suggestions) {
