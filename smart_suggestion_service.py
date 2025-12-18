@@ -226,7 +226,7 @@ class LocationMatcher:
         try:
             # Fetch all requests with matching status
             query = Request.query.filter(Request.status == status)
-            if exclude_user_id:
+            if exclude_user_id is not None:
                 query = query.filter(Request.user_id != exclude_user_id)
             
             all_requests = query.all()
@@ -421,7 +421,7 @@ class SmartSuggestionService:
             # 3. Get nearby requests
             nearby_requests = LocationMatcher.get_nearby_requests(
                 db, Request, user_lat, user_lng,
-                exclude_user_id=user_id,
+                exclude_user_id=(user_id if user_id and user_id > 0 else None),
                 limit=20
             )
             

@@ -1,5 +1,13 @@
 # -*- coding: utf-8 -*-
 
+# Load environment variables from .env early (local dev convenience)
+try:
+    from dotenv import load_dotenv  # type: ignore[import-not-found]
+
+    load_dotenv()
+except Exception:
+    pass
+
 from datetime import datetime, timedelta
 import os
 import math
@@ -708,26 +716,28 @@ class FCMToken(db.Model):
 class Offer(db.Model):
     __tablename__ = "offers"
 
-    # NOTE: The live SQLite schema currently uses user_id/request_id/title/body.
-    # We keep these columns, and add a status column (migrated at startup) so the
-    # newer offer-acceptance/dashboard flows continue to work.
+    # Offers were originally modeled as (request_id, helper_id). Some later code
+    # also writes/reads user_id/title/body. To be resilient to schema drift in
+    # local SQLite DBs, we model both and set both when creating new offers.
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
-    request_id = db.Column(db.Integer, db.ForeignKey("requests.id"), nullable=True)
+    request_id = db.Column(db.Integer, db.ForeignKey("requests.id"), nullable=False)
+
+    # Canonical helper reference (matches Alembic initial schema)
+    helper_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+
+    # Legacy/compat column (some environments have this column instead of using helper_id)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+
     status = db.Column(db.String(20), default="pending")
     title = db.Column(db.String(255))
     body = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     # Relationships
-    helper = db.relationship("User", foreign_keys=[user_id], backref="sent_offers")
+    helper = db.relationship("User", foreign_keys=[helper_id], backref="sent_offers")
     request = db.relationship(
         "Request", backref=db.backref("offers", cascade="all, delete-orphan")
     )
-
-    @property
-    def helper_id(self):
-        return self.user_id
 
 
 class SOSResponse(db.Model):
@@ -1833,18 +1843,86 @@ def auth_google():
     if not id_token:
         return jsonify({"error": "Missing idToken"}), 400
 
+    def _unverified_claims(token: str) -> dict:
+        try:
+            import base64
+            import json
+
+            parts = (token or "").split(".")
+            if len(parts) != 3:
+                return {}
+
+            payload_b64 = parts[1]
+            # base64url padding
+            payload_b64 += "=" * (-len(payload_b64) % 4)
+            payload = base64.urlsafe_b64decode(payload_b64.encode("utf-8"))
+            return json.loads(payload.decode("utf-8")) if payload else {}
+        except Exception:
+            return {}
+
+    def _friendly_auth_error(err: Exception, token: str) -> str:
+        msg = str(err) or err.__class__.__name__
+        low = msg.lower()
+        claims = _unverified_claims(token)
+
+        # Helpful, common failures
+        if "default firebase app" in low and "does not exist" in low:
+            return "Firebase Admin is not initialized on the server (check firebase-service-account.json)."
+        if "error while fetching public key certificates" in low or "fetching public key" in low or "x509" in low:
+            return "Server cannot reach Google to verify the token (check internet/proxy/firewall)."
+        if "expired" in low or "token used too late" in low:
+            return "Token appears expired (check your system clock/time sync)."
+        if "incorrect \"aud\"" in low or "audience" in low:
+            aud = claims.get("aud")
+            iss = claims.get("iss")
+            return f"Token audience mismatch (aud={aud}, iss={iss}). Make sure Firebase project matches server credentials."
+
+        # Minimal detail fallback (still actionable)
+        iss = claims.get("iss")
+        aud = claims.get("aud")
+        if iss or aud:
+            return f"Token verification failed (iss={iss}, aud={aud}). {msg}"
+        return f"Token verification failed: {msg}"
+
+    # Tolerate small system clock drift (common on Windows): prevents
+    # 'Token used too early' errors for a second or two.
+    clock_skew_seconds = int(os.getenv("FIREBASE_TOKEN_CLOCK_SKEW_SECONDS", "10"))
+
     try:
-        decoded = firebase_auth.verify_id_token(id_token)
-        print("Firebase decoded token:", decoded)
+        decoded = firebase_auth.verify_id_token(id_token, clock_skew_seconds=clock_skew_seconds)
     except Exception as e:
         print("Firebase verify error:", e)
-        return jsonify({"error": "Invalid Google token"}), 401
 
-    decoded = firebase_auth.verify_id_token(id_token)
+        # If the client ever sends a raw Google OAuth ID token (not Firebase),
+        # we can optionally verify it if GOOGLE_CLIENT_ID is configured.
+        claims = _unverified_claims(id_token)
+        iss = (claims.get("iss") or "").strip()
+        if iss in {"accounts.google.com", "https://accounts.google.com"}:
+            google_client_id = os.getenv("GOOGLE_CLIENT_ID")
+            if not google_client_id:
+                return jsonify({
+                    "error": "Google login failed: server is missing GOOGLE_CLIENT_ID for OAuth token verification."
+                }), 401
+            try:
+                from google.oauth2 import id_token as google_id_token
+                from google.auth.transport import requests as google_requests
+
+                decoded = google_id_token.verify_oauth2_token(
+                    id_token,
+                    google_requests.Request(),
+                    audience=google_client_id,
+                )
+            except Exception as e2:
+                print("Google OAuth verify error:", e2)
+                return jsonify({"error": f"Google login failed: {_friendly_auth_error(e2, id_token)}"}), 401
+        else:
+            return jsonify({"error": f"Google login failed: {_friendly_auth_error(e, id_token)}"}), 401
+
     email = decoded.get("email")
     uid = decoded.get("uid")
     name = decoded.get("name") or (email.split("@")[0] if email else "Google user")
-    photo_url = decoded.get("photo_url")
+    # Firebase ID tokens use 'picture'; some payloads may use other keys.
+    photo_url = decoded.get("picture") or decoded.get("photo_url") or decoded.get("photo")
 
 
     if not email:
@@ -1888,8 +1966,9 @@ def google_auth():
     if not id_token:
         return jsonify({"error": "Missing id_token"}), 400
 
+    clock_skew_seconds = int(os.getenv("FIREBASE_TOKEN_CLOCK_SKEW_SECONDS", "10"))
     try:
-        decoded = firebase_auth.verify_id_token(id_token)
+        decoded = firebase_auth.verify_id_token(id_token, clock_skew_seconds=clock_skew_seconds)
     except Exception as e:
         print("Firebase verify_id_token error:", e)
         return jsonify({"error": "Invalid or expired Google token"}), 401
@@ -3083,7 +3162,9 @@ def list_requests():
     try:
         offered_ids = {
             int(o.request_id)
-            for o in Offer.query.filter_by(user_id=user.id).all()
+            for o in Offer.query.filter(
+                (Offer.helper_id == user.id) | (Offer.user_id == user.id)
+            ).all()
             if getattr(o, "request_id", None) is not None
         }
     except Exception:
@@ -3127,11 +3208,11 @@ def _create_offer_record(req, user):
     if req.category and str(req.category).lower() == "sos":
         return False, "SOS posts can't be responded to using offers.", 400, None
 
-    existing_offer = Offer.query.filter_by(request_id=req.id, user_id=user.id).first()
+    existing_offer = Offer.query.filter_by(request_id=req.id, helper_id=user.id).first()
     if existing_offer:
         return True, "You have already contacted this person.", 200, existing_offer.id
 
-    new_offer = Offer(request_id=req.id, user_id=user.id, status="pending")
+    new_offer = Offer(request_id=req.id, helper_id=user.id, user_id=user.id, status="pending")
     db.session.add(new_offer)
     db.session.commit()
 
@@ -3355,7 +3436,31 @@ def event_interest(event_id):
 @login_required
 def events_map():
     events = Event.query.all()
-    return render_template("events_map.html", events=events, google_maps_key=GOOGLE_MAPS_API_KEY)
+
+    def _fmt(dt):
+        return dt.strftime("%B %d, %Y") if dt else ""
+
+    events_json = []
+    for e in events:
+        events_json.append(
+            {
+                "title": e.title or "",
+                "description": e.description or "",
+                "lat": e.lat,
+                "lng": e.lng,
+                "date": _fmt(e.date),
+                "area": e.area or "",
+                "created": _fmt(e.created_at),
+                "completed": _fmt((e.completed_at or e.date)) if e.completed else "",
+                "isCompleted": bool(e.completed),
+            }
+        )
+
+    return render_template(
+        "events_map.html",
+        events_json=events_json,
+        google_maps_key=GOOGLE_MAPS_API_KEY,
+    )
 
 
 @app.route("/events/<int:event_id>/notify", methods=["POST"])
@@ -5132,7 +5237,7 @@ def get_smart_suggestions():
         suggestions = SmartSuggestionService.get_suggestions(
             db=db,
             Request=Request,
-            user_id=getattr(user, "id", 0),
+            user_id=(getattr(user, "id", 0) or 0),
             user_lat=user_lat,
             user_lng=user_lng,
             max_suggestions=max_suggestions,
@@ -5178,10 +5283,29 @@ def get_weather():
         if isinstance(weather_data, dict):
             source = weather_data.get("__source") or "openweathermap"
         conditions = WeatherService.extract_conditions(weather_data)
-        
+
         if not conditions:
-            # Graceful fallback for UI when weather fails
-            demo = {
+            # Demo weather is opt-in (DEMO_WEATHER=1). Otherwise, require a real key.
+            demo_enabled = os.getenv("DEMO_WEATHER", "0") == "1"
+            if demo_enabled:
+                demo_raw = {
+                    "__source": "demo",
+                    "weather": [{"main": "Clouds", "description": "demo weather"}],
+                    "main": {"temp": 27.0, "feels_like": 29.0, "humidity": 70},
+                    "wind": {"speed": 2.0},
+                    "visibility": 9000,
+                }
+                return jsonify(
+                    {
+                        "success": True,
+                        "source": "demo",
+                        "weather": WeatherService.extract_conditions(demo_raw),
+                        "location_used": {"lat": lat, "lng": lng},
+                    }
+                ), 200
+
+            # Graceful fallback for UI when live weather fails
+            fallback = {
                 "condition": "Unknown",
                 "description": "Weather unavailable",
                 "temp": None,
@@ -5192,7 +5316,7 @@ def get_weather():
                 {
                     "success": False,
                     "source": source,
-                    "weather": demo,
+                    "weather": fallback,
                     "location_used": {"lat": lat, "lng": lng},
                 }
             ), 200
@@ -5386,17 +5510,37 @@ def _run_startup_migrations_and_bootstrap_admin():
     except Exception as e:
         print(f"Migration error: {e}")
 
-    # 2b) Migrate: Ensure offers.status exists (for pending/accepted flow)
+    # 2b) Migrate: Ensure offers columns exist (for pending/accepted flow + dashboard)
     try:
         if "offers" in table_names:
             cols = [c["name"] for c in inspector.get_columns("offers")]
+
+            stmts = []
             if "status" not in cols:
+                stmts.append("ALTER TABLE offers ADD COLUMN status VARCHAR(20) DEFAULT 'pending'")
+            if "user_id" not in cols:
+                # Compatibility column used by some parts of the app.
+                # Keep it nullable; we'll backfill from helper_id when possible.
+                stmts.append("ALTER TABLE offers ADD COLUMN user_id INTEGER")
+            if "title" not in cols:
+                stmts.append("ALTER TABLE offers ADD COLUMN title VARCHAR(255)")
+            if "body" not in cols:
+                stmts.append("ALTER TABLE offers ADD COLUMN body TEXT")
+
+            if stmts:
                 with db.engine.connect() as conn:
-                    conn.execute(db.text("ALTER TABLE offers ADD COLUMN status VARCHAR(20) DEFAULT 'pending'"))
+                    for stmt in stmts:
+                        conn.execute(db.text(stmt))
+                    # Best-effort backfill: if helper_id exists, mirror it to user_id.
+                    try:
+                        if "user_id" not in cols:
+                            conn.execute(db.text("UPDATE offers SET user_id = helper_id WHERE user_id IS NULL"))
+                    except Exception:
+                        pass
                     conn.commit()
-                print("✓ Added status column to offers")
+                print("✓ Added missing columns to offers")
     except Exception as e:
-        print(f"Migration note (offers.status): {e}")
+        print(f"Migration note (offers): {e}")
 
     # 3) Bootstrap default admin
     try:
