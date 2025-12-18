@@ -98,14 +98,15 @@ endblock %} {% block content %}
             {% endif %}
           </div>
 
-          {% set flag = flagged_map.get(r.id) if flagged_map is defined and
-          flagged_map else None %} {% set reasons = (flag.get('reasons') if flag
-          is mapping else '') | default('', true) %} {% set reasons_l =
-          reasons|lower %} {% set is_duplicate = ('possible duplicate' in
-          reasons_l) or ('duplicate of request' in reasons_l) or ('flagged
-          duplicate' in reasons_l) %} {% set is_scam = ('scam-like keywords' in
-          reasons_l) or ('contains scam' in reasons_l) %} {% if flag and
-          (is_scam or is_duplicate) %} {% if is_scam and is_duplicate %}
+          {% if not is_sos %} {% set flag = flagged_map.get(r.id) if flagged_map
+          is defined and flagged_map else None %} {% set reasons =
+          (flag.get('reasons') if flag is mapping else '') | default('', true)
+          %} {% set reasons_l = reasons|lower %} {% set is_duplicate =
+          ('possible duplicate' in reasons_l) or ('duplicate of request' in
+          reasons_l) or ('flagged duplicate' in reasons_l) %} {% set is_scam =
+          ('scam-like keywords' in reasons_l) or ('contains scam' in reasons_l)
+          %} {% if flag and (is_scam or is_duplicate) %} {% if is_scam and
+          is_duplicate %}
           <div
             class="mt-2 p-3 rounded-xl border border-sky-400/60 bg-sky-500/10"
           >
@@ -149,7 +150,7 @@ endblock %} {% block content %}
               recommended: Verify before offering help
             </p>
           </div>
-          {% endif %} {% endif %}
+          {% endif %} {% endif %} {% endif %}
           <div
             class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-400"
           >
@@ -305,6 +306,59 @@ endblock %} {% block content %}
               >
                 Track SOS on map
               </a>
+
+              <div
+                class="mt-2 rounded-xl border border-slate-700 bg-slate-900/40 p-3"
+              >
+                <p class="text-[11px] text-slate-300 font-bold mb-2">
+                  Responders
+                </p>
+                {% if r.sos_responses and r.sos_responses|length > 0 %}
+                <div class="space-y-2">
+                  {% for resp in r.sos_responses %}
+                  <div
+                    class="rounded-lg border border-slate-700 bg-slate-950/60 p-2"
+                  >
+                    <div class="flex items-center justify-between gap-2">
+                      <div class="flex items-center gap-2 min-w-0">
+                        <div
+                          class="w-6 h-6 rounded-full bg-slate-700 overflow-hidden"
+                        >
+                          <img
+                            src="{{ (resp.helper.profile_photo if resp.helper and resp.helper.profile_photo else url_for('static', filename='uploads/profile_photos/default.png')) }}"
+                            class="w-full h-full object-cover"
+                          />
+                        </div>
+                        <span
+                          class="text-[12px] font-semibold text-slate-200 truncate"
+                          >{{ resp.helper.name if resp.helper else ('User #' ~
+                          resp.helper_id) }}</span
+                        >
+                      </div>
+                      <div class="flex items-center gap-2">
+                        <a
+                          href="{{ url_for('chat_with_user', other_user_id=resp.helper_id) }}"
+                          class="text-[11px] bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded border border-slate-700"
+                        >
+                          Chat
+                        </a>
+                        <a
+                          href="{{ url_for('dashboard', sos_review_request_id=r.id, sos_review_helper_id=resp.helper_id) }}"
+                          class="text-[11px] bg-emerald-700 hover:bg-emerald-600 px-2 py-1 rounded border border-emerald-600 text-white font-semibold"
+                        >
+                          Mark Complete
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                  {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-[11px] text-slate-500">
+                  Waiting for responders…
+                </p>
+                {% endif %}
+              </div>
               {% endif %} {% if not is_sos %} {% set offer_count =
               r.offers|length %}
               <button
@@ -341,7 +395,20 @@ endblock %} {% block content %}
                         class="w-6 h-6 rounded-full bg-slate-700 overflow-hidden"
                       >
                         <img
-                          src="{{ offer.helper.profile_photo or url_for('static', filename='uploads/profile_photos/default.png') }}"
+                          {%
+                          set
+                          _hp="offer.helper.profile_photo"
+                          if
+                          offer.helper
+                          and
+                          offer.helper.profile_photo
+                          and
+                          offer.helper.profile_photo
+                          !="default.png"
+                          else
+                          None
+                          %}
+                          src="{{ _hp or url_for('static', filename='uploads/profile_photos/default.png') }}"
                           class="w-full h-full object-cover"
                         />
                       </div>
