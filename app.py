@@ -348,6 +348,32 @@ class EmotionalPing(db.Model):
     user = db.relationship("User", backref="emotional_pings")
 
 
+# ------------------ MODEL: User Activity (Radar) ------------------
+class UserActivity(db.Model):
+    __tablename__ = "user_activity"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+    lat = db.Column(db.Float, nullable=True)
+    lng = db.Column(db.Float, nullable=True)
+    activity_type = db.Column(db.String(50), nullable=False, default="ping")
+    device_motion = db.Column(db.Float, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    user = db.relationship("User", backref="activities")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "lat": self.lat,
+            "lng": self.lng,
+            "activity_type": self.activity_type,
+            "device_motion": self.device_motion,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
 
 
 def get_trusted_helpers_for_ping(sender_id):
@@ -2042,6 +2068,256 @@ def api_me():
         }
     )
 
+# ------------------ API: Availability Radar ------------------
+@app.route("/api/activity/ping", methods=["POST"])
+@login_required
+def api_activity_ping():
+    user = current_user()
+    data = request.get_json() or {}
+
+    try:
+        lat = float(data.get("lat")) if data.get("lat") is not None else None
+        lng = float(data.get("lng")) if data.get("lng") is not None else None
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "lat and lng must be numbers"}), 400
+
+    activity_type = (data.get("activity_type") or "ping").strip() or "ping"
+    device_motion_raw = data.get("device_motion")
+    try:
+        device_motion = float(device_motion_raw) if device_motion_raw is not None else None
+    except (TypeError, ValueError):
+        device_motion = None
+
+    activity = UserActivity(
+        user_id=user.id,
+        lat=lat,
+        lng=lng,
+        activity_type=activity_type[:50],
+        device_motion=device_motion,
+    )
+
+    if lat is not None and lng is not None:
+        user.lat = lat
+        user.lng = lng
+
+    try:
+        db.session.add(activity)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        return jsonify({"ok": False, "error": "Failed to record activity"}), 500
+
+    return (
+        jsonify({
+            "ok": True,
+            "activity_id": activity.id,
+            "lat": lat,
+            "lng": lng,
+            "activity_type": activity.activity_type,
+            "device_motion": activity.device_motion,
+        }),
+        201,
+    )
+
+
+def _resolve_position(payload, user):
+    lat = payload.get("user_lat") if payload else None
+    lng = payload.get("user_lng") if payload else None
+    try:
+        lat = float(lat if lat is not None else user.lat)
+        lng = float(lng if lng is not None else user.lng)
+    except (TypeError, ValueError):
+        lat = None
+        lng = None
+    return lat, lng
+
+
+@app.route("/api/radar/heatmap", methods=["POST"])
+@login_required
+def api_radar_heatmap():
+    user = current_user()
+    data = request.get_json() or {}
+
+    user_lat, user_lng = _resolve_position(data, user)
+    if user_lat is None or user_lng is None:
+        return jsonify({"ok": False, "error": "user_lat and user_lng are required"}), 400
+
+    try:
+        radius_km = float(data.get("radius_km", 3.0))
+    except (TypeError, ValueError):
+        radius_km = 3.0
+    radius_km = max(0.5, min(radius_km, 30.0))
+
+    try:
+        window_min = int(data.get("window_min", 10))
+    except (TypeError, ValueError):
+        window_min = 10
+    window_min = max(5, min(window_min, 180))
+
+    cutoff = datetime.utcnow() - timedelta(minutes=window_min)
+
+    activities = UserActivity.query.filter(
+        UserActivity.created_at >= cutoff,
+        UserActivity.lat.isnot(None),
+        UserActivity.lng.isnot(None),
+    ).all()
+
+    aggregated = {}
+    for activity in activities:
+        dist = haversine_distance_km(user_lat, user_lng, activity.lat, activity.lng)
+        if dist > radius_km:
+            continue
+
+        entry = aggregated.get(activity.user_id)
+        if not entry:
+            u = User.query.get(activity.user_id)
+            if not u:
+                continue
+            entry = {
+                "user": u,
+                "lat_sum": 0.0,
+                "lng_sum": 0.0,
+                "count": 0,
+                "motion_sum": 0.0,
+                "distance": dist,
+            }
+            aggregated[activity.user_id] = entry
+
+        entry["lat_sum"] += activity.lat
+        entry["lng_sum"] += activity.lng
+        entry["count"] += 1
+        entry["distance"] = min(entry["distance"], dist)
+        if activity.device_motion is not None:
+            entry["motion_sum"] += activity.device_motion
+
+    heatmap_points = []
+    for uid, entry in aggregated.items():
+        count = entry["count"] or 1
+        motion_avg = (entry["motion_sum"] / count) if entry["motion_sum"] else 0
+        activity_intensity = min(100, count * 15)
+        if motion_avg > 20:
+            activity_intensity = min(100, activity_intensity + (motion_avg / 2))
+        weight = round(min(1.0, activity_intensity / 100), 3)
+        user_obj = entry["user"]
+
+        heatmap_points.append({
+            "user_id": uid,
+            "name": user_obj.name if user_obj else "User",
+            "lat": entry["lat_sum"] / count,
+            "lng": entry["lng_sum"] / count,
+            "weight": weight,
+            "is_helper": bool(user_obj.is_trusted_helper) if user_obj else False,
+            "activity_count": count,
+            "motion_avg": round(motion_avg, 1) if motion_avg else 0,
+            "distance_km": round(entry["distance"], 2),
+        })
+
+    heatmap_points.sort(key=lambda x: x["weight"], reverse=True)
+    helpers_nearby = sum(1 for p in heatmap_points if p.get("is_helper"))
+
+    return jsonify({
+        "ok": True,
+        "heatmap_points": heatmap_points,
+        "total_active_nearby": len(heatmap_points),
+        "helpers_nearby": helpers_nearby,
+        "radius_km": radius_km,
+        "window_min": window_min,
+    })
+
+
+@app.route("/api/radar/active-users", methods=["POST"])
+@login_required
+def api_radar_active_users():
+    user = current_user()
+    data = request.get_json() or {}
+
+    user_lat, user_lng = _resolve_position(data, user)
+    if user_lat is None or user_lng is None:
+        return jsonify({"ok": False, "error": "user_lat and user_lng are required"}), 400
+
+    try:
+        radius_km = float(data.get("radius_km", 3.0))
+    except (TypeError, ValueError):
+        radius_km = 3.0
+    radius_km = max(0.5, min(radius_km, 30.0))
+
+    try:
+        window_min = int(data.get("window_min", 10))
+    except (TypeError, ValueError):
+        window_min = 10
+    window_min = max(5, min(window_min, 180))
+
+    cutoff = datetime.utcnow() - timedelta(minutes=window_min)
+
+    recent_activities = (
+        db.session.query(
+            UserActivity.user_id,
+            func.max(UserActivity.created_at).label("last_activity"),
+            func.avg(UserActivity.lat).label("avg_lat"),
+            func.avg(UserActivity.lng).label("avg_lng"),
+            func.count(UserActivity.id).label("activity_count"),
+            func.avg(UserActivity.device_motion).label("avg_motion"),
+        )
+        .filter(UserActivity.created_at >= cutoff)
+        .group_by(UserActivity.user_id)
+        .all()
+    )
+
+    active_users = []
+    now = datetime.utcnow()
+
+    for record in recent_activities:
+        user_id = record[0]
+        last_activity = record[1]
+        avg_lat = record[2]
+        avg_lng = record[3]
+        activity_count = record[4]
+        avg_motion = record[5] or 0
+
+        if avg_lat is None or avg_lng is None:
+            continue
+
+        dist = haversine_distance_km(user_lat, user_lng, avg_lat, avg_lng)
+        if dist > radius_km:
+            continue
+
+        u = User.query.get(user_id)
+        if not u:
+            continue
+
+        age_secs = (now - last_activity).total_seconds() if last_activity else 0
+        recency = max(0, 100 - (age_secs / 3))
+        activity_score = min(100, activity_count * 20)
+        motion_score = min(100, avg_motion * 2) if avg_motion else 0
+        availability_score = int((recency + activity_score + motion_score) / 3)
+
+        active_users.append({
+            "user_id": user_id,
+            "name": u.name,
+            "is_helper": bool(u.is_trusted_helper),
+            "lat": avg_lat,
+            "lng": avg_lng,
+            "distance_km": round(dist, 2),
+            "availability_score": availability_score,
+            "activity_count": int(activity_count),
+            "recency": round(recency, 1),
+            "activity_score": round(activity_score, 1),
+            "motion_score": round(motion_score, 1),
+            "last_activity_ago_secs": int(age_secs),
+        })
+
+    active_users.sort(key=lambda x: x["availability_score"], reverse=True)
+    helpers_nearby = sum(1 for u in active_users if u.get("is_helper"))
+
+    return jsonify({
+        "ok": True,
+        "active_users": active_users,
+        "total_active_nearby": len(active_users),
+        "helpers_nearby": helpers_nearby,
+        "radius_km": radius_km,
+        "window_min": window_min,
+    })
+
 # ------------------ API: NEARBY REQUESTS FOR MAP ------------------
 @app.route("/api/requests/nearby")
 @login_required
@@ -2840,29 +3116,20 @@ def list_requests():
     )
 
 
-@app.route("/make_offer/<int:request_id>", methods=["POST"])
-@login_required
-def make_offer(request_id):
-    user = current_user()
-    req = Request.query.get_or_404(request_id)
-
+def _create_offer_record(req, user):
+    """Create an offer entry with shared validation for HTML and AJAX flows."""
     if req.status != "open" or req.helper_id is not None:
-        flash("This request is no longer available.", "error")
-        return redirect(url_for("list_requests"))
+        return False, "This request is no longer available.", 409, None
 
     if req.user_id == user.id:
-        flash("You cannot offer help on your own request.", "error")
-        return redirect(request.referrer or url_for("list_requests"))
+        return False, "You cannot offer help on your own request.", 403, None
 
     if req.category and str(req.category).lower() == "sos":
-        flash("SOS posts can't be responded to using offers.", "error")
-        return redirect(request.referrer or url_for("list_requests"))
+        return False, "SOS posts can't be responded to using offers.", 400, None
 
-    # Create an Offer row (do not auto-assign helper_id)
     existing_offer = Offer.query.filter_by(request_id=req.id, user_id=user.id).first()
     if existing_offer:
-        flash("You have already contacted this person.", "info")
-        return redirect(request.referrer or url_for("list_requests"))
+        return True, "You have already contacted this person.", 200, existing_offer.id
 
     new_offer = Offer(request_id=req.id, user_id=user.id, status="pending")
     db.session.add(new_offer)
@@ -2895,8 +3162,38 @@ def make_offer(request_id):
     except Exception:
         pass
 
-    flash("Your offer has been sent!", "success")
+    return True, "Your offer has been sent!", 201, new_offer.id
+
+
+@app.route("/make_offer/<int:request_id>", methods=["POST"])
+@login_required
+def make_offer(request_id):
+    user = current_user()
+    req = Request.query.get_or_404(request_id)
+
+    ok, message, status_code, offer_id = _create_offer_record(req, user)
+
+    if status_code >= 400:
+        flash(message, "error")
+        return redirect(request.referrer or url_for("list_requests"))
+
+    flash(message, "success" if status_code == 201 else "info")
     return redirect(request.referrer or url_for("list_requests", mode="offer" if req.is_offer else "need"))
+
+
+@app.route("/requests/<int:request_id>/offer", methods=["POST"])
+@login_required
+def api_make_offer(request_id):
+    """AJAX-friendly endpoint for sending an offer from AI suggestions."""
+    user = current_user()
+    req = Request.query.get_or_404(request_id)
+
+    ok, message, status_code, offer_id = _create_offer_record(req, user)
+    response = {"ok": ok, "message": message}
+    if offer_id:
+        response["offer_id"] = offer_id
+
+    return jsonify(response), status_code
 
 
 @app.route("/debug/fcm-users")
