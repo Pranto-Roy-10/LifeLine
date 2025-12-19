@@ -1,4 +1,4 @@
-<div class="rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-3">
+<div class="rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-3" data-resources-widget="root">
   <div class="flex justify-between items-start">
     <div>
       <p class="font-semibold text-slate-100">Shared Items Nearby</p>
@@ -6,8 +6,26 @@
         Share or request items like rice, medicine, books, or electronics.
       </p>
     </div>
-    <a href="{{ url_for('resources.list_resources') }}" class="text-right text-[10px] text-emerald-300 underline hover:no-underline">
+    <a href="{{ url_for('resources.list_resources') }}#available-items" class="text-right text-[10px] text-emerald-300 underline hover:no-underline" data-resources-widget="view-all">
       View all →
     </a>
+  </div>
+
+  <div data-resources-widget="body">
+    {% if items %}
+    <div class="mt-3 grid sm:grid-cols-3 gap-2">
+      {% for it in items %}
+        <a
+          href="{{ url_for('resources.request_resource', resource_id=it.id) }}"
+          class="block rounded-lg border border-slate-700/60 px-3 py-2 hover:border-emerald-400/50 hover:bg-slate-900/60 transition"
+        >
+          <p class="text-sm text-slate-100 truncate">{{ it.title }}</p>
+          <p class="text-[11px] text-slate-400">{{ it.category }} · {{ it.quantity or 1 }}</p>
+        </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-[11px] text-slate-500 mt-2">No items shared yet.</p>
+    {% endif %}
   </div>
 </div>

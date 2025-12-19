@@ -44,6 +44,9 @@ new Chart(ctx, {
     ]
   },
   options: {
+    responsive: true,
+    // Default aspectRatio (2) can be overly tall on wide screens.
+    aspectRatio: 3,
     plugins: {
       legend: {
         labels: { color: "white" }

@@ -268,11 +268,31 @@ function closeLocationModal() {
 }
 
 function openImagePreview(imageUrl, title) {
-  const modal = document.getElementById('imagePreviewModal');
-  document.getElementById('previewImage').src = imageUrl;
-  document.getElementById('previewTitle').textContent = title;
-  modal.classList.remove('hidden');
-  setTimeout(() => modal.classList.remove('opacity-0'), 50);
+    const modal = document.getElementById('imagePreviewModal');
+    const img = document.getElementById('previewImage');
+    const titleEl = document.getElementById('previewTitle');
+    titleEl.textContent = title || '';
+
+    img.onerror = null;
+    img.alt = title || 'Image preview';
+    img.src = imageUrl || '';
+
+    img.onerror = () => {
+      try {
+        const u = new URL(img.src, window.location.origin);
+        const p = u.pathname || '';
+        if (p.startsWith('/static/uploads/') && !p.startsWith('/static/uploads/profile_photos/')) {
+          const filename = p.replace('/static/uploads/', '');
+          img.onerror = null;
+          img.src = `/static/uploads/profile_photos/${filename}`;
+        }
+      } catch (e) {
+        // ignore
+      }
+    };
+
+    modal.classList.remove('hidden');
+    setTimeout(() => modal.classList.remove('opacity-0'), 50);
 }
 
 function closeImagePreview() {

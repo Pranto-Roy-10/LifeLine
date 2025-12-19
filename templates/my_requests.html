@@ -63,12 +63,12 @@
   }
 </style>
 
-<div class="min-h-screen w-full bg-slate-950">
+<div class="min-h-screen w-full bg-slate-950 page-transition">
   <!-- Header Section -->
-  <div class="bg-slate-950 border-b border-slate-800 shadow-lg">
+  <div class="bg-gradient-to-r from-slate-900/80 to-slate-950/90 border-b border-emerald-500/20 shadow-lg">
     <div class="w-full px-6 py-8">
       <div class="animate-slide-in-down">
-        <h1 class="text-4xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+        <h1 class="text-4xl font-bold bg-gradient-to-r from-emerald-300 to-cyan-300 bg-clip-text text-transparent">
           My Requests & Wanted Items
         </h1>
         <p class="text-slate-400 text-sm mt-2">Track your item requests and wanted posts</p>
@@ -249,8 +249,28 @@
 <script>
   function openImagePreview(imageUrl, title) {
     const modal = document.getElementById('imagePreviewModal');
-    document.getElementById('previewImage').src = imageUrl;
-    document.getElementById('previewTitle').textContent = title;
+    const img = document.getElementById('previewImage');
+    const titleEl = document.getElementById('previewTitle');
+    titleEl.textContent = title || '';
+
+    img.onerror = null;
+    img.alt = title || 'Image preview';
+    img.src = imageUrl || '';
+
+    img.onerror = () => {
+      try {
+        const u = new URL(img.src, window.location.origin);
+        const p = u.pathname || '';
+        if (p.startsWith('/static/uploads/') && !p.startsWith('/static/uploads/profile_photos/')) {
+          const filename = p.replace('/static/uploads/', '');
+          img.onerror = null;
+          img.src = `/static/uploads/profile_photos/${filename}`;
+        }
+      } catch (e) {
+        // ignore
+      }
+    };
+
     modal.classList.remove('hidden');
     setTimeout(() => modal.classList.remove('opacity-0'), 50);
   }

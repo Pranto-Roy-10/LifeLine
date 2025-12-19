@@ -217,7 +217,9 @@ class LocationMatcher:
         radius_km: float = SUGGESTION_RADIUS_KM,
         status: str = "open",
         exclude_user_id: Optional[int] = None,
-        limit: int = 20
+        limit: int = 20,
+        include_expired: bool = False,
+        include_completed: bool = False
     ) -> List[Dict[str, Any]]:
         """
         Get requests near user location within specified radius
@@ -226,6 +228,14 @@ class LocationMatcher:
         try:
             # Fetch all requests with matching status
             query = Request.query.filter(Request.status == status)
+
+            # For "live" surfaces, treat expiry/completion as non-active even if status wasn't updated.
+            now = datetime.utcnow()
+            if not include_expired and hasattr(Request, "expires_at"):
+                query = query.filter(Request.expires_at > now)
+            if not include_completed and hasattr(Request, "completed_at"):
+                query = query.filter(Request.completed_at.is_(None))
+
             if exclude_user_id is not None:
                 query = query.filter(Request.user_id != exclude_user_id)
             

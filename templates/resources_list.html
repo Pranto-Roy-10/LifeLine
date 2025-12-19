@@ -282,7 +282,7 @@
       <!-- Shared Items Section -->
       <div class="mb-8">
         <div class="section-header mb-4">
-          <h2 class="text-xl font-bold text-slate-100 flex items-center gap-2">
+          <h2 id="available-items" style="scroll-margin-top: 110px;" class="text-xl font-bold text-slate-100 flex items-center gap-2">
             <svg class="w-6 h-6 text-emerald-400" fill="currentColor" viewBox="0 0 20 20">
               <path d="M5.5 13a3.5 3.5 0 01-.369-6.98 4 4 0 117.753-1.3A4.5 4.5 0 1113.5 13H11V9.413l1.293 1.293a1 1 0 001.414-1.414l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13H5.5z"></path>
             </svg>
@@ -398,8 +398,31 @@
 <script>
 function openImagePreview(imageUrl, title) {
   const modal = document.getElementById('imagePreviewModal');
-  document.getElementById('previewImage').src = imageUrl;
-  document.getElementById('previewTitle').textContent = title;
+  const img = document.getElementById('previewImage');
+  const titleEl = document.getElementById('previewTitle');
+  titleEl.textContent = title || '';
+
+  // Reset any prior error handler and try the provided URL.
+  img.onerror = null;
+  img.alt = title || 'Image preview';
+  img.src = imageUrl || '';
+
+  // Legacy fallback: older resource uploads were saved under /static/uploads/profile_photos/
+  // while URLs were stored as /static/uploads/<filename>.
+  img.onerror = () => {
+    try {
+      const u = new URL(img.src, window.location.origin);
+      const p = u.pathname || '';
+      if (p.startsWith('/static/uploads/') && !p.startsWith('/static/uploads/profile_photos/')) {
+        const filename = p.replace('/static/uploads/', '');
+        img.onerror = null;
+        img.src = `/static/uploads/profile_photos/${filename}`;
+      }
+    } catch (e) {
+      // ignore
+    }
+  };
+
   modal.classList.remove('hidden');
   setTimeout(() => modal.classList.remove('opacity-0'), 50);
 }
@@ -409,6 +432,25 @@ function closeImagePreview() {
   modal.classList.add('opacity-0');
   setTimeout(() => modal.classList.add('hidden'), 300);
 }
+
+// Smooth-scroll to Available Items when arriving with #available-items.
+document.addEventListener('DOMContentLoaded', () => {
+  if (window.location.hash !== '#available-items') return;
+  const el = document.getElementById('available-items');
+  if (!el) return;
+
+  const prefersReduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // Let the browser finish initial layout before scrolling.
+  setTimeout(() => {
+    try {
+      el.scrollIntoView({ behavior: prefersReduced ? 'auto' : 'smooth', block: 'start' });
+    } catch (e) {
+      // Older browsers: fall back to default jump.
+      el.scrollIntoView();
+    }
+  }, 50);
+});
 </script>
 
 {% endblock %}

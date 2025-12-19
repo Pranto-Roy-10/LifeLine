@@ -198,6 +198,8 @@ block content %}
   let radarDidFit = false;
 
   const INITIAL_FOCUS_ID = getQueryParamInt("focus_request_id");
+  const IS_SOS_CALLER = {{ 1 if is_sos_caller else 0 }};
+  const GUEST_SOS_REQUEST_ID = {{ guest_sos_request_id or 'null' }};
   let mapDidInitialFit = false;
   let userInteractedWithMap = false;
   let programmaticZoom = false;
@@ -288,6 +290,16 @@ block content %}
         ? `<div style="margin-top: 8px; width: 100%; background: #0f172a; color: #34d399; border: 1px solid rgba(52, 211, 153, 0.35); padding: 8px 10px; border-radius: 10px; font-weight: 700; font-size: 12px; text-align: center;">✓ Responded</div>`
         : "";
 
+    // Allow resolve if:
+    // - (1) This is an SOS
+    // - (2) (a) User is SOS caller (session) and focus matches, OR
+    //      (b) Guest session matches guest_sos_request_id
+    const canResolveAsCaller =
+      isSos && (
+        (IS_SOS_CALLER && INITIAL_FOCUS_ID && r.id === INITIAL_FOCUS_ID) ||
+        (GUEST_SOS_REQUEST_ID && r.id === GUEST_SOS_REQUEST_ID)
+      );
+
     return `
       <div style="max-width: 240px;">
         <h3 style="font-size: 14px; margin-bottom: 4px;">${r.title}</h3>
@@ -320,9 +332,34 @@ block content %}
             : ""
         }
         ${respondedBadge}
+        ${
+          canResolveAsCaller
+            ? `<button onclick="resolveSOS(${r.id})" style="margin-top: 8px; width: 100%; background: #22c55e; color: #0b172a; border: 0; padding: 8px 10px; border-radius: 10px; font-weight: 800; font-size: 12px; cursor: pointer;">Mark Resolved</button>`
+            : ""
+        }
       </div>
     `;
   }
+
+  async function resolveSOS(requestId) {
+    if (!confirm("Mark this SOS as resolved?")) return;
+    try {
+      const resp = await fetch(`/api/sos/${requestId}/resolve`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        alert(data.error || "Failed to resolve SOS");
+        return;
+      }
+      alert("SOS marked resolved.");
+      window.location.href = "/";
+    } catch (e) {
+      alert("Failed to resolve SOS");
+    }
+  }
+  window.resolveSOS = resolveSOS;
 
   const sosRespondInFlight = new Set();
 
@@ -1436,7 +1473,8 @@ block content %}
       `;
 
       card.addEventListener("click", () => {
-        focusOnRequest(r.id);
+        const mode = r.is_offer ? "offer" : "need";
+        window.location.href = `/requests?mode=${mode}&open=${r.id}`;
       });
 
       listEl.appendChild(card);

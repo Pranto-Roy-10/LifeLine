@@ -136,7 +136,8 @@ def search_resource():
             if img and img.filename != "" and allowed_image(img.filename):
                 filename = secure_filename(img.filename)
                 filename = f"{int(time.time())}_{filename}"
-                upload_folder = current_app.config.get("UPLOAD_FOLDER", os.path.join("static", "uploads"))
+                # Resource uploads should go to static/uploads (NOT profile_photos).
+                upload_folder = os.path.join(current_app.root_path, "static", "uploads")
                 save_path = os.path.join(upload_folder, filename)
                 # Ensure folder exists
                 os.makedirs(upload_folder, exist_ok=True)
@@ -190,7 +191,8 @@ def create_resource():
             if img and img.filename != "" and allowed_image(img.filename):
                 filename = secure_filename(img.filename)
                 filename = f"{int(time.time())}_{filename}"
-                upload_folder = current_app.config.get("UPLOAD_FOLDER", os.path.join("static", "uploads"))
+                # Resource uploads should go to static/uploads (NOT profile_photos).
+                upload_folder = os.path.join(current_app.root_path, "static", "uploads")
                 save_path = os.path.join(upload_folder, filename)
                 # ensure folder exists
                 os.makedirs(upload_folder, exist_ok=True)
@@ -264,6 +266,11 @@ def request_resource(resource_id):
     r = db.session.get(Resource, resource_id)
     if not r:
         flash("Resource not found.", "error")
+        return redirect(url_for("resources.list_resources"))
+
+    # Only available items can be requested
+    if r.status != "available":
+        flash("This item is no longer available.", "info")
         return redirect(url_for("resources.list_resources"))
     
     # Can't request your own item
@@ -349,7 +356,22 @@ def accept_request(request_id):
         flash("You can only accept requests for your own items.", "error")
         return redirect(url_for("resources.my_items"))
     
+    # Mark accepted and automatically clear the item from public listings.
     req.status = "accepted"
+    if req.resource and req.resource.status == "available":
+        req.resource.status = "claimed"
+
+    # Reject other pending requests for this same item.
+    (
+        db.session.query(ResourceRequest)
+        .filter(
+            ResourceRequest.resource_id == req.resource_id,
+            ResourceRequest.id != req.id,
+            ResourceRequest.status == "pending",
+        )
+        .update({"status": "rejected"}, synchronize_session=False)
+    )
+
     db.session.commit()
     flash(f"Request from {req.requester.name} has been accepted.", "success")
     return redirect(url_for("resources.my_items"))
@@ -543,7 +565,12 @@ def api_widget():
     from app import Resource
     db = current_app.extensions['sqlalchemy']
     
-    items = db.session.query(Resource).filter(Resource.status == "available").order_by(Resource.created_at.desc()).limit(3).all()
+    query = db.session.query(Resource).filter(Resource.status == "available")
+    # Don't show your own items in the "Shared Items Nearby" widget.
+    if "user_id" in session:
+        query = query.filter(Resource.user_id != session["user_id"])
+
+    items = query.order_by(Resource.created_at.desc()).limit(3).all()
     return render_template("_resources_widget.html", items=items)
 
 

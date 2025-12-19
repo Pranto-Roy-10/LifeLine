@@ -1,11 +1,11 @@
 {% extends 'base.html' %} {% block content %}
-<div class="chat-fullpage-container">
-  <div class="chat-sidebar">
-    <div class="chat-sidebar-header">
-      <h3>Messages</h3>
+<div class="chat-fullpage-container page-transition">
+  <div class="chat-sidebar border-r border-emerald-500/20">
+    <div class="chat-sidebar-header border-b border-emerald-500/20 bg-gradient-to-r from-slate-900/80 to-slate-950/90">
+      <h3 class="bg-gradient-to-r from-emerald-300 to-cyan-300 bg-clip-text text-transparent">Messages</h3>
       <a
         href="{{ url_for('chat_index') }}"
-        class="back-to-conversations"
+        class="back-to-conversations hover:text-emerald-300 transition-colors"
         title="All Conversations"
       >
         <svg
@@ -25,20 +25,20 @@
       {% for conv in conversations %}
       <a
         href="{{ url_for('chat_with_user', other_user_id=conv.other_user.id) }}"
-        class="sidebar-conversation-item {% if conv.is_active %}active{% endif %}"
+        class="sidebar-conversation-item card-hover border border-emerald-500/20 hover:border-emerald-400/40 {% if conv.is_active %}bg-slate-900 border-emerald-400/40{% else %}bg-slate-950/50{% endif %}"
       >
-        <div class="sidebar-conv-avatar">
+        <div class="sidebar-conv-avatar bg-gradient-to-br from-emerald-400 to-cyan-400 text-slate-950 font-semibold">
           {{ conv.other_user.name[0].upper() }}
         </div>
         <div class="sidebar-conv-info">
-          <div class="sidebar-conv-name">{{ conv.other_user.name }}</div>
-          <div class="sidebar-conv-preview">
+          <div class="sidebar-conv-name text-white">{{ conv.other_user.name }}</div>
+          <div class="sidebar-conv-preview text-slate-400 text-sm">
             {{ conv.last_message[:30] }}{% if conv.last_message|length > 30
             %}...{% endif %}
           </div>
         </div>
         {% if conv.unread_count > 0 %}
-        <div class="sidebar-conv-unread">{{ conv.unread_count }}</div>
+        <div class="sidebar-conv-unread bg-emerald-500 text-slate-950 font-bold rounded-full w-6 h-6 flex items-center justify-center text-xs">{{ conv.unread_count }}</div>
         {% endif %}
       </a>
       {% endfor %}
@@ -46,18 +46,18 @@
   </div>
 
   <div class="chat-main">
-    <div class="chat-header-modern">
+    <div class="chat-header-modern border-b border-emerald-500/20 bg-gradient-to-r from-slate-900/80 to-slate-950/90">
       <div class="chat-header-user">
-        <div class="avatar-modern">{{ other_user.name[0].upper() }}</div>
+        <div class="avatar-modern bg-gradient-to-br from-emerald-400 to-cyan-400 text-slate-950 font-semibold">{{ other_user.name[0].upper() }}</div>
         <div class="header-user-info">
-          <h2>{{ other_user.name }}</h2>
-          <span class="user-status-dot"></span>
+          <h2 class="text-white">{{ other_user.name }}</h2>
+          <span class="user-status-dot bg-emerald-400"></span>
         </div>
       </div>
       {% if translation_enabled %}
       <div class="chat-header-actions">
         <div class="translation-controls">
-          <select id="translate_to" class="translate-select">
+          <select id="translate_to" class="translate-select bg-slate-950 border border-emerald-500/20 text-white rounded px-3 py-2 focus:border-emerald-400/40 focus:outline-none">
             <option value="">No translation</option>
             <option value="en">English</option>
             <option value="es">Spanish</option>
@@ -65,7 +65,7 @@
             <option value="bn">Bengali</option>
             <option value="ar">Arabic</option>
           </select>
-          <label class="auto-translate-label">
+          <label class="auto-translate-label text-slate-300 cursor-pointer">
             <input type="checkbox" id="auto_translate" />
             <span>Auto</span>
           </label>
@@ -93,7 +93,7 @@
       </div>
 
       <div class="chat-input-wrapper">
-        <button class="emoji-btn" id="emoji-toggle-btn" title="Emojis">
+        <button class="emoji-btn hover:text-emerald-300 transition-colors" id="emoji-toggle-btn" title="Emojis">
           <svg
             width="20"
             height="20"
@@ -111,10 +111,10 @@
 
         <input
           id="message_input"
-          class="chat-input-modern"
+          class="chat-input-modern bg-slate-950/80 border border-emerald-500/20 text-white placeholder-slate-500 focus:border-emerald-400/40 focus:outline-none rounded-lg"
           placeholder="Type a message..."
         />
-        <button id="send_btn" class="send-btn-modern">
+        <button id="send_btn" class="send-btn-modern bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-slate-950 font-semibold hover:scale-105 transition-transform">
           <svg
             width="20"
             height="20"

@@ -12,55 +12,34 @@
         <!-- Sidebar -->
         <div class="lg:col-span-1">
             <!-- User Stats -->
-            <div class="bg-white rounded-lg shadow-md p-6 mb-6">
-                <h3 class="text-lg font-bold text-gray-800 mb-4">🏆 Your Profile</h3>
+            <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 mb-6">
+                <h3 class="text-lg font-bold text-slate-100 mb-4">🏆 Your Profile</h3>
                 <div class="space-y-3">
                     <div>
-                        <p class="text-sm text-gray-600">Trust Score</p>
-                        <p class="text-2xl font-bold text-indigo-600" id="trust-score">--</p>
+                        <p class="text-sm text-slate-400">Trust Score</p>
+                        <p class="text-2xl font-bold text-indigo-300" id="trust-score">--</p>
                     </div>
                     <div>
-                        <p class="text-sm text-gray-600">Kindness Score</p>
-                        <p class="text-2xl font-bold text-green-600" id="kindness-score">--</p>
+                        <p class="text-sm text-slate-400">Kindness Score</p>
+                        <p class="text-2xl font-bold text-emerald-300" id="kindness-score">--</p>
                     </div>
                     <div>
-                        <p class="text-sm text-gray-600">Badge</p>
-                        <p class="text-lg font-bold text-yellow-600" id="user-badge">--</p>
+                        <p class="text-sm text-slate-400">Badge</p>
+                        <p class="text-lg font-bold text-amber-300" id="user-badge">--</p>
                     </div>
                 </div>
             </div>
             
             <!-- Trending Categories -->
-            <div class="bg-white rounded-lg shadow-md p-6">
-                <h3 class="text-lg font-bold text-gray-800 mb-4">🔥 Trending Help Needed</h3>
+            <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-6">
+                <h3 class="text-lg font-bold text-slate-100 mb-4">🔥 Trending Help Needed</h3>
                 <div id="trending-categories" class="space-y-2">
-                    <p class="text-gray-600 text-sm">Loading...</p>
+                    <p class="text-slate-400 text-sm">Loading...</p>
                 </div>
             </div>
         </div>
     </div>
 </div>
-
-<style>
-    .trending-item {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 0.75rem;
-        background: #f9fafb;
-        border-radius: 0.5rem;
-        border-left: 3px solid #4f46e5;
-    }
-    
-    .trending-count {
-        background: #4f46e5;
-        color: white;
-        padding: 0.25rem 0.75rem;
-        border-radius: 9999px;
-        font-size: 0.75rem;
-        font-weight: 600;
-    }
-</style>
 
 <script>
     
@@ -75,15 +54,15 @@
             if (data.trending_categories && data.trending_categories.length > 0) {
                 data.trending_categories.forEach(item => {
                     const div = document.createElement('div');
-                    div.className = 'trending-item';
+                    div.className = 'flex items-center justify-between px-3 py-2 rounded-xl border border-slate-800 bg-slate-900/50 border-l-4 border-indigo-500/40';
                     div.innerHTML = `
-                        <span class="font-semibold text-gray-800 capitalize">${escapeHtml(item.category)}</span>
-                        <span class="trending-count">${item.count}</span>
+                        <span class="font-semibold text-slate-100 capitalize">${escapeHtml(item.category)}</span>
+                        <span class="text-[11px] font-semibold px-2.5 py-1 rounded-full border bg-indigo-500/10 text-indigo-200 border-indigo-400/30">${item.count}</span>
                     `;
                     container.appendChild(div);
                 });
             } else {
-                container.innerHTML = '<p class="text-gray-600 text-sm">No trending categories yet.</p>';
+                container.innerHTML = '<p class="text-slate-400 text-sm">No trending categories yet.</p>';
             }
         })
         .catch(error => {
@@ -124,9 +103,9 @@
     
     function getUrgencyColor(urgency) {
         const u = (urgency || 'normal').toLowerCase();
-        if (u === 'emergency') return 'bg-red-100 text-red-800';
-        if (u === 'high') return 'bg-yellow-100 text-yellow-800';
-        return 'bg-blue-100 text-blue-800';
+        if (u === 'emergency') return 'bg-rose-500/10 text-rose-200 border border-rose-400/30';
+        if (u === 'high') return 'bg-amber-500/10 text-amber-200 border border-amber-400/30';
+        return 'bg-sky-500/10 text-sky-200 border border-sky-400/30';
     }
     
     function escapeHtml(text) {

@@ -2,14 +2,14 @@
 {% block title %}I Can Help{% endblock %}
 
 {% block content %}
-<div class="w-full max-w-7xl mx-auto px-6 py-10">
+<div class="w-full max-w-7xl mx-auto px-6 py-10 page-transition">
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-10">
 
     <!-- 🟦 FORM CARD -->
-    <div class="lg:col-span-2 bg-slate-800/60 backdrop-blur-md border border-slate-700 rounded-2xl p-8 shadow-xl">
+    <div class="lg:col-span-2 bg-gradient-to-br from-slate-900/80 to-slate-950/90 backdrop-blur-md border border-cyan-500/20 rounded-2xl p-8 shadow-xl card-hover hover:border-cyan-400/40">
       <div class="flex items-center justify-between mb-4">
         <div>
-          <h2 class="text-3xl font-bold text-sky-400">I Can Help</h2>
+          <h2 class="text-3xl font-bold bg-gradient-to-r from-cyan-300 to-emerald-300 bg-clip-text text-transparent">I Can Help</h2>
           <p class="text-xs text-slate-400 mt-1">
             Offer rides, medicine runs, small repairs, tutoring, or just your time.
           </p>
@@ -17,7 +17,7 @@
         {% if current_user %}
         <div class="text-[11px] text-slate-400 text-right">
           <p>Posting as</p>
-          <p class="font-semibold text-slate-100">{{ current_user.name }}</p>
+          <p class="font-semibold text-cyan-300">{{ current_user.name }}</p>
         </div>
         {% endif %}
       </div>
@@ -27,21 +27,21 @@
         <!-- TITLE + CATEGORY -->
         <div class="grid md:grid-cols-2 gap-4">
           <div>
-            <label class="text-xs text-slate-300">What can you offer? <span class="text-sky-400">*</span></label>
+            <label class="text-xs text-slate-300">What can you offer? <span class="text-cyan-400">*</span></label>
             <input name="title"
                    required
                    maxlength="120"
                    placeholder="Ride to BRACU, can take 2 people"
-                   class="w-full mt-1 px-4 py-3 rounded-xl bg-slate-700 text-white border border-slate-600
-                          focus:ring-2 focus:ring-sky-400 outline-none text-sm" />
+                   class="w-full mt-1 px-4 py-3 rounded-xl bg-slate-950/80 text-white border border-cyan-500/20
+                          focus:border-cyan-400/40 focus:outline-none text-sm transition" />
           </div>
 
           <div>
-            <label class="text-xs text-slate-300">Category <span class="text-sky-400">*</span></label>
+            <label class="text-xs text-slate-300">Category <span class="text-cyan-400">*</span></label>
             <select name="category"
                     required
-                    class="w-full mt-1 px-4 py-3 rounded-xl bg-slate-700 border border-slate-600 text-white
-                           focus:ring-2 focus:ring-sky-400 outline-none text-sm">
+                    class="w-full mt-1 px-4 py-3 rounded-xl bg-slate-950/80 border border-cyan-500/20 text-white
+                           focus:border-cyan-400/40 focus:outline-none text-sm transition">
               <option value="" disabled selected>Select a category</option>
               <option value="medicine">Medicine help</option>
               <option value="food">Food / groceries</option>
@@ -61,14 +61,14 @@
               <label class="text-[11px] text-slate-400">Area / Neighborhood</label>
               <input name="area"
                      placeholder="Badda, near BRACU"
-                     class="w-full mt-1 px-4 py-2.5 rounded-xl bg-slate-700 text-white border border-slate-600
-                            focus:ring-2 focus:ring-sky-400 outline-none text-sm" />
+                     class="w-full mt-1 px-4 py-2.5 rounded-xl bg-slate-950/80 text-white border border-cyan-500/20
+                            focus:border-cyan-400/40 focus:outline-none text-sm transition" />
             </div>
             <div>
               <label class="text-[11px] text-slate-400">How far can you help? (radius)</label>
               <select name="radius_pref" id="helper-radius-pref"
-                      class="w-full mt-1 px-4 py-2.5 rounded-xl bg-slate-700 text-white border border-slate-600
-                             focus:ring-2 focus:ring-sky-400 outline-none text-sm"
+                      class="w-full mt-1 px-4 py-2.5 rounded-xl bg-slate-950/80 text-white border border-cyan-500/20
+                             focus:border-cyan-400/40 focus:outline-none text-sm transition"
                       onchange="updateHelperCircle()">
                 <option value="">No specific limit</option>
                 <option value="1">Within 1 km</option>
@@ -87,15 +87,15 @@
         <div class="mt-2">
           <div class="flex items-center justify-between mb-2">
             <p class="text-xs text-slate-300">
-              Pin your base point on the map <span class="text-sky-400">*</span>
+              Pin your base point on the map <span class="text-cyan-400">*</span>
             </p>
             <button type="button"
                     onclick="useMyLocationForHelper()"
-                    class="text-[11px] px-3 py-1 rounded-full border border-sky-400/60 text-sky-300 hover:bg-sky-500/10">
+                    class="text-[11px] px-3 py-1 rounded-full border border-cyan-400/60 text-cyan-300 hover:bg-cyan-500/10 transition">
               Use my current location
             </button>
           </div>
-          <div id="helper-map" class="w-full h-56 rounded-2xl border border-slate-700 overflow-hidden"></div>
+          <div id="helper-map" class="w-full h-56 rounded-2xl border border-cyan-500/20 overflow-hidden shadow-lg"></div>
           <p class="text-[10px] text-slate-500 mt-1">
             You must pin your location. We'll use this for the neighborhood map and radius.
           </p>
@@ -106,8 +106,8 @@
           <div>
             <label class="text-xs text-slate-300">When are you usually free?</label>
             <select name="time_window"
-                    class="w-full mt-2 px-4 py-2.5 rounded-xl bg-slate-700 text-white border border-slate-600
-                           focus:ring-2 focus:ring-sky-400 outline-none text-sm">
+                    class="w-full mt-2 px-4 py-2.5 rounded-xl bg-slate-950/80 text-white border border-cyan-500/20
+                           focus:border-cyan-400/40 focus:outline-none text-sm transition">
               <option value="anytime_today">Anytime today</option>
               <option value="evenings">Mostly evenings</option>
               <option value="weekends">Mostly weekends</option>
@@ -118,8 +118,8 @@
           <div>
             <label class="text-xs text-slate-300">How often can you help?</label>
             <select name="frequency"
-                    class="w-full mt-2 px-4 py-2.5 rounded-xl bg-slate-700 text-white border border-slate-600
-                           focus:ring-2 focus:ring-sky-400 outline-none text-sm">
+                    class="w-full mt-2 px-4 py-2.5 rounded-xl bg-slate-950/80 text-white border border-cyan-500/20
+                           focus:border-cyan-400/40 focus:outline-none text-sm transition">
               <option value="one_time">One time</option>
               <option value="few_times_week">Few times a week</option>
               <option value="daily">Almost daily</option>
@@ -134,15 +134,15 @@
             <div>
               <label class="text-[11px] text-slate-400">Preferred method</label>
               <select name="contact_method"
-                      class="w-full mt-1 px-4 py-2.5 rounded-xl bg-slate-700 text-white border border-slate-600
-                             focus:ring-2 focus:ring-sky-400 outline-none text-sm">
+                      class="w-full mt-1 px-4 py-2.5 rounded-xl bg-slate-950/80 text-white border border-cyan-500/20
+                             focus:border-cyan-400/40 focus:outline-none text-sm transition">
                 <option value="lifeline_chat">LifeLine chat</option>
                 <option value="phone">Phone call</option>
                 <option value="whatsapp">WhatsApp</option>
               </select>
             </div>
             <div>
-              <label class="text-[11px] text-slate-400">Phone / WhatsApp <span class="text-sky-400">*</span></label>
+              <label class="text-[11px] text-slate-400">Phone / WhatsApp <span class="text-cyan-400">*</span></label>
               <input name="contact_info"
                      type="tel"
                      inputmode="numeric"
@@ -150,8 +150,8 @@
                      maxlength="15"
                      required
                      placeholder="01XXXXXXXXX"
-                     class="w-full mt-1 px-4 py-2.5 rounded-xl bg-slate-700 text-white border border-slate-600
-                            focus:ring-2 focus:ring-sky-400 outline-none text-sm" />
+                     class="w-full mt-1 px-4 py-2.5 rounded-xl bg-slate-950/80 text-white border border-cyan-500/20
+                            focus:border-cyan-400/40 focus:outline-none text-sm transition" />
               <p class="text-[10px] text-slate-500 mt-1">
                 Digits only, no spaces or dashes.
               </p>
@@ -166,8 +166,8 @@
                     required
                     minlength="10"
                     placeholder="Example: I drive to BRACU every morning from Badda, can take 2 students on most weekdays..."
-                    class="w-full mt-1 px-4 py-3 rounded-xl bg-slate-700 text-white border border-slate-600
-                           focus:ring-2 focus:ring-sky-400 outline-none text-sm"></textarea>
+                    class="w-full mt-1 px-4 py-3 rounded-xl bg-slate-950/80 text-white border border-cyan-500/20
+                           focus:border-cyan-400/40 focus:outline-none text-sm transition"></textarea>
         </div>
 
         <!-- IMAGE (optional) -->
@@ -178,8 +178,8 @@
                         file:mr-3 file:py-1.5 file:px-3
                         file:rounded-full file:border-0
                         file:text-xs file:font-semibold
-                        file:bg-slate-700 file:text-slate-200
-                        hover:file:bg-slate-600">
+                        file:bg-slate-950/80 file:text-slate-200
+                        hover:file:bg-slate-900">
         </div>
 
         <!-- EXPIRY -->
@@ -187,8 +187,8 @@
           <div>
             <label class="text-xs text-slate-300">Expires in (minutes)</label>
             <input type="number" name="expiry_minutes" value="180" min="30" max="4320"
-                   class="mt-1 w-32 px-4 py-2.5 rounded-xl bg-slate-700 text-white border border-slate-600
-                          focus:ring-2 focus:ring-sky-400 outline-none text-sm" />
+                   class="mt-1 w-32 px-4 py-2.5 rounded-xl bg-slate-950/80 text-white border border-cyan-500/20
+                          focus:border-cyan-400/40 focus:outline-none text-sm transition" />
           </div>
           <p class="text-[11px] text-slate-400">
             After this, your offer will disappear from the active feed.
@@ -197,7 +197,7 @@
 
         <!-- SUBMIT -->
         <div class="pt-2">
-          <button class="bg-sky-500 hover:bg-sky-400 text-slate-950 font-semibold px-6 py-3 rounded-xl text-sm transition">
+          <button class="bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-600 hover:to-emerald-600 text-slate-950 font-semibold px-6 py-3 rounded-xl text-sm transition hover:scale-105 w-full">
             Post Help Offer
           </button>
         </div>

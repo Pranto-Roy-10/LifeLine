@@ -137,6 +137,11 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_SECURE"] = False
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 
+# Some embedded webviews (including VS Code Simple Browser) can be aggressive about
+# clearing non-persistent session cookies on reload/navigation. Use a permanent
+# session cookie with a reasonable lifetime so logins persist reliably.
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
+
 mail = Mail(app)
 
 # Your Google Maps API key
@@ -988,21 +993,9 @@ def notify_interested_users(event, message):
 
 
 def auto_add_event_impact(event):
-    helper = event.creator
-
-    # Only helpers generate impact
-    if helper.role != "helper":
-        return
-
-    impact = ImpactLog(
-        helper_id=helper.id,
-        hours=4,        # demo value
-        items=10,       # demo value
-        carbon=1.5      # demo value
-    )
-
-    db.session.add(impact)
-    db.session.commit()
+    # Do not auto-add synthetic impact entries. Impact is recorded
+    # only when real actions are verified elsewhere in the app.
+    return
 
 
 # --------------- CHAT HELPERS ----------------
@@ -1033,6 +1026,8 @@ def serialize_message(msg: ChatMessage):
 
 # ------------------ AUTH HELPERS ------------------
 def login_user(user: User):
+    # Persist session across reloads (important for webviews)
+    session.permanent = True
     session["user_id"] = user.id
     session["user_name"] = user.name
     session["is_trusted_helper"] = bool(user.is_trusted_helper)
@@ -1374,12 +1369,31 @@ def debug_session():
 
 
 @app.route("/map")
-@login_required
 def map_page():
+    # Map is normally for logged-in users, but we also allow an emergency guest
+    # to view/resolve the SOS they just created (tracked in session).
+    viewer = current_user()
+    focus_request_id = request.args.get("focus_request_id", type=int)
+    is_sos_caller = request.args.get("sos_caller") in ("1", "true", "True")
+    guest_sos_request_id = session.get("guest_sos_request_id")
+
+    allow_guest_sos_view = (
+        (not viewer)
+        and is_sos_caller
+        and focus_request_id
+        and guest_sos_request_id
+        and int(guest_sos_request_id) == int(focus_request_id)
+    )
+
+    if not viewer and not allow_guest_sos_view:
+        return redirect(url_for("login", next=request.full_path))
+
     return render_template(
         "map.html",
         google_maps_key=GOOGLE_MAPS_API_KEY,
-        user=current_user(),
+        user=viewer,
+        is_sos_caller=bool(is_sos_caller),
+        guest_sos_request_id=guest_sos_request_id,
     )
 
 # ------------------ ROUTES: AUTH ------------------
@@ -1951,7 +1965,9 @@ def auth_google():
 
     # Optional: create a JWT for API usage
     access_token = create_jwt_for_user(user)
-    session["api_token"] = access_token  # purely for convenience/debug
+    # NOTE: Do not stash JWTs in the Flask session cookie; it can become too large
+    # and some webviews/browsers will drop it, making the user appear "logged out".
+    # If you need the token for debugging, log it server-side instead.
 
     # Frontend JS will redirect based on this
     return jsonify({"redirect_url": url_for("home")})
@@ -2012,7 +2028,7 @@ def google_auth():
 
     # Optional: issue JWT for API use and stash in session
     token = create_jwt_for_user(user)
-    session["api_token"] = token
+    # See note above about not storing JWTs in session cookies.
 
     # Where to go next
     next_url = session.pop("next_after_google", url_for("home"))
@@ -2632,6 +2648,7 @@ def need_help():
     - If not logged in     -> use Emergency Guest user (quick help)
     """
     user = current_user()
+    can_post = True  # Guests can always post emergency requests
     if user:
         can_post = check_post_limit(user)
     if request.method == "POST":
@@ -3331,55 +3348,6 @@ def list_events():
     # a full created → completed timeline.
     events = Event.query.order_by(Event.created_at.desc()).all()
     
-    # Create sample events only if NO events exist at all (including completed ones)
-    all_events_count = Event.query.count()
-    if all_events_count == 0:
-        # Add some sample events
-        sample_events = [
-            {
-                "title": "Neighborhood Cleanup Drive",
-                "description": "Join us for a community cleanup in Dhanmondi. Bring gloves and enthusiasm!",
-                "event_type": "cleanup",
-                "date": datetime(2025, 12, 20, 9, 0),
-                "lat": 23.7461,
-                "lng": 90.3742,
-                "area": "Dhanmondi"
-            },
-            {
-                "title": "Blood Donation Camp",
-                "description": "Help save lives by donating blood at the local hospital.",
-                "event_type": "donation",
-                "date": datetime(2025, 12, 25, 10, 0),
-                "lat": 23.8103,
-                "lng": 90.4125,
-                "area": "Mohammadpur"
-            },
-            {
-                "title": "Free Medical Checkup",
-                "description": "Free health checkups for seniors and low-income families.",
-                "event_type": "repair",
-                "date": datetime(2025, 12, 18, 14, 0),
-                "lat": 23.7519,
-                "lng": 90.3936,
-                "area": "Gulshan"
-            }
-        ]
-        for e in sample_events:
-            event = Event(
-                creator_id=1,  # Assume user 1 exists
-                title=e["title"],
-                description=e["description"],
-                event_type=e["event_type"],
-                date=e["date"],
-                lat=e["lat"],
-                lng=e["lng"],
-                area=e["area"]
-            )
-            db.session.add(event)
-        db.session.commit()
-        # Reload list after seeding
-        events = Event.query.order_by(Event.created_at.desc()).all()
-    
     return render_template("events.html", events=events, google_maps_key=GOOGLE_MAPS_API_KEY)
 
 
@@ -3660,6 +3628,25 @@ def api_nearby_requests():
             exclude_user_id=exclude_user_id,
             limit=limit
         )
+
+        # Mark which requests already have an offer from this user
+        try:
+            user_id = getattr(user, "id", None)
+            if user_id and nearby:
+                nearby_ids = [int(r.get("id")) for r in nearby if r.get("id") is not None]
+                if nearby_ids:
+                    offered_rows = (
+                        Offer.query.filter(Offer.request_id.in_(nearby_ids))
+                        .filter((Offer.helper_id == user_id) | (Offer.user_id == user_id))
+                        .all()
+                    )
+                    offered_ids = {int(o.request_id) for o in offered_rows if getattr(o, "request_id", None) is not None}
+                    for r in nearby:
+                        rid = r.get("id")
+                        if rid is not None:
+                            r["already_offered"] = int(rid) in offered_ids
+        except Exception:
+            pass
 
         return jsonify({"requests": nearby}), 200
     except Exception as e:
@@ -4250,37 +4237,53 @@ def api_impact_stories():
 # 8) Community-wide impact summary
 @app.route("/api/community/impact", methods=["GET"])
 def api_community_impact():
-    # Prefer ImpactLog (source of truth). Also include completed/past events that
-    # may exist as demo/dummy data even if no ImpactLog rows were recorded.
-    all_impacts = ImpactLog.query.all()
+    # Source of truth: real DB rows only (no synthetic/demo rollups).
+    # Hours: verified request-completion reviews + event impact logs.
+    review_hours = (
+        db.session.query(func.coalesce(func.sum(Review.duration_hours), 0.0)).scalar()
+        or 0.0
+    )
+    event_hours = (
+        db.session.query(func.coalesce(func.sum(ImpactLog.hours), 0.0)).scalar()
+        or 0.0
+    )
+    total_hours = float(review_hours) + float(event_hours)
 
-    total_hours = sum(float(impact.hours or 0) for impact in all_impacts)
+    all_impacts = ImpactLog.query.all()
     total_items = sum(int(impact.items or 0) for impact in all_impacts)
     total_carbon = sum(float(impact.carbon or 0) for impact in all_impacts)
 
-    logged_event_ids = {int(i.event_id) for i in all_impacts if getattr(i, "event_id", None)}
-    now = datetime.utcnow()
-    extra_events = (
-        Event.query.filter(Event.id.notin_(logged_event_ids) if logged_event_ids else True)
-        .filter(Event.date <= now)
+    # CO₂ saved (kg) from completed shared rides.
+    # Uses verified request completions (reviews) as the source of truth.
+    # Each completed ride is counted once.
+    try:
+        ride_request_ids = (
+            db.session.query(Review.request_id)
+            .join(Request, Request.id == Review.request_id)
+            .filter(func.lower(Request.category) == "ride")
+            .distinct()
+            .all()
+        )
+        ride_count = len(ride_request_ids)
+    except Exception:
+        ride_count = 0
+
+    # Simple per-ride kg estimate used elsewhere in the codebase.
+    total_carbon += float(ride_count) * 2.5
+
+    # Neighbors helped = unique people who received help from the community.
+    # Use completed request reviews as verification; infer the recipient from request type.
+    recipient_rows = (
+        db.session.query(Request.is_offer, Request.user_id, Request.helper_id)
+        .join(Review, Review.request_id == Request.id)
         .all()
     )
-    for ev in extra_events:
-        # ignore future/draft events (defensive)
-        dt = ev.completed_at or ev.date or ev.created_at
-        if dt and dt > now:
-            continue
-
-        et = (ev.event_type or "").lower()
-        if et == "cleanup":
-            total_hours += 3
-            total_carbon += 5
-        elif et == "donation":
-            total_items += 10
-        elif et == "repair":
-            total_hours += 2
-
-    total_helped = db.session.query(func.count(func.distinct(ImpactLog.helper_id))).scalar() or 0
+    recipient_ids = set()
+    for is_offer, owner_id, helper_id in recipient_rows:
+        recipient_id = helper_id if is_offer else owner_id
+        if recipient_id:
+            recipient_ids.add(int(recipient_id))
+    total_helped = len(recipient_ids)
 
     return jsonify(
         {
@@ -4337,7 +4340,6 @@ def api_community_impact_over_time():
         .all()
     )
 
-    logged_event_ids = set()
     for created_at, hours, items, carbon, event_id in rows:
         if not created_at:
             continue
@@ -4345,39 +4347,45 @@ def api_community_impact_over_time():
         buckets[key]["hours"] += float(hours or 0)
         buckets[key]["items"] += int(items or 0)
         buckets[key]["carbon"] += float(carbon or 0)
-        if event_id:
-            try:
-                logged_event_ids.add(int(event_id))
-            except Exception:
-                pass
 
-    # Include demo/dummy events even if no ImpactLog exists yet.
-    # We bucket by event date (or completed_at fallback) so it appears in the
-    # correct month.
-    now = datetime.utcnow()
-    extra_events_q = (
-        Event.query.filter(Event.date >= start_month)
-        .filter(Event.date < end_exclusive)
-        .filter(Event.date <= now)
+    # Also include verified request completion hours via reviews.
+    review_rows = (
+        db.session.query(Review.created_at, Review.duration_hours)
+        .filter(Review.created_at >= start_month)
+        .filter(Review.created_at < end_exclusive)
+        .all()
     )
-    if logged_event_ids:
-        extra_events_q = extra_events_q.filter(Event.id.notin_(logged_event_ids))
-    extra_events = extra_events_q.all()
-    for ev in extra_events:
-        dt = ev.completed_at or ev.date or ev.created_at
-        if not dt:
+
+    for created_at, duration_hours in review_rows:
+        if not created_at:
             continue
-        if dt > now:
+        key = created_at.strftime("%Y-%m")
+        buckets[key]["hours"] += float(duration_hours or 0)
+
+    # CO₂ saved from completed rides (verified by reviews).
+    # Bucket by review month and count each request once per month.
+    try:
+        ride_review_rows = (
+            db.session.query(Review.created_at, Review.request_id)
+            .join(Request, Request.id == Review.request_id)
+            .filter(func.lower(Request.category) == "ride")
+            .filter(Review.created_at >= start_month)
+            .filter(Review.created_at < end_exclusive)
+            .all()
+        )
+    except Exception:
+        ride_review_rows = []
+
+    seen_ride_requests = set()
+    for created_at, request_id in ride_review_rows:
+        if not created_at or not request_id:
             continue
-        key = dt.strftime("%Y-%m")
-        et = (ev.event_type or "").lower()
-        if et == "cleanup":
-            buckets[key]["hours"] += 3
-            buckets[key]["carbon"] += 5
-        elif et == "donation":
-            buckets[key]["items"] += 10
-        elif et == "repair":
-            buckets[key]["hours"] += 2
+        key = created_at.strftime("%Y-%m")
+        marker = (key, int(request_id))
+        if marker in seen_ride_requests:
+            continue
+        seen_ride_requests.add(marker)
+        buckets[key]["carbon"] += 2.5
 
     labels = []
     hours_data = []
@@ -4392,6 +4400,87 @@ def api_community_impact_over_time():
         carbon_data.append(round(float(buckets[key]["carbon"]), 1))
 
     return jsonify({"labels": labels, "hours": hours_data, "items": items_data, "carbon": carbon_data})
+
+
+# Lightweight public summary for the home/hero cards
+@app.route("/api/home/summary", methods=["GET"])
+def api_home_summary():
+    try:
+        now = datetime.utcnow()
+        week_ago = now - timedelta(days=7)
+
+        open_requests = (
+            Request.query.filter(Request.status == "open")
+            .filter(Request.expires_at > now)
+            .count()
+        )
+
+        helpers = User.query.filter(User.is_trusted_helper == True).count()  # noqa: E712
+
+        matched_requests = (
+            Request.query.filter(Request.status.in_(["claimed", "closed"])).count()
+        )
+
+        # Home stats:
+        # - "Helped this week" reflects how many *people* the logged-in user helped (unique counterparts)
+        #   based on verified completions (reviews).
+        # - "Volunteer hours" shows the logged-in user's total hours (all-time), not community total.
+
+        helped_recent = 0
+        volunteer_hours_total = 0.0
+        user = current_user()
+        if user:
+            # Find all requests completed (reviewed) in the last 7 days where this user was the credited helper.
+            # Then count unique recipients (the other participant) across those requests.
+            rows = (
+                db.session.query(Request.is_offer, Request.user_id, Request.helper_id)
+                .join(Review, Review.request_id == Request.id)
+                .filter(Review.helper_id == user.id)
+                .filter(Review.created_at >= week_ago)
+                .all()
+            )
+
+            helped_user_ids = set()
+            for is_offer, owner_id, helper_id in rows:
+                if is_offer:
+                    recipient_id = helper_id
+                else:
+                    recipient_id = owner_id
+
+                if recipient_id and recipient_id != user.id:
+                    helped_user_ids.add(int(recipient_id))
+
+            helped_recent = len(helped_user_ids)
+
+            # All-time hours credited to this user:
+            # - Review.duration_hours for completed requests where this user was credited as helper
+            # - ImpactLog.hours for completed events attributed to this user
+            review_hours = (
+                db.session.query(func.coalesce(func.sum(Review.duration_hours), 0.0))
+                .filter(Review.helper_id == user.id)
+                .scalar()
+                or 0.0
+            )
+            event_hours = (
+                db.session.query(func.coalesce(func.sum(ImpactLog.hours), 0.0))
+                .filter(ImpactLog.helper_id == user.id)
+                .scalar()
+                or 0.0
+            )
+            volunteer_hours_total = float(review_hours) + float(event_hours)
+
+        return jsonify(
+            {
+                "open_requests": int(open_requests),
+                "helpers": int(helpers),
+                "matched_requests": int(matched_requests),
+                "neighbors_helped": int(helped_recent),
+                "volunteer_hours": round(float(volunteer_hours_total), 1),
+            }
+        )
+    except Exception as e:
+        print("[API] home summary error:", e)
+        return jsonify({"error": "summary_unavailable"}), 500
 
 @app.route("/impact")
 @login_required
@@ -4454,14 +4543,15 @@ def update_user_location():
 
 
 @app.route("/sos/trigger", methods=["POST"])
-@login_required
 def trigger_sos():
-    user = current_user()
+    viewer = current_user()
+    is_guest = viewer is None
 
-
+    # Allow guests to trigger SOS - use emergency user as the DB owner,
+    # but keep the browser "not logged in" by tracking the SOS id in session.
+    user = viewer
     if not user:
-        flash("Please log in again to send SOS.", "error")
-        return redirect(url_for("login", next=request.path))
+        user = get_emergency_user()
 
     # Prefer client-provided GPS for accuracy; fallback to user's last-known location
     sos_lat = None
@@ -4513,6 +4603,14 @@ def trigger_sos():
     db.session.add(sos_req)
     db.session.commit()
 
+    # Remember this SOS for emergency guests so they can view status and mark
+    # it resolved without logging in.
+    if is_guest:
+        try:
+            session["guest_sos_request_id"] = sos_req.id
+        except Exception:
+            pass
+
     # Update last-known location if GPS was provided
     if sos_lat is not None and sos_lng is not None:
         try:
@@ -4562,6 +4660,42 @@ def trigger_sos():
     else:
         flash("SOS SENT! Trusted helpers have been alerted.", "error")
     return redirect(url_for("map_page", focus_request_id=sos_req.id, sos_caller=1))
+
+
+@app.route("/api/sos/<int:request_id>/resolve", methods=["POST"])
+def api_sos_resolve(request_id: int):
+    """Mark an SOS request as resolved.
+
+    Allowed for:
+    - Logged-in SOS owner
+    - Emergency guest who created the SOS (tracked in session)
+    """
+    req_obj = Request.query.get_or_404(request_id)
+    if (req_obj.category or "").lower() != "sos":
+        return jsonify({"error": "Not an SOS request"}), 400
+
+    viewer = current_user()
+    guest_sos_request_id = session.get("guest_sos_request_id")
+    is_guest_owner = guest_sos_request_id and int(guest_sos_request_id) == int(req_obj.id)
+
+    if not ((viewer and viewer.id == req_obj.user_id) or is_guest_owner):
+        return jsonify({"error": "Unauthorized"}), 403
+
+    if req_obj.status in ("completed", "closed"):
+        return jsonify({"ok": True, "already": True})
+
+    req_obj.status = "completed"
+    req_obj.completed_at = datetime.utcnow()
+    db.session.commit()
+
+    if is_guest_owner:
+        try:
+            session.pop("guest_sos_request_id", None)
+            session.pop("active_sos_request_id", None)
+        except Exception:
+            pass
+
+    return jsonify({"ok": True})
 
 
 @app.route("/sos/<int:request_id>/accept/<int:helper_id>", methods=["POST"])
@@ -4669,13 +4803,28 @@ def api_sos_respond(request_id):
 
 
 @app.route("/api/sos/<int:request_id>/status", methods=["GET"])
-@login_required
 def api_sos_status(request_id):
     req_obj = Request.query.get_or_404(request_id)
     if (req_obj.category or "").lower() != "sos":
         return jsonify({"error": "Not an SOS request"}), 400
 
     viewer = current_user()
+    guest_sos_request_id = session.get("guest_sos_request_id")
+    is_guest_owner = (
+        (not viewer)
+        and guest_sos_request_id
+        and int(guest_sos_request_id) == int(req_obj.id)
+    )
+
+    # Only allow status polling for:
+    # - SOS owner (logged in)
+    # - Trusted helpers (logged in)
+    # - Emergency guest who created this SOS (session-bound)
+    if not (
+        (viewer and (viewer.id == req_obj.user_id or getattr(viewer, "is_trusted_helper", False)))
+        or is_guest_owner
+    ):
+        return jsonify({"error": "Unauthorized"}), 403
 
     responders = (
         SOSResponse.query.filter_by(request_id=req_obj.id)
@@ -4689,7 +4838,7 @@ def api_sos_status(request_id):
         u = User.query.get(r.helper_id)
         if u:
             names.append(u.name)
-            if viewer and viewer.id == req_obj.user_id:
+            if (viewer and viewer.id == req_obj.user_id) or is_guest_owner:
                 responder_locations.append(
                     {
                         "helper_id": u.id,
@@ -4705,7 +4854,7 @@ def api_sos_status(request_id):
     should_call = False
     seconds_remaining = None
     try:
-        if viewer and viewer.id == req_obj.user_id:
+        if (viewer and viewer.id == req_obj.user_id) or is_guest_owner:
             now = datetime.utcnow()
             elapsed_s = (now - req_obj.created_at).total_seconds() if req_obj.created_at else 0
             seconds_remaining = max(0, int(60 - elapsed_s))
@@ -5285,25 +5434,6 @@ def get_weather():
         conditions = WeatherService.extract_conditions(weather_data)
 
         if not conditions:
-            # Demo weather is opt-in (DEMO_WEATHER=1). Otherwise, require a real key.
-            demo_enabled = os.getenv("DEMO_WEATHER", "0") == "1"
-            if demo_enabled:
-                demo_raw = {
-                    "__source": "demo",
-                    "weather": [{"main": "Clouds", "description": "demo weather"}],
-                    "main": {"temp": 27.0, "feels_like": 29.0, "humidity": 70},
-                    "wind": {"speed": 2.0},
-                    "visibility": 9000,
-                }
-                return jsonify(
-                    {
-                        "success": True,
-                        "source": "demo",
-                        "weather": WeatherService.extract_conditions(demo_raw),
-                        "location_used": {"lat": lat, "lng": lng},
-                    }
-                ), 200
-
             # Graceful fallback for UI when live weather fails
             fallback = {
                 "condition": "Unknown",

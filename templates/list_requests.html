@@ -45,6 +45,7 @@ endblock %} {% block content %}
     {% for r in requests %} {% set is_sos = (r.category|lower == 'sos') %}
 
     <div
+      id="request-card-{{ r.id }}"
       class="rounded-2xl border border-slate-800 bg-slate-900/70 overflow-hidden"
     >
       <button
@@ -586,6 +587,25 @@ fab_href = url_for('can_help') if mode == 'offer' else url_for('need_help') %}
         respondToSOSFromList(requestId);
       });
     });
+
+    // Deep-link support: /requests?open=<id>
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const openIdRaw = params.get("open");
+      const openId = openIdRaw ? parseInt(openIdRaw, 10) : null;
+      if (openId) {
+        // Open the card if it exists in this mode
+        toggleDetails(String(openId));
+        const card = document.getElementById(`request-card-${openId}`);
+        if (card && card.scrollIntoView) {
+          setTimeout(() => {
+            card.scrollIntoView({ behavior: "smooth", block: "center" });
+          }, 0);
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
   });
 </script>
 

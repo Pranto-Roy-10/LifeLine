@@ -1,10 +1,10 @@
 {% extends "base.html" %} {% block title %}Dashboard – LifeLine{% endblock %} {%
 block content %}
 <div
-  class="w-full min-h-screen bg-slate-950 text-slate-100 px-6 md:px-12 py-10 space-y-8"
+  class="w-full min-h-screen bg-gradient-to-b from-slate-950 via-slate-950/90 to-slate-900 text-slate-100 px-6 md:px-12 py-10 space-y-8 page-transition"
 >
   {% if sos_review_req and sos_review_helper %}
-  <div class="bg-slate-900/60 border border-emerald-500/30 rounded-2xl p-6">
+  <div class="bg-gradient-to-r from-slate-900/60 to-emerald-900/20 border border-emerald-500/40 rounded-2xl p-6 shadow-lg card-hover">
     <div
       class="flex flex-col md:flex-row md:items-center md:justify-between gap-3"
     >
@@ -20,7 +20,7 @@ block content %}
       </div>
       <a
         href="{{ url_for('chat_with_user', other_user_id=sos_review_helper.id) }}"
-        class="inline-flex items-center justify-center px-3 py-2 rounded-lg font-medium transition border bg-slate-900/40 border-slate-700 text-slate-200 hover:bg-slate-900/60"
+        class="inline-flex items-center justify-center px-4 py-2.5 rounded-lg font-semibold transition border bg-gradient-to-r from-emerald-500/10 to-cyan-500/10 border-emerald-500/40 text-emerald-300 hover:from-emerald-500/20 hover:to-cyan-500/20 hover:border-emerald-500/60 shadow-lg"
       >
         Chat
       </a>
@@ -32,22 +32,52 @@ block content %}
       class="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3"
     >
       <div class="md:col-span-1">
-        <label class="block text-xs text-slate-400 mb-1">Rating</label>
+        <label class="block text-xs text-slate-400 mb-2 font-medium">Rating</label>
         <div class="flex gap-2">
           {% for i in range(1, 6) %}
-          <label class="cursor-pointer">
-            <input type="radio" name="rating" value="{{ i }}" class="sr-only
-            peer" {% if i==5 %}checked{% endif %}>
-            <span
-              class="text-slate-600 peer-checked:text-yellow-400 text-xl hover:text-yellow-300 transition"
-              >★</span
-            >
+          <label class="cursor-pointer transform transition hover:scale-110">
+            <input type="radio" name="rating" value="{{ i }}" class="sr-only star-input" {% if i==5 %}checked{% endif %}>
+            <span class="star-icon text-slate-600 text-xl hover:text-yellow-300 transition duration-200">★</span>
           </label>
           {% endfor %}
         </div>
+        <script>
+        // Star rating fill logic for all review forms (robust for multiple groups)
+        document.addEventListener('DOMContentLoaded', function() {
+          function updateStars(group) {
+            const stars = Array.from(group.querySelectorAll('.star-input'));
+            const icons = Array.from(group.querySelectorAll('.star-icon'));
+            let checkedIndex = stars.findIndex(star => star.checked);
+            if (checkedIndex === -1) checkedIndex = 4;
+            icons.forEach((icon, idx) => {
+              if (idx <= checkedIndex) {
+                icon.classList.add('text-yellow-400');
+                icon.classList.remove('text-slate-600');
+              } else {
+                icon.classList.remove('text-yellow-400');
+                icon.classList.add('text-slate-600');
+              }
+            });
+          }
+          // For each group of stars (flex/gap-2 or gap-1)
+          document.querySelectorAll('.flex.gap-2, .flex.gap-1').forEach(group => {
+            const starInputs = group.querySelectorAll('.star-input');
+            if (starInputs.length) {
+              group.addEventListener('change', function(e) {
+                if (e.target.classList.contains('star-input')) {
+                  updateStars(group);
+                }
+              });
+              // Initial fill
+              updateStars(group);
+            }
+          });
+        });
+        </script>
+        </div>
       </div>
       <div class="md:col-span-1">
-        <label class="block text-xs text-slate-400 mb-1"
+        <label class="block text-xs text-slate-400 mb-2 font-medium"
           >Duration (Hours)</label
         >
         <input
@@ -106,7 +136,7 @@ block content %}
         Offer Help
       </a>
       <a
-        href="{{ url_for('emotional') }}"
+        href="{{ url_for('emotional_ping_placeholder') }}"
         class="inline-flex items-center justify-center px-4 py-2 rounded-lg font-medium mr-2 transition border bg-slate-900/40 border-cyan-500/30 text-cyan-200 hover:bg-slate-900/60 hover:border-cyan-400/50"
       >
         Emotional Ping

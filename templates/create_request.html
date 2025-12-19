@@ -2,12 +2,12 @@
 {% block title %}Create Help Request / Offer{% endblock %}
 
 {% block content %}
-<div class="w-full flex justify-center mt-10 px-4">
+<div class="w-full flex justify-center mt-10 px-4 page-transition">
 
     <!-- Card -->
-    <div class="w-full max-w-xl bg-slate-800 border border-slate-700 p-8 rounded-2xl shadow-xl">
+    <div class="w-full max-w-xl bg-gradient-to-br from-slate-900/70 to-slate-950/80 border border-emerald-500/20 p-8 rounded-2xl shadow-2xl card-hover">
 
-        <h1 class="text-3xl font-bold text-emerald-400 mb-6">
+        <h1 class="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-emerald-300 to-cyan-300 mb-6">
             Create Help Request / Offer
         </h1>
 
@@ -15,24 +15,23 @@
 
             <!-- TITLE -->
             <div>
-                <label class="block text-slate-300 mb-1">Title</label>
+                <label class="block text-slate-300 mb-2 font-medium">Title</label>
                 <input
                     type="text"
                     name="title"
                     required
-                    class="w-full px-4 py-3 rounded-lg bg-slate-700 text-white border border-slate-600
-                           focus:ring focus:ring-emerald-400 outline-none"
+                    class="w-full px-4 py-3 rounded-lg bg-slate-950/80 text-white border border-slate-700/60 focus:border-emerald-400 focus:outline-none transition duration-200 placeholder-slate-500"
+                    placeholder="What do you need or can offer?"
                 >
             </div>
 
             <!-- CATEGORY -->
             <div>
-                <label class="block text-slate-300 mb-1">Category</label>
+                <label class="block text-slate-300 mb-2 font-medium">Category</label>
                 <select
                     name="category"
                     required
-                    class="w-full px-4 py-3 rounded-lg bg-slate-700 text-white border border-slate-600
-                           focus:ring focus:ring-emerald-400 outline-none"
+                    class="w-full px-4 py-3 rounded-lg bg-slate-950/80 text-white border border-slate-700/60 focus:border-emerald-400 focus:outline-none transition duration-200"
                 >
                     <option value="medicine">Medicine</option>
                     <option value="food">Food</option>
@@ -43,11 +42,12 @@
 
             <!-- DESCRIPTION -->
             <div>
-                <label class="block text-slate-300 mb-1">Description</label>
+                <label class="block text-slate-300 mb-2 font-medium">Description</label>
                 <textarea
                     name="description"
                     rows="4"
-                    class="w-full px-4 py-3 rounded-lg bg-slate-700 text-white border border-slate-600
+                    class="w-full px-4 py-3 rounded-lg bg-slate-950/80 text-white border border-slate-700/60 focus:border-emerald-400 focus:outline-none transition duration-200 placeholder-slate-500 resize-none"
+                    placeholder="Describe what you need or can offer..."
                            focus:ring focus:ring-emerald-400 outline-none"
                 ></textarea>
             </div>

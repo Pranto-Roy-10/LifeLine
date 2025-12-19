@@ -1,14 +1,14 @@
 {% extends "base.html" %} {% block title %}I Need Help{% endblock %} {% block
 content %}
-<div class="w-full max-w-7xl mx-auto px-6 py-10">
+<div class="w-full max-w-7xl mx-auto px-6 py-10 page-transition">
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-10 items-start">
     <!-- 🟩 FORM CARD -->
     <div
-      class="lg:col-span-2 bg-slate-800/60 backdrop-blur-md border border-slate-700 rounded-2xl p-8 shadow-xl"
+      class="lg:col-span-2 bg-gradient-to-br from-slate-900/80 to-slate-950/90 backdrop-blur-md border border-emerald-500/20 rounded-2xl p-8 shadow-xl card-hover hover:border-emerald-400/40"
     >
       <div class="flex items-center justify-between mb-4">
         <div>
-          <h2 class="text-3xl font-bold text-emerald-400">I Need Help</h2>
+          <h2 class="text-3xl font-bold bg-gradient-to-r from-emerald-300 to-cyan-300 bg-clip-text text-transparent">I Need Help</h2>
           <p class="text-xs text-slate-400 mt-1">
             Tell your neighbors what you need. Keep it short but clear.
           </p>
@@ -16,12 +16,12 @@ content %}
         {% if current_user %}
         <div class="text-[11px] text-slate-400 text-right">
           <p>Posting as</p>
-          <p class="font-semibold text-slate-100">{{ current_user.name }}</p>
+          <p class="font-semibold text-emerald-300">{{ current_user.name }}</p>
         </div>
         {% else %}
         <div class="text-[11px] text-slate-400 text-right">
           <p>Posting as</p>
-          <p class="font-semibold text-slate-100">Guest (quick help)</p>
+          <p class="font-semibold text-emerald-300">Guest (quick help)</p>
         </div>
         {% endif %}
       </div>
@@ -39,7 +39,7 @@ content %}
               required
               maxlength="120"
               placeholder="Need medicine from pharmacy"
-              class="w-full mt-1 px-4 py-3 rounded-xl bg-slate-700 text-white border border-slate-600 focus:ring-2 focus:ring-emerald-400 outline-none text-sm"
+              class="w-full mt-1 px-4 py-3 rounded-xl bg-slate-950/80 text-white border border-emerald-500/20 focus:border-emerald-400/40 focus:outline-none text-sm transition"
             />
           </div>
 
@@ -50,7 +50,7 @@ content %}
             <select
               name="category"
               required
-              class="w-full mt-1 px-4 py-3 rounded-xl bg-slate-700 border border-slate-600 text-white focus:ring-2 focus:ring-emerald-400 outline-none text-sm"
+              class="w-full mt-1 px-4 py-3 rounded-xl bg-slate-950/80 border border-emerald-500/20 text-white focus:border-emerald-400/40 focus:outline-none text-sm transition"
             >
               <option value="" disabled selected>Select a category</option>
               <option value="medicine">Medicine</option>
@@ -74,7 +74,7 @@ content %}
               <input
                 name="area"
                 placeholder="Badda, near BRACU"
-                class="w-full mt-1 px-4 py-2.5 rounded-xl bg-slate-700 text-white border border-slate-600 focus:ring-2 focus:ring-emerald-400 outline-none text-sm"
+                class="w-full mt-1 px-4 py-2.5 rounded-xl bg-slate-950/80 text-white border border-emerald-500/20 focus:border-emerald-400/40 focus:outline-none text-sm transition"
               />
             </div>
             <div>
@@ -82,7 +82,7 @@ content %}
               <input
                 name="landmark"
                 placeholder="Near mosque / school / BRACU campus"
-                class="w-full mt-1 px-4 py-2.5 rounded-xl bg-slate-700 text-white border border-slate-600 focus:ring-2 focus:ring-emerald-400 outline-none text-sm"
+                class="w-full mt-1 px-4 py-2.5 rounded-xl bg-slate-950/80 text-white border border-emerald-500/20 focus:border-emerald-400/40 focus:outline-none text-sm transition"
               />
             </div>
           </div>
@@ -101,14 +101,14 @@ content %}
             <button
               type="button"
               onclick="useMyLocationForHelp()"
-              class="text-[11px] px-3 py-1 rounded-full border border-emerald-400/60 text-emerald-300 hover:bg-emerald-500/10"
+              class="text-[11px] px-3 py-1 rounded-full border border-emerald-400/60 text-emerald-300 hover:bg-emerald-500/10 transition"
             >
               Use my current location
             </button>
           </div>
           <div
             id="help-map"
-            class="w-full h-56 rounded-2xl border border-slate-700 overflow-hidden"
+            class="w-full h-56 rounded-2xl border border-emerald-500/20 overflow-hidden shadow-lg"
           ></div>
           <p class="text-[10px] text-slate-500 mt-1">
             Click anywhere on the map to drop a pin. You must pin a location to
@@ -124,11 +124,11 @@ content %}
               {% for level,label in [ ('low','Low'), ('normal','Normal'),
               ('high','High'), ('emergency','Emergency') ] %}
               <label
-                class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-700 border border-slate-600 cursor-pointer hover:border-emerald-400"
+                class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-950/80 border border-emerald-500/20 cursor-pointer hover:border-emerald-400 transition"
               >
                 <input type="radio" name="urgency" value="{{ level }}"
                 class="h-3 w-3" {% if level == 'normal' %}checked{% endif %}>
-                <span class="capitalize">{{ label }}</span>
+                <span class="capitalize text-slate-300">{{ label }}</span>
               </label>
               {% endfor %}
             </div>
@@ -138,7 +138,7 @@ content %}
             <label class="text-xs text-slate-300">When do you need help?</label>
             <select
               name="time_window"
-              class="w-full mt-2 px-4 py-2.5 rounded-xl bg-slate-700 text-white border border-slate-600 focus:ring-2 focus:ring-emerald-400 outline-none text-sm"
+              class="w-full mt-2 px-4 py-2.5 rounded-xl bg-slate-950/80 text-white border border-emerald-500/20 focus:border-emerald-400/40 focus:outline-none text-sm transition"
             >
               <option value="anytime_today">Anytime today</option>
               <option value="next_few_hours">Within the next few hours</option>
@@ -162,7 +162,7 @@ content %}
               >
               <select
                 name="contact_method"
-                class="w-full mt-1 px-4 py-2.5 rounded-xl bg-slate-700 text-white border border-slate-600 focus:ring-2 focus:ring-emerald-400 outline-none text-sm"
+                class="w-full mt-1 px-4 py-2.5 rounded-xl bg-slate-950/80 text-white border border-emerald-500/20 focus:border-emerald-400/40 focus:outline-none text-sm transition"
               >
                 <option value="lifeline_chat">LifeLine chat only</option>
                 <option value="phone">Phone call</option>
@@ -182,7 +182,7 @@ content %}
                 pattern="\d{7,15}"
                 maxlength="15"
                 placeholder="01XXXXXXXXX"
-                class="w-full mt-1 px-4 py-2.5 rounded-xl bg-slate-700 text-white border border-slate-600 focus:ring-2 focus:ring-emerald-400 outline-none text-sm"
+                class="w-full mt-1 px-4 py-2.5 rounded-xl bg-slate-950/80 text-white border border-emerald-500/20 focus:border-emerald-400/40 focus:outline-none text-sm transition"
               />
               <p class="text-[10px] text-slate-500 mt-1">
                 Required if you choose phone / WhatsApp / SMS.
@@ -200,7 +200,7 @@ content %}
             required
             minlength="10"
             placeholder="Example: My father is sick, I need someone to pick up BP medicine from the nearby pharmacy before 9 PM..."
-            class="w-full mt-1 px-4 py-3 rounded-xl bg-slate-700 text-white border border-slate-600 focus:ring-2 focus:ring-emerald-400 outline-none text-sm"
+            class="w-full mt-1 px-4 py-3 rounded-xl bg-slate-950/80 text-white border border-emerald-500/20 focus:border-emerald-400/40 focus:outline-none text-sm transition"
           ></textarea>
         </div>
 
@@ -214,7 +214,7 @@ content %}
               value="60"
               min="15"
               max="1440"
-              class="mt-1 w-32 px-4 py-2.5 rounded-xl bg-slate-700 text-white border border-slate-600 focus:ring-2 focus:ring-emerald-400 outline-none text-sm"
+              class="mt-1 w-32 px-4 py-2.5 rounded-xl bg-slate-950/80 text-white border border-emerald-500/20 focus:border-emerald-400/40 focus:outline-none text-sm transition"
             />
           </div>
           <p class="text-[11px] text-slate-400">
@@ -225,7 +225,7 @@ content %}
         <!-- SUBMIT -->
         <div class="pt-2">
           <button
-            class="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold px-6 py-3 rounded-xl text-sm transition"
+            class="bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-slate-950 font-semibold px-6 py-3 rounded-xl text-sm transition hover:scale-105 w-full"
           >
             Post Need
           </button>

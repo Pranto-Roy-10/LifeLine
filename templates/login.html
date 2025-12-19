@@ -1,12 +1,12 @@
 {% extends "base.html" %} {% block title %}Log in – LifeLine{% endblock %} {%
 block content %}
 
-<section class="w-full px-6 md:px-12 py-10 md:py-16 flex justify-center">
+<section class="w-full px-6 md:px-12 py-10 md:py-16 flex justify-center page-transition">
   <div
-    class="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900/70 p-6 md:p-8 shadow-xl"
+    class="w-full max-w-md rounded-3xl border border-emerald-500/20 bg-gradient-to-br from-slate-900/80 to-slate-950/90 p-6 md:p-8 shadow-2xl backdrop-filter backdrop-blur-xl card-hover"
   >
-    <h2 class="text-xl md:text-2xl font-semibold mb-2">Log in to LifeLine</h2>
-    <p class="text-xs text-slate-400 mb-6">
+    <h2 class="text-xl md:text-2xl font-bold mb-2 bg-clip-text text-transparent bg-gradient-to-r from-emerald-300 to-cyan-300">Log in to LifeLine</h2>
+    <p class="text-xs text-slate-400 mb-6 animate-fadeInUp">
       Access your neighborhood map, help requests, and kindness dashboard.
     </p>
 
@@ -28,30 +28,30 @@ block content %}
 
       <form method="post" action="{{ url_for('login') }}" class="space-y-4">
         <div>
-          <label class="block text-xs text-slate-300 mb-1">Email</label>
+          <label class="block text-xs text-slate-300 mb-2 font-medium">Email</label>
           <input
             type="email"
             name="email"
             required
-            class="w-full rounded-xl bg-slate-950 border border-slate-700 focus:border-emerald-400 focus:outline-none text-sm px-3 py-2"
+            class="w-full rounded-lg bg-slate-950/80 border border-slate-700/60 focus:border-emerald-400 focus:outline-none text-sm px-4 py-2.5 text-white placeholder-slate-500 transition duration-200"
             placeholder="you@example.com"
           />
         </div>
 
         <div>
-          <label class="block text-xs text-slate-300 mb-1">Password</label>
+          <label class="block text-xs text-slate-300 mb-2 font-medium">Password</label>
           <input
             type="password"
             name="password"
             required
-            class="w-full rounded-xl bg-slate-950 border border-slate-700 focus:border-emerald-400 focus:outline-none text-sm px-3 py-2"
+            class="w-full rounded-lg bg-slate-950/80 border border-slate-700/60 focus:border-emerald-400 focus:outline-none text-sm px-4 py-2.5 text-white placeholder-slate-500 transition duration-200"
             placeholder="••••••••"
           />
         </div>
 
         <button
           type="submit"
-          class="w-full rounded-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-sm font-semibold py-2.5 mt-2 transition"
+          class="w-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-slate-950 text-sm font-bold py-2.5 mt-3 transition duration-300 transform hover:scale-105 active:scale-95 shadow-lg hover:shadow-emerald-500/40"
         >
           Log in
         </button>
@@ -75,12 +75,12 @@ block content %}
     </div>
 
     {# SEPARATOR #}
-    <div class="flex items-center my-4">
-      <div class="flex-1 h-px bg-slate-800"></div>
-      <span class="px-3 text-[10px] uppercase tracking-widest text-slate-500">
+    <div class="flex items-center my-5">
+      <div class="flex-1 h-px bg-gradient-to-r from-slate-800 to-transparent"></div>
+      <span class="px-3 text-[10px] uppercase tracking-widest text-slate-500 font-semibold">
         or
       </span>
-      <div class="flex-1 h-px bg-slate-800"></div>
+      <div class="flex-1 h-px bg-gradient-to-l from-slate-800 to-transparent"></div>
     </div>
 
     {# ---------------- OTP LOGIN ---------------- #}
