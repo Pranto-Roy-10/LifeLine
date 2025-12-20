@@ -1050,6 +1050,10 @@ def auto_add_event_impact(event):
 
 # --------------- CHAT HELPERS ----------------
 def get_or_create_conversation(user1_id, user2_id):
+    if user1_id is None or user2_id is None:
+        return None
+    if int(user1_id) == int(user2_id):
+        return None
     a, b = sorted([int(user1_id), int(user2_id)])
     conv = Conversation.query.filter_by(user_a=a, user_b=b).first()
     if conv:
@@ -2539,6 +2543,19 @@ def api_requests_nearby():
     except Exception:
         responded_ids = set()
 
+    sos_response_counts = {}
+    try:
+        if sos_ids:
+            rows = (
+                db.session.query(SOSResponse.request_id, func.count(SOSResponse.id))
+                .filter(SOSResponse.request_id.in_(sos_ids))
+                .group_by(SOSResponse.request_id)
+                .all()
+            )
+            sos_response_counts = {int(rid): int(cnt) for (rid, cnt) in rows}
+    except Exception:
+        sos_response_counts = {}
+
     if responded_ids:
         for item in nearby:
             if (item.get("category") or "").lower() == "sos":
@@ -2547,6 +2564,11 @@ def api_requests_nearby():
         for item in nearby:
             if (item.get("category") or "").lower() == "sos":
                 item["viewer_sos_responded"] = False
+
+    for item in nearby:
+        if (item.get("category") or "").lower() == "sos":
+            item_id = int(item.get("id"))
+            item["sos_responders_count"] = int(sos_response_counts.get(item_id, 0))
 
     return jsonify({"requests": nearby})
 
@@ -3556,8 +3578,14 @@ def update_impact_from_event(event, user):
 @login_required
 def chat_with_user(other_user_id):
     user = current_user()
+    if user and int(other_user_id) == int(user.id):
+        flash("You cannot message yourself.", "error")
+        return redirect(url_for("chat_index"))
     other = User.query.get_or_404(other_user_id)
     conv = get_or_create_conversation(user.id, other.id)
+    if not conv:
+        flash("Could not open this conversation.", "error")
+        return redirect(url_for("chat_index"))
     
     # Get all conversations for sidebar
     all_convs = Conversation.query.filter(
@@ -5083,16 +5111,46 @@ online_users = set()
 sid_to_user = {}
 
 # --- REPLACED/MODIFIED BLOCK (for Step 1) ---
+def _resolve_socket_user():
+    user = current_user()
+    if user:
+        return user
+    try:
+        from flask_jwt_extended import verify_jwt_in_request
+
+        verify_jwt_in_request(optional=True)
+        uid = get_jwt_identity()
+        if uid:
+            return User.query.get(int(uid))
+    except Exception:
+        return None
+    return None
+
+
 @socketio.on("join")
-@jwt_required()
 def on_join(data):
-    user_id = int(get_jwt_identity())
+    user = _resolve_socket_user()
+    if not user:
+        return
 
-    sid_to_user[request.sid] = user_id
-    online_users.add(user_id)
+    sid_to_user[request.sid] = int(user.id)
+    online_users.add(int(user.id))
 
-    join_room(f"user_{user_id}")
-    print(f"[SOCKETIO] User {user_id} joined personal room user_{user_id}")
+    join_room(f"user_{user.id}")
+
+    conv_id = None
+    try:
+        conv_id = int((data or {}).get("conversation_id"))
+    except Exception:
+        conv_id = None
+
+    if conv_id:
+        conv = Conversation.query.get(conv_id)
+        if conv and int(user.id) in conv.participants():
+            join_room(f"chat_{conv.id}")
+            emit("joined", {"conversation_id": conv.id})
+
+    print(f"[SOCKETIO] User {user.id} joined. conv={conv_id}")
 
 
 @socketio.on("disconnect")
@@ -5135,7 +5193,7 @@ def on_emotional_ping(data=None):
 @socketio.on("leave")
 def on_leave(data):
     conv_id = data.get("conversation_id")
-    user = current_user()
+    user = _resolve_socket_user()
     if not user or not conv_id:
         return
     room = f"chat_{conv_id}"
@@ -5146,7 +5204,7 @@ def on_leave(data):
 @socketio.on("typing")
 def on_typing(data):
     conv_id = data.get("conversation_id")
-    user = current_user()
+    user = _resolve_socket_user()
     if not user or not conv_id:
         return
     room = f"chat_{conv_id}"
@@ -5156,7 +5214,7 @@ def on_typing(data):
 @socketio.on("stop_typing")
 def on_stop_typing(data):
     conv_id = data.get("conversation_id")
-    user = current_user()
+    user = _resolve_socket_user()
     if not user or not conv_id:
         return
     room = f"chat_{conv_id}"
@@ -5175,7 +5233,7 @@ def on_send_message(data):
     file_size = data.get("file_size")
     is_image = data.get("is_image", False)
     
-    user = current_user()
+    user = _resolve_socket_user()
     
     # Log file attachment info
     if file_data:
@@ -5193,6 +5251,14 @@ def on_send_message(data):
     if not conv or user.id not in conv.participants():
         print(f"[SEND_MESSAGE] Rejected: conv not found or user not participant")
         return
+
+    # Hard block self-chat message sends, even if a legacy self-conversation exists.
+    try:
+        if int(conv.user_a) == int(conv.user_b) == int(user.id):
+            print("[SEND_MESSAGE] Rejected: self-conversation")
+            return
+    except Exception:
+        pass
 
     msg = ChatMessage(conversation_id=conv.id, sender_id=user.id, text=text or "", language=lang)
     db.session.add(msg)

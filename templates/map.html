@@ -26,7 +26,11 @@ block content %}
         title="Activate Human Availability Radar"
       >
         <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+          <path
+            fill-rule="evenodd"
+            d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+            clip-rule="evenodd"
+          />
         </svg>
         Availability Radar
       </button>
@@ -278,6 +282,10 @@ block content %}
   function buildRequestInfoHtml(r) {
     const isSos = (r.category || "").toLowerCase() === "sos";
     const viewerResponded = !!r.viewer_sos_responded;
+    const sosRespondersCount = Number(r.sos_responders_count || 0);
+    const hasSosResponders = isSos && sosRespondersCount > 0;
+
+    const isLoggedInOwner = !!CURRENT_USER_ID && r.user_id === CURRENT_USER_ID;
     const canRespond =
       isSos &&
       IS_TRUSTED_HELPER &&
@@ -299,6 +307,8 @@ block content %}
         (IS_SOS_CALLER && INITIAL_FOCUS_ID && r.id === INITIAL_FOCUS_ID) ||
         (GUEST_SOS_REQUEST_ID && r.id === GUEST_SOS_REQUEST_ID)
       );
+
+    const canGoToReview = canResolveAsCaller && isLoggedInOwner && hasSosResponders;
 
     return `
       <div style="max-width: 240px;">
@@ -333,13 +343,20 @@ block content %}
         }
         ${respondedBadge}
         ${
-          canResolveAsCaller
-            ? `<button onclick="resolveSOS(${r.id})" style="margin-top: 8px; width: 100%; background: #22c55e; color: #0b172a; border: 0; padding: 8px 10px; border-radius: 10px; font-weight: 800; font-size: 12px; cursor: pointer;">Mark Resolved</button>`
-            : ""
+          canGoToReview
+            ? `<button onclick="goToSosReview(${r.id})" style="margin-top: 8px; width: 100%; background: #22c55e; color: #0b172a; border: 0; padding: 8px 10px; border-radius: 10px; font-weight: 800; font-size: 12px; cursor: pointer;">Complete & Review</button>`
+            : canResolveAsCaller
+              ? `<button onclick="resolveSOS(${r.id})" style="margin-top: 8px; width: 100%; background: #22c55e; color: #0b172a; border: 0; padding: 8px 10px; border-radius: 10px; font-weight: 800; font-size: 12px; cursor: pointer;">Mark Resolved</button>`
+              : ""
         }
       </div>
     `;
   }
+
+  function goToSosReview(requestId) {
+    window.location.href = `/dashboard#review-request-${requestId}`;
+  }
+  window.goToSosReview = goToSosReview;
 
   async function resolveSOS(requestId) {
     if (!confirm("Mark this SOS as resolved?")) return;
@@ -759,7 +776,7 @@ block content %}
       const posLat = typeof position.lat === 'function' ? position.lat() : position.lat;
       const posLng = typeof position.lng === 'function' ? position.lng() : position.lng;
         console.log("Activity ping with lat:", posLat, "lng:", posLng);
-      
+
       const response = await fetch("/api/activity/ping", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -924,9 +941,9 @@ block content %}
       // Handle both {lat, lng} objects and Google Maps LatLng objects
       const posLat = typeof position.lat === 'function' ? position.lat() : position.lat;
       const posLng = typeof position.lng === 'function' ? position.lng() : position.lng;
-      
+
       console.log("Heatmap request with lat:", posLat, "lng:", posLng);
-      
+
       const resp = await fetch("/api/radar/heatmap", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1063,7 +1080,7 @@ block content %}
         const radiusLbl = document.getElementById("radius-label");
         if (radiusLbl) radiusLbl.textContent = `${currentRadiusKm} km`;
       console.log("Turning radar ON");
-      
+
       // Use map center as fallback if geolocation not available
       const rawPos = userPosition || map.getCenter();
       console.log("Radar raw position:", rawPos);
