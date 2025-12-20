@@ -18,6 +18,22 @@ body {
   -webkit-text-size-adjust: 100%;
 }
 
+:root {
+  --nav-offset: 44px; /* tightened further */
+}
+
+/* Ensure anchor navigation doesn't hide headings behind the fixed navbar */
+h1[id],
+h2[id],
+h3[id],
+section[id] {
+  scroll-margin-top: calc(var(--nav-offset) - 6px);
+}
+
+@media (max-width: 640px) {
+  :root { --nav-offset: 40px; }
+}
+
 *,
 *::before,
 *::after {
@@ -48,9 +64,11 @@ pre {
 
 /* ===== NAVBAR (MODERN) ===== */
 .top-nav {
-  position: sticky;
+  position: fixed;
   top: 0;
-  z-index: 60;
+  left: 0;
+  width: 100%;
+  z-index: 1000;
   background: linear-gradient(90deg, #050b18 0%, #040f1f 40%, #040c19 100%);
   border-bottom: 1px solid rgba(99, 102, 241, 0.1);
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
@@ -66,6 +84,17 @@ pre {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+}
+
+/* Reserve space for the fixed navbar so page content isn't covered */
+.page-shell {
+  padding-top: 72px; /* matches nav height (approx). Adjust if you change nav padding/logo size */
+}
+
+@media (max-width: 640px) {
+  .page-shell {
+    padding-top: 64px;
+  }
 }
 
 .nav-brand {
@@ -108,6 +137,13 @@ pre {
   font-size: 11px;
   color: #94a3b8;
   margin: 0;
+}
+
+/* Slightly larger site-name badge (improves visibility for LIFELINE · NEIGHBORHOOD NETWORK) */
+p[class*="text-[11px]"][class*="text-emerald-300"] {
+  font-size: 16px !important;
+  font-weight: 800 !important;
+  line-height: 1;
 }
 
 .nav-links {
@@ -529,7 +565,8 @@ pre {
 .btn-primary,
 .btn-secondary,
 .btn-ghost,
-.btn-map {
+.btn-map,
+.btn-sheen {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -585,6 +622,97 @@ pre {
 .btn-map:hover {
   background: rgba(148, 163, 184, 0.2);
   border-color: rgba(148, 163, 184, 0.55);
+}
+
+/* Enhanced "approach" interaction for action cards using btn-sheen */
+.btn-sheen {
+  will-change: transform, box-shadow, opacity;
+  transform-origin: center center;
+  backface-visibility: hidden;
+}
+
+.btn-sheen::after {
+  /* subtle soft border/glow that appears on hover */
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: 0 6px 18px rgba(2,6,23,0.45);
+  opacity: 0;
+  transform: scale(0.98);
+  transition: opacity 260ms cubic-bezier(0.2,0.9,0.2,1), transform 260ms cubic-bezier(0.2,0.9,0.2,1);
+}
+
+.btn-sheen:hover {
+  transform: translateY(-6px) scale(1.02);
+  box-shadow: 0 28px 48px rgba(3,8,20,0.6), 0 6px 20px rgba(14,165,233,0.06);
+}
+
+.btn-sheen:hover::after {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.btn-sheen p {
+  transition: color 220ms ease, transform 220ms ease;
+}
+
+/* Card text hierarchy: small colored top-line, larger main heading */
+.btn-sheen p:first-child {
+  font-size: 12px; /* smaller than the main heading */
+  line-height: 1.05;
+  font-weight: 700;
+  margin-bottom: 6px;
+  opacity: 0.95;
+  letter-spacing: 0.01em;
+}
+
+.btn-sheen p:nth-child(2) {
+  font-size: 15px; /* slightly larger for the main title */
+  line-height: 1.15;
+  margin-bottom: 8px;
+}
+
+/* Stronger rules to ensure visual hierarchy and preserve accent colors */
+.btn-sheen > p.text-xs {
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  opacity: 0.95 !important;
+}
+
+.btn-sheen > p.font-semibold:not(.text-xs) {
+  font-size: 16px !important;
+  line-height: 1.12 !important;
+  color: #f8fafc !important; /* make sure the main title is prominent */
+}
+
+.btn-sheen:hover p:first-child {
+  transform: translateY(-2px);
+}
+
+/* Slight accent animation for the small status line */
+.btn-sheen .micro-emoji {
+  display: inline-block;
+  transition: transform 320ms cubic-bezier(0.2,0.9,0.2,1), opacity 220ms ease;
+}
+
+.btn-sheen:hover .micro-emoji {
+  transform: translateY(-3px) rotate(-6deg) scale(1.06);
+  opacity: 0.98;
+}
+
+/* Respect user's reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .btn-sheen,
+  .btn-sheen::before,
+  .btn-sheen::after,
+  .btn-sheen p,
+  .btn-sheen .micro-emoji {
+    transition: none !important;
+    animation: none !important;
+    transform: none !important;
+  }
 }
 
 .live-panel {
@@ -2306,7 +2434,8 @@ html {
 .btn-primary,
 .btn-secondary,
 .btn-ghost,
-.btn-map {
+.btn-map,
+.btn-sheen {
   position: relative;
   overflow: hidden;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -2315,7 +2444,8 @@ html {
 .btn-primary::before,
 .btn-secondary::before,
 .btn-ghost::before,
-.btn-map::before {
+.btn-map::before,
+.btn-sheen::before {
   content: '';
   position: absolute;
   inset: 0;
@@ -2327,14 +2457,16 @@ html {
 .btn-primary:hover::before,
 .btn-secondary:hover::before,
 .btn-ghost:hover::before,
-.btn-map:hover::before {
+.btn-map:hover::before,
+.btn-sheen:hover::before {
   transform: translateX(100%);
 }
 
 .btn-primary:active,
 .btn-secondary:active,
 .btn-ghost:active,
-.btn-map:active {
+.btn-map:active,
+.btn-sheen:active {
   transform: translateY(0) scale(0.98);
   transition-duration: 0.1s;
 }
@@ -2343,7 +2475,8 @@ html {
 .btn-primary:focus-visible,
 .btn-secondary:focus-visible,
 .btn-ghost:focus-visible,
-.btn-map:focus-visible {
+.btn-map:focus-visible,
+.btn-sheen:focus-visible {
   outline: 2px solid rgba(94, 234, 212, 0.5);
   outline-offset: 2px;
 }
@@ -2415,32 +2548,7 @@ html {
   width: 100%;
 }
 
-/* Floating action button style */
-.fab {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #1fe27a, #11c163);
-  box-shadow: 0 8px 24px rgba(31, 226, 122, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  z-index: 1000;
-}
-
-.fab:hover {
-  transform: scale(1.1);
-  box-shadow: 0 12px 32px rgba(31, 226, 122, 0.5);
-}
-
-.fab:active {
-  transform: scale(0.95);
-}
+/* Floating action button removed */
 
 /* Page transition effects */
 .page-transition {
@@ -2456,6 +2564,52 @@ html {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* Common entrance animations used across templates */
+.animate-fadeIn {
+  animation: fadeIn 0.6s ease-out forwards;
+  opacity: 0;
+}
+
+.animate-fadeInUp {
+  animation: fadeInUp 0.7s cubic-bezier(0.2,0.9,0.2,1) forwards;
+  opacity: 0;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Gentle floating accent for hero imagery or small ornaments */
+@keyframes floatY {
+  0% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+  100% { transform: translateY(0); }
+}
+
+.float-slow { animation: floatY 6s ease-in-out infinite; }
+
+/* Animated gradient text for hero headings */
+.gradient-animate {
+  background: linear-gradient(90deg, #e6fdf2 0%, #cfeffd 30%, #f3e7ff 60%, #fff6e6 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  background-size: 200% 100%;
+  animation: gradientShift 6s linear infinite;
+}
+
+@keyframes gradientShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
 }
 
 /* Enhanced form inputs */
@@ -2509,6 +2663,74 @@ html {
     padding: 10px 16px;
     font-size: 13px;
   }
+}
+
+/* Action grid - make action cards larger and fill more of the viewport */
+.action-grid {
+  /* Leave some space for header/footer; adjust as needed */
+  min-height: calc(100vh - 220px);
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+  align-items: stretch;
+}
+
+.action-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.action-grid .btn-sheen {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  min-height: 180px;
+  padding: 28px 32px;
+  width: 100%;
+  transition: transform 280ms cubic-bezier(0.2,0.9,0.2,1), box-shadow 260ms ease;
+}
+
+.action-grid .btn-sheen p.text-xs {
+  font-size: 13px;
+}
+
+.action-grid .btn-sheen p.font-semibold {
+  font-size: 1.125rem; /* ~18px */
+  line-height: 1.3;
+}
+
+.action-grid .btn-sheen p.text-[11px] {
+  font-size: 1rem; /* 16px for body copy */
+  line-height: 1.6; /* more breathing room */
+}
+
+.action-grid .btn-sheen p {
+  /* ensure comfortable spacing for all paragraphs inside the card */
+  margin-top: 0.35rem;
+  margin-bottom: 0.35rem;
+  color: #cbd5e1;
+}
+
+.action-grid .btn-sheen {
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.action-grid .btn-sheen:hover {
+  transform: translateY(-10px) scale(1.02);
+  box-shadow: 0 40px 70px rgba(2,6,23,0.6), 0 10px 30px rgba(59,130,246,0.06);
+}
+
+@media (max-width: 1024px) {
+  .action-grid { grid-template-columns: repeat(2, 1fr); min-height: auto; }
+  .action-grid .btn-sheen { min-height: 160px; }
+}
+
+@media (max-width: 640px) {
+  .action-grid { grid-template-columns: 1fr; }
+  .action-grid .btn-sheen { min-height: 140px; padding: 18px; }
 }
 
 /* Accessibility improvements */
