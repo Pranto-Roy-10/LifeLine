@@ -50,7 +50,8 @@ from flask_socketio import SocketIO, emit, join_room, leave_room
 # Initialize Firebase Admin SDK ONCE
 try:
     if not firebase_admin._apps:
-        cred = credentials.Certificate("firebase-service-account.json")
+        firebase_cred_path = os.getenv("FIREBASE_SERVICE_ACCOUNT_PATH", "firebase-service-account.json")
+        cred = credentials.Certificate(firebase_cred_path)
         firebase_admin.initialize_app(cred)
         print("[FCM] Firebase Admin initialized.")
     else:
@@ -90,17 +91,48 @@ CORS(app, supports_credentials=True)
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-change-me")
 app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "dev-jwt-secret")
 
-# SQLite for now (file lifeline.db in project root).
-# app.config["SQLALCHEMY_DATABASE_URI"] = "postgresql+psycopg2://postgres:error101@localhost:5432/lifeline_db"
-import os
-
+# Database
+# - Preferred (Render/Postgres/etc): set DATABASE_URL
+# - Fallback: SQLite at SQLITE_PATH (use a Render disk mount like /var/data)
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-DB_PATH = os.path.join(BASE_DIR, "lifeline.db")   # keep it in project root
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + DB_PATH
+
+database_url = os.getenv("DATABASE_URL", "").strip()
+if database_url:
+    # Render and some providers use the legacy `postgres://` scheme.
+    if database_url.startswith("postgres://"):
+        database_url = database_url.replace("postgres://", "postgresql://", 1)
+    app.config["SQLALCHEMY_DATABASE_URI"] = database_url
+else:
+    sqlite_path = os.getenv("SQLITE_PATH", os.path.join(BASE_DIR, "lifeline.db")).strip()
+    sqlite_dir = os.path.dirname(sqlite_path)
+    if sqlite_dir:
+        os.makedirs(sqlite_dir, exist_ok=True)
+    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + sqlite_path
 
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-app.config["UPLOAD_FOLDER"] = os.path.join("static", "uploads", "profile_photos")
+app.config["UPLOAD_FOLDER"] = os.getenv(
+    "UPLOAD_FOLDER",
+    os.path.join("static", "uploads", "profile_photos")
+)
 app.config["ALLOWED_IMAGE_EXTENSIONS"] = {"png", "jpg", "jpeg", "gif"}
+
+# Persist uploads on Render by symlinking the public static path to a mounted disk.
+# This preserves existing URLs like /static/uploads/profile_photos/<file>.
+uploads_disk_path = os.getenv("UPLOADS_DISK_PATH", "").strip() or "/var/data/profile_photos"
+public_upload_path = os.path.join("static", "uploads", "profile_photos")
+try:
+    if os.name == "posix" and uploads_disk_path.startswith("/"):
+        os.makedirs(uploads_disk_path, exist_ok=True)
+        os.makedirs(os.path.dirname(public_upload_path), exist_ok=True)
+
+        if not os.path.exists(public_upload_path):
+            os.symlink(uploads_disk_path, public_upload_path)
+
+        # Ensure we write into the public path (which is a symlink on Render).
+        app.config["UPLOAD_FOLDER"] = public_upload_path
+except Exception:
+    pass
+
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
 
@@ -144,11 +176,8 @@ app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
 
 mail = Mail(app)
 
-# Your Google Maps API key
-GOOGLE_MAPS_API_KEY = os.getenv(
-    "GOOGLE_MAPS_API_KEY",
-    "AIzaSyAVtLNl7YZaPZeSnuA_5Gxm8VdtFXxreYo"  
-)
+# Your Google Maps API key (set in Render env vars)
+GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "").strip()
 
 EMERGENCY_GUEST_EMAIL = "guest_emergency@lifeline.local"
 

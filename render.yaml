@@ -1,0 +1,48 @@
+services:
+  - type: web
+    name: lifeline
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn -k eventlet -w 1 -b 0.0.0.0:$PORT app:app
+    healthCheckPath: /
+    envVars:
+      - key: FLASK_DEBUG
+        value: "0"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      # SQLite persistence on Render: mount a disk and point SQLITE_PATH to it.
+      - key: SQLITE_PATH
+        value: "/var/data/lifeline.db"
+      # Neon/Postgres: set DATABASE_URL in the Render dashboard (overrides SQLite)
+      - key: DATABASE_URL
+        sync: false
+      # Persist profile photo uploads on the same disk
+      - key: UPLOADS_DISK_PATH
+        value: "/var/data/profile_photos"
+      # Optional / feature-specific env vars
+      - key: DEFAULT_LAT
+        value: "23.8103"
+      - key: DEFAULT_LNG
+        value: "90.4125"
+      - key: SUGGESTION_RADIUS_KM
+        value: "10"
+      # Set these in the Render dashboard as secrets (do NOT commit values)
+      - key: OPENWEATHER_API_KEY
+        sync: false
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
+      - key: EMAIL_ADDRESS
+        sync: false
+      - key: EMAIL_PASSWORD
+        sync: false
+      - key: FIREBASE_SERVICE_ACCOUNT_PATH
+        sync: false
+    disk:
+      name: lifeline-data
+      mountPath: /var/data
+      sizeGB: 1
