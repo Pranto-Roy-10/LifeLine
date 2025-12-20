@@ -1,0 +1,427 @@
+{
+  "console": [
+    {
+      "type": "console",
+      "text": "Failed to load resource: the server responded with a status of 404 (NOT FOUND)",
+      "location": {
+        "url": "http://127.0.0.1:5000/static/uploads/profile_photos/default.png",
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    },
+    {
+      "type": "console",
+      "text": "cdn.tailwindcss.com should not be used in production. To use Tailwind CSS in production, install it as a PostCSS plugin or use the Tailwind CLI: https://tailwindcss.com/docs/installation",
+      "location": {
+        "url": "https://cdn.tailwindcss.com/",
+        "lineNumber": 63,
+        "columnNumber": 1710
+      }
+    },
+    {
+      "type": "console",
+      "text": "[SmartSuggestions] init called",
+      "location": {
+        "url": "http://127.0.0.1:5000/suggestions",
+        "lineNumber": 241,
+        "columnNumber": 20
+      }
+    },
+    {
+      "type": "console",
+      "text": "[FCM] DOMContentLoaded, calling initFCM()",
+      "location": {
+        "url": "http://127.0.0.1:5000/static/js/fcm.js",
+        "lineNumber": 87,
+        "columnNumber": 10
+      }
+    },
+    {
+      "type": "console",
+      "text": "[FCM] initFCM called",
+      "location": {
+        "url": "http://127.0.0.1:5000/static/js/fcm.js",
+        "lineNumber": 18,
+        "columnNumber": 10
+      }
+    },
+    {
+      "type": "console",
+      "text": "[FCM] Firebase App initialized.",
+      "location": {
+        "url": "http://127.0.0.1:5000/static/js/fcm.js",
+        "lineNumber": 24,
+        "columnNumber": 14
+      }
+    },
+    {
+      "type": "console",
+      "text": "[SmartSuggestions] Geolocation denied or failed: User denied Geolocation",
+      "location": {
+        "url": "http://127.0.0.1:5000/suggestions",
+        "lineNumber": 252,
+        "columnNumber": 32
+      }
+    },
+    {
+      "type": "console",
+      "text": "[SmartSuggestions] No coordinates - server will use defaults",
+      "location": {
+        "url": "http://127.0.0.1:5000/suggestions",
+        "lineNumber": 293,
+        "columnNumber": 24
+      }
+    },
+    {
+      "type": "console",
+      "text": "Failed to load resource: the server responded with a status of 400 (BAD REQUEST)",
+      "location": {
+        "url": "http://127.0.0.1:5000/api/suggestion-insights",
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    },
+    {
+      "type": "console",
+      "text": "Error loading user insights: Error: HTTP 400: {\"error\":\"User location required\",\"success\":false}\n\n    at http://127.0.0.1:5000/suggestions:673:23",
+      "location": {
+        "url": "http://127.0.0.1:5000/suggestions",
+        "lineNumber": 685,
+        "columnNumber": 20
+      }
+    },
+    {
+      "type": "console",
+      "text": "[FCM] Notification permission: default",
+      "location": {
+        "url": "http://127.0.0.1:5000/static/js/fcm.js",
+        "lineNumber": 33,
+        "columnNumber": 10
+      }
+    },
+    {
+      "type": "console",
+      "text": "[FCM] Permission not granted, aborting FCM",
+      "location": {
+        "url": "http://127.0.0.1:5000/static/js/fcm.js",
+        "lineNumber": 35,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "console",
+      "text": "[SmartSuggestions] API Response status: 200",
+      "location": {
+        "url": "http://127.0.0.1:5000/suggestions",
+        "lineNumber": 305,
+        "columnNumber": 24
+      }
+    },
+    {
+      "type": "console",
+      "text": "[SmartSuggestions] Full API response: {\n  \"generated_at\": \"2025-12-20T07:33:56.265938\",\n  \"location_source\": \"fallback_default\",\n  \"location_used\": {\n    \"lat\": 23.8103,\n    \"lng\": 90.4125\n  },\n  \"success\": true,\n  \"suggestions\": [\n    {\n      \"category\": \"food\",\n      \"description\": \"no rice at home\",\n      \"distance_km\": 6.04,\n      \"explanation\": \"High priority. Expiring soon. Trending need.\",\n      \"id\": 3,\n      \"relevance_score\": 46.99,\n      \"request_full\": {\n        \"area\": \"uttara\",\n        \"category\": \"food\",\n        \"contact_info\": \"01537320838\",\n        \"contact_method\": \"lifeline_chat\",\n        \"created_at\": 1766193751,\n        \"description\": \"no rice at home\",\n        \"distance_km\": 6.04,\n        \"expires_at\": 1766197351,\n        \"frequency\": null,\n        \"id\": 3,\n        \"image_url\": null,\n        \"is_offer\": false,\n        \"landmark\": \"Uttara metro\",\n        \"lat\": 23.862045,\n        \"lng\": 90.394593,\n        \"radius_pref\": null,\n        \"seconds_remaining\": 2915,\n        \"status\": \"open\",\n        \"time_window\": \"this_week\",\n        \"title\": \"Need Some Rice\",\n        \"urgency\": \"high\",\n        \"user_id\": 2,\n        \"user_name\": \"muaz ashraf\"\n      },\n      \"title\": \"Need Some Rice\",\n      \"urgency\": \"high\"\n    },\n    {\n      \"category\": \"ride\",\n      \"description\": \"Can you drop me off?\",\n      \"distance_km\": 5.99,\n      \"explanation\": \"Expiring soon. Trending need.\",\n      \"id\": 4,\n      \"relevance_score\": 41.99,\n      \"request_full\": {\n        \"area\": \"uttara\",\n        \"category\": \"ride\",\n        \"contact_info\": \"01537320838\",\n        \"contact_method\": \"lifeline_chat\",\n        \"created_at\": 1766193974,\n        \"description\": \"Can you drop me off?\",\n        \"distance_km\": 5.99,\n        \"expires_at\": 1766197574,\n        \"frequency\": null,\n        \"id\": 4,\n        \"image_url\": null,\n        \"is_offer\": false,\n        \"landmark\": \"ruap\",\n        \"lat\": 23.861437,\n        \"lng\": 90.394046,\n        \"radius_pref\": null,\n        \"seconds_remaining\": 3138,\n        \"status\": \"open\",\n        \"time_window\": \"this_week\",\n        \"title\": \"Ride to Bracu\",\n        \"urgency\": \"normal\",\n        \"user_id\": 1,\n        \"user_name\": \"Super Admin\"\n      },\n      \"title\": \"Ride to Bracu\",\n      \"urgency\": \"normal\"\n    }\n  ]\n}",
+      "location": {
+        "url": "http://127.0.0.1:5000/suggestions",
+        "lineNumber": 310,
+        "columnNumber": 24
+      }
+    },
+    {
+      "type": "console",
+      "text": "[SmartSuggestions] Extracted 2 AI suggestions",
+      "location": {
+        "url": "http://127.0.0.1:5000/suggestions",
+        "lineNumber": 312,
+        "columnNumber": 24
+      }
+    },
+    {
+      "type": "console",
+      "text": "[SmartSuggestions] displaySuggestions called with 2 items",
+      "location": {
+        "url": "http://127.0.0.1:5000/suggestions",
+        "lineNumber": 352,
+        "columnNumber": 20
+      }
+    },
+    {
+      "type": "console",
+      "text": "[SmartSuggestions] Suggestions array: [\n  {\n    \"category\": \"food\",\n    \"description\": \"no rice at home\",\n    \"distance_km\": 6.04,\n    \"explanation\": \"High priority. Expiring soon. Trending need.\",\n    \"id\": 3,\n    \"relevance_score\": 46.99,\n    \"request_full\": {\n      \"area\": \"uttara\",\n      \"category\": \"food\",\n      \"contact_info\": \"01537320838\",\n      \"contact_method\": \"lifeline_chat\",\n      \"created_at\": 1766193751,\n      \"description\": \"no rice at home\",\n      \"distance_km\": 6.04,\n      \"expires_at\": 1766197351,\n      \"frequency\": null,\n      \"id\": 3,\n      \"image_url\": null,\n      \"is_offer\": false,\n      \"landmark\": \"Uttara metro\",\n      \"lat\": 23.862045,\n      \"lng\": 90.394593,\n      \"radius_pref\": null,\n      \"seconds_remaining\": 2915,\n      \"status\": \"open\",\n      \"time_window\": \"this_week\",\n      \"title\": \"Need Some Rice\",\n      \"urgency\": \"high\",\n      \"user_id\": 2,\n      \"user_name\": \"muaz ashraf\"\n    },\n    \"title\": \"Need Some Rice\",\n    \"urgency\": \"high\"\n  },\n  {\n    \"category\": \"ride\",\n    \"description\": \"Can you drop me off?\",\n    \"distance_km\": 5.99,\n    \"explanation\": \"Expiring soon. Trending need.\",\n    \"id\": 4,\n    \"relevance_score\": 41.99,\n    \"request_full\": {\n      \"area\": \"uttara\",\n      \"category\": \"ride\",\n      \"contact_info\": \"01537320838\",\n      \"contact_method\": \"lifeline_chat\",\n      \"created_at\": 1766193974,\n      \"description\": \"Can you drop me off?\",\n      \"distance_km\": 5.99,\n      \"expires_at\": 1766197574,\n      \"frequency\": null,\n      \"id\": 4,\n      \"image_url\": null,\n      \"is_offer\": false,\n      \"landmark\": \"ruap\",\n      \"lat\": 23.861437,\n      \"lng\": 90.394046,\n      \"radius_pref\": null,\n      \"seconds_remaining\": 3138,\n      \"status\": \"open\",\n      \"time_window\": \"this_week\",\n      \"title\": \"Ride to Bracu\",\n      \"urgency\": \"normal\",\n      \"user_id\": 1,\n      \"user_name\": \"Super Admin\"\n    },\n    \"title\": \"Ride to Bracu\",\n    \"urgency\": \"normal\"\n  }\n]",
+      "location": {
+        "url": "http://127.0.0.1:5000/suggestions",
+        "lineNumber": 353,
+        "columnNumber": 20
+      }
+    },
+    {
+      "type": "console",
+      "text": "[SmartSuggestions] Rendering 2 AI suggestion cards",
+      "location": {
+        "url": "http://127.0.0.1:5000/suggestions",
+        "lineNumber": 375,
+        "columnNumber": 20
+      }
+    },
+    {
+      "type": "console",
+      "text": "[SmartSuggestions] Creating card 1 for: Need Some Rice",
+      "location": {
+        "url": "http://127.0.0.1:5000/suggestions",
+        "lineNumber": 380,
+        "columnNumber": 24
+      }
+    },
+    {
+      "type": "console",
+      "text": "[SmartSuggestions] Card details: {title: Need Some Rice, explanation: High priority. Expiring soon. Trending need., score: 46.99, urgency: high}",
+      "location": {
+        "url": "http://127.0.0.1:5000/suggestions",
+        "lineNumber": 394,
+        "columnNumber": 24
+      }
+    },
+    {
+      "type": "console",
+      "text": "[SmartSuggestions] Card created successfully",
+      "location": {
+        "url": "http://127.0.0.1:5000/suggestions",
+        "lineNumber": 476,
+        "columnNumber": 24
+      }
+    },
+    {
+      "type": "console",
+      "text": "[SmartSuggestions] Creating card 2 for: Ride to Bracu",
+      "location": {
+        "url": "http://127.0.0.1:5000/suggestions",
+        "lineNumber": 380,
+        "columnNumber": 24
+      }
+    },
+    {
+      "type": "console",
+      "text": "[SmartSuggestions] Card details: {title: Ride to Bracu, explanation: Expiring soon. Trending need., score: 41.99, urgency: normal}",
+      "location": {
+        "url": "http://127.0.0.1:5000/suggestions",
+        "lineNumber": 394,
+        "columnNumber": 24
+      }
+    },
+    {
+      "type": "console",
+      "text": "[SmartSuggestions] Card created successfully",
+      "location": {
+        "url": "http://127.0.0.1:5000/suggestions",
+        "lineNumber": 476,
+        "columnNumber": 24
+      }
+    },
+    {
+      "type": "console",
+      "text": "[SmartSuggestions] Refresh clicked",
+      "location": {
+        "url": "http://127.0.0.1:5000/suggestions",
+        "lineNumber": 264,
+        "columnNumber": 28
+      }
+    },
+    {
+      "type": "console",
+      "text": "[SmartSuggestions] No coordinates - server will use defaults",
+      "location": {
+        "url": "http://127.0.0.1:5000/suggestions",
+        "lineNumber": 293,
+        "columnNumber": 24
+      }
+    },
+    {
+      "type": "console",
+      "text": "[SmartSuggestions] API Response status: 200",
+      "location": {
+        "url": "http://127.0.0.1:5000/suggestions",
+        "lineNumber": 305,
+        "columnNumber": 24
+      }
+    },
+    {
+      "type": "console",
+      "text": "[SmartSuggestions] Full API response: {\n  \"generated_at\": \"2025-12-20T07:33:57.436806\",\n  \"location_source\": \"fallback_default\",\n  \"location_used\": {\n    \"lat\": 23.8103,\n    \"lng\": 90.4125\n  },\n  \"success\": true,\n  \"suggestions\": [\n    {\n      \"category\": \"food\",\n      \"description\": \"no rice at home\",\n      \"distance_km\": 6.04,\n      \"explanation\": \"High priority. Expiring soon. Trending need.\",\n      \"id\": 3,\n      \"relevance_score\": 46.99,\n      \"request_full\": {\n        \"area\": \"uttara\",\n        \"category\": \"food\",\n        \"contact_info\": \"01537320838\",\n        \"contact_method\": \"lifeline_chat\",\n        \"created_at\": 1766193751,\n        \"description\": \"no rice at home\",\n        \"distance_km\": 6.04,\n        \"expires_at\": 1766197351,\n        \"frequency\": null,\n        \"id\": 3,\n        \"image_url\": null,\n        \"is_offer\": false,\n        \"landmark\": \"Uttara metro\",\n        \"lat\": 23.862045,\n        \"lng\": 90.394593,\n        \"radius_pref\": null,\n        \"seconds_remaining\": 2914,\n        \"status\": \"open\",\n        \"time_window\": \"this_week\",\n        \"title\": \"Need Some Rice\",\n        \"urgency\": \"high\",\n        \"user_id\": 2,\n        \"user_name\": \"muaz ashraf\"\n      },\n      \"title\": \"Need Some Rice\",\n      \"urgency\": \"high\"\n    },\n    {\n      \"category\": \"ride\",\n      \"description\": \"Can you drop me off?\",\n      \"distance_km\": 5.99,\n      \"explanation\": \"Expiring soon. Trending need.\",\n      \"id\": 4,\n      \"relevance_score\": 41.99,\n      \"request_full\": {\n        \"area\": \"uttara\",\n        \"category\": \"ride\",\n        \"contact_info\": \"01537320838\",\n        \"contact_method\": \"lifeline_chat\",\n        \"created_at\": 1766193974,\n        \"description\": \"Can you drop me off?\",\n        \"distance_km\": 5.99,\n        \"expires_at\": 1766197574,\n        \"frequency\": null,\n        \"id\": 4,\n        \"image_url\": null,\n        \"is_offer\": false,\n        \"landmark\": \"ruap\",\n        \"lat\": 23.861437,\n        \"lng\": 90.394046,\n        \"radius_pref\": null,\n        \"seconds_remaining\": 3136,\n        \"status\": \"open\",\n        \"time_window\": \"this_week\",\n        \"title\": \"Ride to Bracu\",\n        \"urgency\": \"normal\",\n        \"user_id\": 1,\n        \"user_name\": \"Super Admin\"\n      },\n      \"title\": \"Ride to Bracu\",\n      \"urgency\": \"normal\"\n    }\n  ]\n}",
+      "location": {
+        "url": "http://127.0.0.1:5000/suggestions",
+        "lineNumber": 310,
+        "columnNumber": 24
+      }
+    },
+    {
+      "type": "console",
+      "text": "[SmartSuggestions] Extracted 2 AI suggestions",
+      "location": {
+        "url": "http://127.0.0.1:5000/suggestions",
+        "lineNumber": 312,
+        "columnNumber": 24
+      }
+    },
+    {
+      "type": "console",
+      "text": "[SmartSuggestions] displaySuggestions called with 2 items",
+      "location": {
+        "url": "http://127.0.0.1:5000/suggestions",
+        "lineNumber": 352,
+        "columnNumber": 20
+      }
+    },
+    {
+      "type": "console",
+      "text": "[SmartSuggestions] Suggestions array: [\n  {\n    \"category\": \"food\",\n    \"description\": \"no rice at home\",\n    \"distance_km\": 6.04,\n    \"explanation\": \"High priority. Expiring soon. Trending need.\",\n    \"id\": 3,\n    \"relevance_score\": 46.99,\n    \"request_full\": {\n      \"area\": \"uttara\",\n      \"category\": \"food\",\n      \"contact_info\": \"01537320838\",\n      \"contact_method\": \"lifeline_chat\",\n      \"created_at\": 1766193751,\n      \"description\": \"no rice at home\",\n      \"distance_km\": 6.04,\n      \"expires_at\": 1766197351,\n      \"frequency\": null,\n      \"id\": 3,\n      \"image_url\": null,\n      \"is_offer\": false,\n      \"landmark\": \"Uttara metro\",\n      \"lat\": 23.862045,\n      \"lng\": 90.394593,\n      \"radius_pref\": null,\n      \"seconds_remaining\": 2914,\n      \"status\": \"open\",\n      \"time_window\": \"this_week\",\n      \"title\": \"Need Some Rice\",\n      \"urgency\": \"high\",\n      \"user_id\": 2,\n      \"user_name\": \"muaz ashraf\"\n    },\n    \"title\": \"Need Some Rice\",\n    \"urgency\": \"high\"\n  },\n  {\n    \"category\": \"ride\",\n    \"description\": \"Can you drop me off?\",\n    \"distance_km\": 5.99,\n    \"explanation\": \"Expiring soon. Trending need.\",\n    \"id\": 4,\n    \"relevance_score\": 41.99,\n    \"request_full\": {\n      \"area\": \"uttara\",\n      \"category\": \"ride\",\n      \"contact_info\": \"01537320838\",\n      \"contact_method\": \"lifeline_chat\",\n      \"created_at\": 1766193974,\n      \"description\": \"Can you drop me off?\",\n      \"distance_km\": 5.99,\n      \"expires_at\": 1766197574,\n      \"frequency\": null,\n      \"id\": 4,\n      \"image_url\": null,\n      \"is_offer\": false,\n      \"landmark\": \"ruap\",\n      \"lat\": 23.861437,\n      \"lng\": 90.394046,\n      \"radius_pref\": null,\n      \"seconds_remaining\": 3136,\n      \"status\": \"open\",\n      \"time_window\": \"this_week\",\n      \"title\": \"Ride to Bracu\",\n      \"urgency\": \"normal\",\n      \"user_id\": 1,\n      \"user_name\": \"Super Admin\"\n    },\n    \"title\": \"Ride to Bracu\",\n    \"urgency\": \"normal\"\n  }\n]",
+      "location": {
+        "url": "http://127.0.0.1:5000/suggestions",
+        "lineNumber": 353,
+        "columnNumber": 20
+      }
+    },
+    {
+      "type": "console",
+      "text": "[SmartSuggestions] Rendering 2 AI suggestion cards",
+      "location": {
+        "url": "http://127.0.0.1:5000/suggestions",
+        "lineNumber": 375,
+        "columnNumber": 20
+      }
+    },
+    {
+      "type": "console",
+      "text": "[SmartSuggestions] Creating card 1 for: Need Some Rice",
+      "location": {
+        "url": "http://127.0.0.1:5000/suggestions",
+        "lineNumber": 380,
+        "columnNumber": 24
+      }
+    },
+    {
+      "type": "console",
+      "text": "[SmartSuggestions] Card details: {title: Need Some Rice, explanation: High priority. Expiring soon. Trending need., score: 46.99, urgency: high}",
+      "location": {
+        "url": "http://127.0.0.1:5000/suggestions",
+        "lineNumber": 394,
+        "columnNumber": 24
+      }
+    },
+    {
+      "type": "console",
+      "text": "[SmartSuggestions] Card created successfully",
+      "location": {
+        "url": "http://127.0.0.1:5000/suggestions",
+        "lineNumber": 476,
+        "columnNumber": 24
+      }
+    },
+    {
+      "type": "console",
+      "text": "[SmartSuggestions] Creating card 2 for: Ride to Bracu",
+      "location": {
+        "url": "http://127.0.0.1:5000/suggestions",
+        "lineNumber": 380,
+        "columnNumber": 24
+      }
+    },
+    {
+      "type": "console",
+      "text": "[SmartSuggestions] Card details: {title: Ride to Bracu, explanation: Expiring soon. Trending need., score: 41.99, urgency: normal}",
+      "location": {
+        "url": "http://127.0.0.1:5000/suggestions",
+        "lineNumber": 394,
+        "columnNumber": 24
+      }
+    },
+    {
+      "type": "console",
+      "text": "[SmartSuggestions] Card created successfully",
+      "location": {
+        "url": "http://127.0.0.1:5000/suggestions",
+        "lineNumber": 476,
+        "columnNumber": 24
+      }
+    }
+  ],
+  "network": [
+    {
+      "url": "http://127.0.0.1:5000/suggestions",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:5000/static/uploads/profile_photos/default.png",
+      "status": 404
+    },
+    {
+      "url": "http://127.0.0.1:5000/static/images/lifeline_logo.png",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:5000/static/css/main.css",
+      "status": 200
+    },
+    {
+      "url": "https://cdn.tailwindcss.com/",
+      "status": 302
+    },
+    {
+      "url": "https://cdn.tailwindcss.com/3.4.17",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:5000/static/js/fcm.js",
+      "status": 200
+    },
+    {
+      "url": "https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js",
+      "status": 200
+    },
+    {
+      "url": "https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js",
+      "status": 200
+    },
+    {
+      "url": "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:5000/api/trending-categories?hours=24&limit=5",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:5000/api/suggestion-insights",
+      "status": 400
+    },
+    {
+      "url": "http://127.0.0.1:5000/api/notifications",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:5000/api/notification-count",
+      "status": 200
+    },
+    {
+      "url": "https://fonts.gstatic.com/s/spacegrotesk/v22/V8mDoQDjQSkFtoMM3T6r8E7mPbF4Cw.woff2",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:5000/api/weather",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:5000/api/suggestions",
+      "status": 200,
+      "body": "{\"generated_at\":\"2025-12-20T07:33:56.265938\",\"location_source\":\"fallback_default\",\"location_used\":{\"lat\":23.8103,\"lng\":90.4125},\"success\":true,\"suggestions\":[{\"category\":\"food\",\"description\":\"no rice at home\",\"distance_km\":6.04,\"explanation\":\"High priority. Expiring soon. Trending need.\",\"id\":3,\"relevance_score\":46.99,\"request_full\":{\"area\":\"uttara\",\"category\":\"food\",\"contact_info\":\"01537320838\",\"contact_method\":\"lifeline_chat\",\"created_at\":1766193751,\"description\":\"no rice at home\",\"distance_km\":6.04,\"expires_at\":1766197351,\"frequency\":null,\"id\":3,\"image_url\":null,\"is_offer\":false,\"landmark\":\"Uttara metro\",\"lat\":23.862045,\"lng\":90.394593,\"radius_pref\":null,\"seconds_remaining\":2915,\"status\":\"open\",\"time_window\":\"this_week\",\"title\":\"Need Some Rice\",\"urgency\":\"high\",\"user_id\":2,\"user_name\":\"muaz ashraf\"},\"title\":\"Need Some Rice\",\"urgency\":\"high\"},{\"category\":\"ride\",\"description\":\"Can you drop me off?\",\"distance_km\":5.99,\"explanation\":\"Expiring soon. Trending need.\",\"id\":4,\"relevance_score\":41.99,\"request_full\":{\"area\":\"uttara\",\"category\":\"ride\",\"contact_info\":\"01537320838\",\"contact_method\":\"lifeline_chat\",\"created_at\":1766193974,\"description\":\"Can you drop me off?\",\"distance_km\":5.99,\"expires_at\":1766197574,\"frequency\":null,\"id\":4,\"image_url\":null,\"is_offer\":false,\"landmark\":\"ruap\",\"lat\":23.861437,\"lng\":90.394046,\"radius_pref\":null,\"seconds_remaining\":3138,\"status\":\"open\",\"time_window\":\"this_week\",\"title\":\"Ride to Bracu\",\"urgency\":\"normal\",\"user_id\":1,\"user_name\":\"Super Admin\"},\"title\":\"Ride to Bracu\",\"urgency\":\"normal\"}]}\n"
+    },
+    {
+      "url": "http://127.0.0.1:5000/api/weather",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:5000/api/suggestions",
+      "status": 200,
+      "body": "{\"generated_at\":\"2025-12-20T07:33:57.436806\",\"location_source\":\"fallback_default\",\"location_used\":{\"lat\":23.8103,\"lng\":90.4125},\"success\":true,\"suggestions\":[{\"category\":\"food\",\"description\":\"no rice at home\",\"distance_km\":6.04,\"explanation\":\"High priority. Expiring soon. Trending need.\",\"id\":3,\"relevance_score\":46.99,\"request_full\":{\"area\":\"uttara\",\"category\":\"food\",\"contact_info\":\"01537320838\",\"contact_method\":\"lifeline_chat\",\"created_at\":1766193751,\"description\":\"no rice at home\",\"distance_km\":6.04,\"expires_at\":1766197351,\"frequency\":null,\"id\":3,\"image_url\":null,\"is_offer\":false,\"landmark\":\"Uttara metro\",\"lat\":23.862045,\"lng\":90.394593,\"radius_pref\":null,\"seconds_remaining\":2914,\"status\":\"open\",\"time_window\":\"this_week\",\"title\":\"Need Some Rice\",\"urgency\":\"high\",\"user_id\":2,\"user_name\":\"muaz ashraf\"},\"title\":\"Need Some Rice\",\"urgency\":\"high\"},{\"category\":\"ride\",\"description\":\"Can you drop me off?\",\"distance_km\":5.99,\"explanation\":\"Expiring soon. Trending need.\",\"id\":4,\"relevance_score\":41.99,\"request_full\":{\"area\":\"uttara\",\"category\":\"ride\",\"contact_info\":\"01537320838\",\"contact_method\":\"lifeline_chat\",\"created_at\":1766193974,\"description\":\"Can you drop me off?\",\"distance_km\":5.99,\"expires_at\":1766197574,\"frequency\":null,\"id\":4,\"image_url\":null,\"is_offer\":false,\"landmark\":\"ruap\",\"lat\":23.861437,\"lng\":90.394046,\"radius_pref\":null,\"seconds_remaining\":3136,\"status\":\"open\",\"time_window\":\"this_week\",\"title\":\"Ride to Bracu\",\"urgency\":\"normal\",\"user_id\":1,\"user_name\":\"Super Admin\"},\"title\":\"Ride to Bracu\",\"urgency\":\"normal\"}]}\n"
+    }
+  ],
+  "suggestions_html_snapshot": "\n        <div id=\"no-suggestions\" class=\"text-center py-6 text-slate-400 hidden\">\n            <p>No suggestions available at the moment. Check back soon!</p>\n        </div>\n    <div class=\"suggestion-card rounded-2xl border border-slate-800 bg-slate-900/50 px-4 py-3 flex items-start justify-between gap-4 transition hover:border-indigo-400/40 hover:bg-slate-900/70\">\n                    <div class=\"flex-1\">\n                        <div class=\"flex items-center gap-2 mb-2\">\n                            <span class=\"inline-flex items-center text-[10px] font-semibold px-2 py-1 rounded-full border bg-amber-500/10 text-amber-200 border-amber-400/30\">\n                                HIGH\n                            </span>\n                            <span class=\"inline-flex items-center text-[10px] font-semibold px-2 py-1 rounded-full border bg-indigo-500/10 text-indigo-200 border-indigo-400/30\">Suggested by AI</span>\n                            <span class=\"text-[10px] text-slate-400\">6.04km away</span>\n                        </div>\n                        <h4 class=\"font-bold text-slate-100 mb-1\">Need Some Rice</h4>\n                        <p class=\"text-sm text-slate-300 mb-2\">no rice at home</p>\n                        <p class=\"text-xs text-indigo-200 font-semibold\">AI: High priority. Expiring soon. Trending need.</p>\n                    </div>\n                    <div class=\"ml-4 text-right\">\n                        <div class=\"text-sm font-bold px-3 py-2 rounded-xl border bg-slate-800/60 text-slate-200 border-slate-700\">\n                            46.99%\n                        </div>\n                        <button class=\"mt-2 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded-lg text-sm transition suggestion-action\" data-request-id=\"3\">\n                            Help Now\n                        </button>\n                    </div>\n                </div><div class=\"suggestion-card rounded-2xl border border-slate-800 bg-slate-900/50 px-4 py-3 flex items-start justify-between gap-4 transition hover:border-indigo-400/40 hover:bg-slate-900/70\">\n                    <div class=\"flex-1\">\n                        <div class=\"flex items-center gap-2 mb-2\">\n                            <span class=\"inline-flex items-center text-[10px] font-semibold px-2 py-1 rounded-full border bg-sky-500/10 text-sky-200 border-sky-400/30\">\n                                NORMAL\n                            </span>\n                            <span class=\"inline-flex items-center text-[10px] font-semibold px-2 py-1 rounded-full border bg-indigo-500/10 text-indigo-200 border-indigo-400/30\">Suggested by AI</span>\n                            <span class=\"text-[10px] text-slate-400\">5.99km away</span>\n                        </div>\n                        <h4 class=\"font-bold text-slate-100 mb-1\">Ride to Bracu</h4>\n                        <p class=\"text-sm text-slate-300 mb-2\">Can you drop me off?</p>\n                        <p class=\"text-xs text-indigo-200 font-semibold\">AI: Expiring soon. Trending need.</p>\n                    </div>\n                    <div class=\"ml-4 text-right\">\n                        <div class=\"text-sm font-bold px-3 py-2 rounded-xl border bg-slate-800/60 text-slate-200 border-slate-700\">\n                            41.99%\n                        </div>\n                        <button class=\"mt-2 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded-lg text-sm transition suggestion-action\" data-request-id=\"4\">\n                            Help Now\n                        </button>\n                    </div>\n                </div>"
+}

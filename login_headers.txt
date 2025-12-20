@@ -1,0 +1,20 @@
+HTTP/1.1 302 FOUND
+Server: Werkzeug/3.1.4 Python/3.13.9
+Date: Sat, 20 Dec 2025 07:15:34 GMT
+Content-Type: text/html; charset=utf-8
+Content-Length: 189
+Location: /
+Vary: Cookie
+Set-Cookie: session=.eJwtizEKwzAQBL8ithapUukN-UEwx2GdbIF8CTqpCMZ_zxWudthhTlBpbLsY0vtEGD6wua5ihojXZ9skh6rh_sps7ffAci0R9JV-sIp6NPqUiGrkYEMy7dJcIxVu5maadKoZ6Xmz8iFIYGXD9Qdhai8l.aUZNFg.gMTwswjamCyoFS0nIVkKzLHudas; Expires=Sat, 27 Dec 2025 07:15:34 GMT; HttpOnly; Path=/; SameSite=Lax
+Connection: close
+
+HTTP/1.1 405 METHOD NOT ALLOWED
+Server: Werkzeug/3.1.4 Python/3.13.9
+Date: Sat, 20 Dec 2025 07:15:34 GMT
+Content-Type: text/html; charset=utf-8
+Allow: OPTIONS, GET, HEAD
+Content-Length: 153
+Set-Cookie: session=.eJwtizEKwzAQBL8ithapUukN-UEwx2GdbIF8CTqpCMZ_zxWudthhTlBpbLsY0vtEGD6wua5ihojXZ9skh6rh_sps7ffAci0R9JV-sIp6NPqUiGrkYEMy7dJcIxVu5maadKoZ6Xmz8iFIYGXD9Qdhai8l.aUZNFg.gMTwswjamCyoFS0nIVkKzLHudas; Expires=Sat, 27 Dec 2025 07:15:34 GMT; HttpOnly; Path=/; SameSite=Lax
+Vary: Cookie
+Connection: close
+
