@@ -190,8 +190,13 @@ block content %}
 
         <a
           href="/chat"
-          class="block btn-sheen rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-900/50 to-slate-900/30 px-5 py-4 hover:border-sky-400/80 transition-all duration-300 hover:bg-gradient-to-br hover:from-sky-500/10 hover:to-slate-900/40 group hover:shadow-lg hover:shadow-sky-500/20"
+          class="relative block btn-sheen rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-900/50 to-slate-900/30 px-5 py-4 hover:border-sky-400/80 transition-all duration-300 hover:bg-gradient-to-br hover:from-sky-500/10 hover:to-slate-900/40 group hover:shadow-lg hover:shadow-sky-500/20"
         >
+          {% if unread_chat_count and unread_chat_count > 0 %}
+            <span class="absolute top-3 right-3 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-emerald-500 text-slate-950 text-[11px] font-bold">
+              {% if unread_chat_count > 9 %}9+{% else %}{{ unread_chat_count }}{% endif %}
+            </span>
+          {% endif %}
           <p class="text-xs font-semibold text-sky-300 mb-2 group-hover:text-sky-200 transition-colors">
             💬 Talk live
           </p>

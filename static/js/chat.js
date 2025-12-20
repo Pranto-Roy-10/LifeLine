@@ -1,5 +1,8 @@
 (function(){
-  const socket = io();
+  // Explicitly use the current origin; improves reliability behind proxies (e.g., Render)
+  const socket = io(window.location.origin, {
+    transports: ['websocket', 'polling']
+  });
   const messagesEl = document.getElementById('messages');
   const input = document.getElementById('message_input');
   const sendBtn = document.getElementById('send_btn');
@@ -12,7 +15,7 @@
   socket.on('connect', () => {
     console.log('Socket connected:', socket.id);
     console.log('Emitting join to conversation', CONVERSATION_ID);
-    socket.emit('join', {conversation_id: CONVERSATION_ID});
+    socket.emit('join', { conversation_id: CONVERSATION_ID });
   });
 
   socket.on('disconnect', () => {

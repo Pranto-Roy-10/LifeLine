@@ -1,9 +1,23 @@
 (function(){
-  const socket = io();
+  const socket = io(window.location.origin, {
+    transports: ['websocket', 'polling']
+  });
   console.log('chat_index.js loaded');
 
   socket.on('connect', ()=>{
     console.log('Socket connected on index page', socket.id);
+
+    // Join personal room + all conversation rooms so we receive new_message events.
+    try {
+      socket.emit('join', {});
+      if (typeof CONVERSATION_IDS !== 'undefined' && Array.isArray(CONVERSATION_IDS)) {
+        CONVERSATION_IDS.forEach((cid) => {
+          if (cid) socket.emit('join', { conversation_id: cid });
+        });
+      }
+    } catch (e) {
+      console.warn('join rooms failed', e);
+    }
   });
 
   socket.on('new_message', (m) => {

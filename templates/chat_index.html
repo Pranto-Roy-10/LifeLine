@@ -105,6 +105,7 @@
 
 <script>
   const CURRENT_USER_ID = {{ current_user.id if current_user else 'null' }};
+  const CONVERSATION_IDS = {{ conversation_ids|tojson }};
 </script>
 <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 <script src="{{ url_for('static', filename='js/chat_index.js') }}"></script>
