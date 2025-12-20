@@ -95,15 +95,34 @@ BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 def _normalize_database_url(url: str) -> str:
     url = (url or "").strip()
     if not url:
-        return url
+        return ""
+
+    # Common copy/paste format: psql 'postgresql://...'
+    lower = url.lower()
+    if lower.startswith("psql "):
+        url = url[5:].strip()
+
+    # Strip surrounding quotes (single or double)
+    if len(url) >= 2 and url[0] in ("'", '"') and url[-1] == url[0]:
+        url = url[1:-1].strip()
+
     # Heroku-style scheme compatibility
     if url.startswith("postgres://"):
         url = "postgresql://" + url[len("postgres://"):]
+
     return url
 
 
 # Prefer DATABASE_URL (Render/Neon). Fallback to local SQLite for dev.
-_env_db_url = _normalize_database_url(os.getenv("DATABASE_URL", ""))
+# Also accept alternative env var names to reduce deployment friction.
+_raw_db_url = (
+    os.getenv("DATABASE_URL")
+    or os.getenv("RENDER_DATABASE_URL")
+    or os.getenv("POSTGRES_URL")
+    or os.getenv("POSTGRESQL_URL")
+    or ""
+)
+_env_db_url = _normalize_database_url(_raw_db_url)
 if _env_db_url:
     app.config["SQLALCHEMY_DATABASE_URI"] = _env_db_url
     # Production-friendly defaults for Postgres.
