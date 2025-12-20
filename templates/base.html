@@ -4,14 +4,20 @@
     <meta charset="UTF-8" />
     <title>{% block title %}LifeLine{% endblock %}</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="LifeLine - Neighborhood Help & Emergency Network. Connect with nearby people for help and support." />
+    <meta
+      name="description"
+      content="LifeLine - Neighborhood Help & Emergency Network. Connect with nearby people for help and support."
+    />
     <meta name="theme-color" content="#040915" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
 
     <!-- Preload font for better performance -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 
     <script src="https://cdn.tailwindcss.com"></script>
 
@@ -21,8 +27,18 @@
     />
 
     <!-- Favicon -->
-    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='images/favicon-32x32.png') }}" />
-    <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='images/favicon-16x16.png') }}" />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="32x32"
+      href="{{ url_for('static', filename='images/favicon-32x32.png') }}"
+    />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="16x16"
+      href="{{ url_for('static', filename='images/favicon-16x16.png') }}"
+    />
 
     <style>
       /* Custom scrollbar for notifications */
@@ -54,7 +70,9 @@
     </style>
   </head>
 
-  <body class="page-shell text-slate-100 min-h-screen flex flex-col overflow-x-hidden page-loading">
+  <body
+    class="page-shell text-slate-100 min-h-screen flex flex-col overflow-x-hidden page-loading"
+  >
     <header class="top-nav">
       <nav class="nav-shell">
         <a href="{{ url_for('home') }}" class="nav-brand">
@@ -69,7 +87,9 @@
           </div>
           <div class="min-w-0">
             <h1 class="nav-title truncate">LifeLine</h1>
-            <p class="nav-subtitle truncate">Neighborhood Help & Emergency Network</p>
+            <p class="nav-subtitle truncate">
+              Neighborhood Help & Emergency Network
+            </p>
           </div>
         </a>
 
@@ -89,106 +109,153 @@
           >
             <input type="hidden" name="lat" id="sos-lat" />
             <input type="hidden" name="lng" id="sos-lng" />
-            <button type="submit" class="nav-btn nav-btn--sos" title="Emergency SOS - Get immediate help">
+            <button
+              type="submit"
+              class="nav-btn nav-btn--sos"
+              title="Emergency SOS - Get immediate help"
+            >
               <span>🚨</span>
               <span>SOS</span>
             </button>
           </form>
 
           {% if session.get('user_id') %}
-            <div class="relative">
-              <button id="notif-btn" type="button" class="nav-icon-btn">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke-width="1.8"
-                  stroke="currentColor"
-                  class="w-5 h-5 pointer-events-none"
+          <div class="relative">
+            <button id="notif-btn" type="button" class="nav-icon-btn">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke-width="1.8"
+                stroke="currentColor"
+                class="w-5 h-5 pointer-events-none"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M14.857 17.657A2 2 0 0113.07 19H10.93a2 2 0 01-1.787-1.343m5.714 0A2 2 0 0016 15.5V11a4 4 0 10-8 0v4.5a2 2 0 002 2m3.857 0H9.143"
+                />
+              </svg>
+              <span id="notif-badge" class="nav-badge hidden">0</span>
+            </button>
+
+            <div
+              id="notif-dropdown"
+              class="hidden absolute right-0 mt-3 w-80 max-w-[calc(100vw-2rem)] bg-slate-900 border border-slate-700 rounded-xl shadow-2xl z-50 overflow-hidden ring-1 ring-white/10"
+            >
+              <div
+                class="bg-slate-800/50 px-4 py-2 border-b border-slate-700 flex justify-between items-center backdrop-blur-sm"
+              >
+                <span
+                  class="text-xs font-semibold text-slate-300 uppercase tracking-wider"
+                  >Notifications</span
                 >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M14.857 17.657A2 2 0 0113.07 19H10.93a2 2 0 01-1.787-1.343m5.714 0A2 2 0 0016 15.5V11a4 4 0 10-8 0v4.5a2 2 0 002 2m3.857 0H9.143"
-                  />
-                </svg>
-                <span id="notif-badge" class="nav-badge hidden">0</span>
-              </button>
-
+                <button
+                  onclick="markAllRead()"
+                  class="text-[10px] text-emerald-400 hover:text-emerald-300 hover:underline cursor-pointer"
+                >
+                  Mark all read
+                </button>
+              </div>
               <div
-                id="notif-dropdown"
-                class="hidden absolute right-0 mt-3 w-80 max-w-[calc(100vw-2rem)] bg-slate-900 border border-slate-700 rounded-xl shadow-2xl z-50 overflow-hidden ring-1 ring-white/10"
+                id="notif-list"
+                class="divide-y divide-slate-800 max-h-80 overflow-y-auto bg-slate-900"
               >
-                <div class="bg-slate-800/50 px-4 py-2 border-b border-slate-700 flex justify-between items-center backdrop-blur-sm">
-                  <span class="text-xs font-semibold text-slate-300 uppercase tracking-wider">Notifications</span>
-                  <button onclick="markAllRead()" class="text-[10px] text-emerald-400 hover:text-emerald-300 hover:underline cursor-pointer">
-                    Mark all read
-                  </button>
-                </div>
-                <div id="notif-list" class="divide-y divide-slate-800 max-h-80 overflow-y-auto bg-slate-900">
-                  <p class="text-slate-500 text-xs p-4 text-center">Loading...</p>
-                </div>
+                <p class="text-slate-500 text-xs p-4 text-center">Loading...</p>
               </div>
             </div>
+          </div>
 
-            <div class="relative">
-              <button
-                id="user-menu-btn"
-                type="button"
-                class="nav-profile"
-                aria-haspopup="menu"
-                aria-expanded="false"
+          <div class="relative">
+            <button
+              id="user-menu-btn"
+              type="button"
+              class="nav-profile"
+              aria-haspopup="menu"
+              aria-expanded="false"
+            >
+              {% set photo = current_user.profile_photo or 'default.png' %} {%
+              if 'http' in photo %}
+              <img src="{{ photo }}" class="nav-avatar" alt="Avatar" />
+              {% else %}
+              <img
+                src="{{ url_for('static', filename='uploads/profile_photos/' ~ photo) }}"
+                class="nav-avatar"
+                alt="Avatar"
+              />
+              {% endif %}
+              <span class="hidden md:inline text-xs text-slate-200 truncate"
+                >{{ session.get('user_name') }}</span
               >
-                {% set photo = current_user.profile_photo or 'default.png' %}
-                {% if 'http' in photo %}
-                  <img src="{{ photo }}" class="nav-avatar" alt="Avatar" />
-                {% else %}
-                  <img src="{{ url_for('static', filename='uploads/profile_photos/' ~ photo) }}" class="nav-avatar" alt="Avatar" />
-                {% endif %}
-                <span class="hidden md:inline text-xs text-slate-200 truncate">{{ session.get('user_name') }}</span>
-                <span class="hidden md:inline text-xs text-slate-400">▾</span>
-              </button>
+              <span class="hidden md:inline text-xs text-slate-400">▾</span>
+            </button>
 
+            <div
+              id="user-menu-dropdown"
+              class="hidden absolute right-0 mt-3 w-72 max-w-[calc(100vw-2rem)] bg-slate-900 border border-slate-700 rounded-xl shadow-2xl z-50 overflow-hidden ring-1 ring-white/10"
+            >
               <div
-                id="user-menu-dropdown"
-                class="hidden absolute right-0 mt-3 w-72 max-w-[calc(100vw-2rem)] bg-slate-900 border border-slate-700 rounded-xl shadow-2xl z-50 overflow-hidden ring-1 ring-white/10"
+                class="px-4 py-3 border-b border-slate-800 bg-slate-800/40 backdrop-blur-sm"
               >
-                <div class="px-4 py-3 border-b border-slate-800 bg-slate-800/40 backdrop-blur-sm">
-                  <p class="text-xs font-semibold text-slate-200 truncate">{{ session.get('user_name') }}</p>
-                  <p class="text-[11px] text-slate-400 truncate">{{ current_user.email }}</p>
-                  <div class="flex flex-wrap gap-2 mt-2">
-                    {% if current_user.is_admin %}
-                      <span class="nav-pill nav-pill--accent">🛡️ Admin</span>
-                    {% endif %}
-                    {% if current_user.is_premium %}
-                      <span class="nav-pill nav-pill--premium">👑 Premium</span>
-                    {% endif %}
-                    {% if session.get('is_trusted_helper') %}
-                      <span class="nav-pill nav-pill--accent">✔ Trusted</span>
-                    {% endif %}
-                  </div>
-                </div>
-
-                <div class="py-2">
-                  <a href="{{ url_for('profile') }}" class="block px-4 py-2 text-sm text-slate-200 hover:bg-slate-800/60 transition">Profile</a>
-                  <a href="{{ url_for('dashboard') }}" class="block px-4 py-2 text-sm text-slate-200 hover:bg-slate-800/60 transition">Dashboard</a>
-
+                <p class="text-xs font-semibold text-slate-200 truncate">
+                  {{ session.get('user_name') }}
+                </p>
+                <p class="text-[11px] text-slate-400 truncate">
+                  {{ current_user.email }}
+                </p>
+                <div class="flex flex-wrap gap-2 mt-2">
                   {% if current_user.is_admin %}
-                    <a href="{{ url_for('admin_dashboard') }}" class="block px-4 py-2 text-sm text-slate-200 hover:bg-slate-800/60 transition">Admin Dashboard</a>
+                  <span class="nav-pill nav-pill--accent">🛡️ Admin</span>
+                  {% endif %} {% if current_user.is_premium %}
+                  <span class="nav-pill nav-pill--premium">👑 Premium</span>
+                  {% endif %} {% if session.get('is_trusted_helper') %}
+                  <span class="nav-pill nav-pill--accent">✔ Trusted</span>
                   {% endif %}
-
-                  {% if not current_user.is_premium %}
-                    <a href="{{ url_for('plans') }}" class="block px-4 py-2 text-sm text-slate-200 hover:bg-slate-800/60 transition">Upgrade</a>
-                  {% endif %}
-
-                  <div class="my-2 border-t border-slate-800"></div>
-                  <a href="{{ url_for('logout') }}" class="block px-4 py-2 text-sm text-slate-200 hover:bg-slate-800/60 transition">Log out</a>
                 </div>
               </div>
+
+              <div class="py-2">
+                <a
+                  href="{{ url_for('profile') }}"
+                  class="block px-4 py-2 text-sm text-slate-200 hover:bg-slate-800/60 transition"
+                  >Profile</a
+                >
+                <a
+                  href="{{ url_for('dashboard') }}"
+                  class="block px-4 py-2 text-sm text-slate-200 hover:bg-slate-800/60 transition"
+                  >Dashboard</a
+                >
+
+                {% if current_user.is_admin %}
+                <a
+                  href="{{ url_for('admin_dashboard') }}"
+                  class="block px-4 py-2 text-sm text-slate-200 hover:bg-slate-800/60 transition"
+                  >Admin Dashboard</a
+                >
+                {% endif %} {% if not current_user.is_premium %}
+                <a
+                  href="{{ url_for('plans') }}"
+                  class="block px-4 py-2 text-sm text-slate-200 hover:bg-slate-800/60 transition"
+                  >Upgrade</a
+                >
+                {% endif %}
+
+                <div class="my-2 border-t border-slate-800"></div>
+                <a
+                  href="{{ url_for('logout') }}"
+                  class="block px-4 py-2 text-sm text-slate-200 hover:bg-slate-800/60 transition"
+                  >Log out</a
+                >
+              </div>
             </div>
+          </div>
           {% else %}
-            <a href="{{ url_for('login') }}" class="nav-btn nav-btn--ghost">Log in</a>
-            <a href="{{ url_for('signup') }}" class="nav-btn nav-btn--upgrade">Join as Helper</a>
+          <a href="{{ url_for('login') }}" class="nav-btn nav-btn--ghost"
+            >Log in</a
+          >
+          <a href="{{ url_for('signup') }}" class="nav-btn nav-btn--upgrade"
+            >Join as Helper</a
+          >
           {% endif %}
         </div>
       </nav>
@@ -679,6 +746,13 @@
           }
         }
 
+        // Expose for real-time Socket.IO updates (used by static/js/realtime_counts.js)
+        try {
+          window.lifelineFetchNotifications = fetchNotifications;
+          window.lifelineFetchNotificationCount = fetchUnreadCount;
+          window.lifelineUpdateNotificationBadge = updateBadge;
+        } catch (e) {}
+
         // Initial Load
         fetchNotifications();
         setInterval(fetchNotifications, 10000); // Check every 10s
@@ -700,7 +774,8 @@
 
         document.addEventListener("click", (e) => {
           if (!userOpen) return;
-          if (userDropdown.contains(e.target) || userBtn.contains(e.target)) return;
+          if (userDropdown.contains(e.target) || userBtn.contains(e.target))
+            return;
           userOpen = false;
           userDropdown.classList.add("hidden");
           userBtn.setAttribute("aria-expanded", "false");
@@ -727,63 +802,69 @@
       // ===== MODERN ENHANCEMENTS =====
 
       // Smooth scroll for anchor links
-      document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-        anchor.addEventListener('click', function (e) {
+      document.querySelectorAll('a[href^="#"]').forEach((anchor) => {
+        anchor.addEventListener("click", function (e) {
           e.preventDefault();
-          const target = document.querySelector(this.getAttribute('href'));
+          const target = document.querySelector(this.getAttribute("href"));
           if (target) {
             target.scrollIntoView({
-              behavior: 'smooth',
-              block: 'start'
+              behavior: "smooth",
+              block: "start",
             });
           }
         });
       });
 
       // Enhanced button interactions
-      document.querySelectorAll('.btn-primary, .btn-secondary, .btn-ghost, .btn-map, .btn-sheen').forEach(btn => {
-        btn.addEventListener('mousedown', function() {
-          this.style.transform = 'scale(0.98)';
-        });
+      document
+        .querySelectorAll(
+          ".btn-primary, .btn-secondary, .btn-ghost, .btn-map, .btn-sheen"
+        )
+        .forEach((btn) => {
+          btn.addEventListener("mousedown", function () {
+            this.style.transform = "scale(0.98)";
+          });
 
-        btn.addEventListener('mouseup', function() {
-          this.style.transform = '';
-        });
+          btn.addEventListener("mouseup", function () {
+            this.style.transform = "";
+          });
 
-        btn.addEventListener('mouseleave', function() {
-          this.style.transform = '';
+          btn.addEventListener("mouseleave", function () {
+            this.style.transform = "";
+          });
         });
-      });
 
       // Card hover effects
-      document.querySelectorAll('.glass-card').forEach(card => {
-        card.addEventListener('mouseenter', function() {
-          this.style.transform = 'translateY(-2px)';
+      document.querySelectorAll(".glass-card").forEach((card) => {
+        card.addEventListener("mouseenter", function () {
+          this.style.transform = "translateY(-2px)";
         });
 
-        card.addEventListener('mouseleave', function() {
-          this.style.transform = '';
+        card.addEventListener("mouseleave", function () {
+          this.style.transform = "";
         });
       });
 
       // Staggered animation for lists
       const observerOptions = {
         threshold: 0.1,
-        rootMargin: '0px 0px -50px 0px'
+        rootMargin: "0px 0px -50px 0px",
       };
 
       const observer = new IntersectionObserver((entries) => {
-        const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const reduceMotion =
+          window.matchMedia &&
+          window.matchMedia("(prefers-reduced-motion: reduce)").matches;
         entries.forEach((entry, index) => {
           if (entry.isIntersecting) {
             if (reduceMotion) {
-              entry.target.style.opacity = '1';
-              entry.target.style.transform = 'translateY(0)';
+              entry.target.style.opacity = "1";
+              entry.target.style.transform = "translateY(0)";
             } else {
               // Use CSS animation class for smoother control and allow per-item delay
-              if (!entry.target.classList.contains('animate-fadeInUp')) {
+              if (!entry.target.classList.contains("animate-fadeInUp")) {
                 entry.target.style.animationDelay = `${index * 120}ms`;
-                entry.target.classList.add('animate-fadeInUp');
+                entry.target.classList.add("animate-fadeInUp");
               }
             }
           }
@@ -791,67 +872,70 @@
       }, observerOptions);
 
       // Observe elements with stagger class
-      document.querySelectorAll('.stagger-item').forEach(item => {
-        item.style.opacity = '0';
-        item.style.transform = 'translateY(20px)';
-        item.style.transition = 'all 0.6s ease';
+      document.querySelectorAll(".stagger-item").forEach((item) => {
+        item.style.opacity = "0";
+        item.style.transform = "translateY(20px)";
+        item.style.transition = "all 0.6s ease";
         observer.observe(item);
       });
 
       // Enhanced form focus effects
-      document.querySelectorAll('input, textarea, select').forEach(input => {
-        input.addEventListener('focus', function() {
-          this.parentElement?.classList.add('focused');
+      document.querySelectorAll("input, textarea, select").forEach((input) => {
+        input.addEventListener("focus", function () {
+          this.parentElement?.classList.add("focused");
         });
 
-        input.addEventListener('blur', function() {
-          this.parentElement?.classList.remove('focused');
+        input.addEventListener("blur", function () {
+          this.parentElement?.classList.remove("focused");
         });
       });
 
       // Loading state improvements
-      document.querySelectorAll('form').forEach(form => {
-        form.addEventListener('submit', function(e) {
+      document.querySelectorAll("form").forEach((form) => {
+        form.addEventListener("submit", function (e) {
           const submitBtn = form.querySelector('button[type="submit"]');
           if (submitBtn) {
             submitBtn.disabled = true;
-            submitBtn.innerHTML = '<div class="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>';
+            submitBtn.innerHTML =
+              '<div class="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>';
           }
         });
       });
 
       // Keyboard navigation improvements
-      document.addEventListener('keydown', function(e) {
+      document.addEventListener("keydown", function (e) {
         // Close modals/dropdowns with Escape
-        if (e.key === 'Escape') {
-          document.querySelectorAll('.modal, .dropdown').forEach(el => {
-            el.classList.add('hidden');
+        if (e.key === "Escape") {
+          document.querySelectorAll(".modal, .dropdown").forEach((el) => {
+            el.classList.add("hidden");
           });
         }
       });
 
       // Performance optimization: Lazy load images
       const imageObserver = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
+        entries.forEach((entry) => {
           if (entry.isIntersecting) {
             const img = entry.target;
             if (img.dataset.src) {
               img.src = img.dataset.src;
-              img.classList.remove('lazy');
+              img.classList.remove("lazy");
               imageObserver.unobserve(img);
             }
           }
         });
       });
 
-      document.querySelectorAll('img[data-src]').forEach(img => {
+      document.querySelectorAll("img[data-src]").forEach((img) => {
         imageObserver.observe(img);
       });
 
       // Add notification animation
-      function showNotification(message, type = 'success') {
-        const notification = document.createElement('div');
-        notification.className = `fixed top-4 right-4 px-4 py-2 rounded-lg text-sm font-medium z-50 notification-enter ${type === 'success' ? 'bg-emerald-500' : 'bg-red-500'} text-white`;
+      function showNotification(message, type = "success") {
+        const notification = document.createElement("div");
+        notification.className = `fixed top-4 right-4 px-4 py-2 rounded-lg text-sm font-medium z-50 notification-enter ${
+          type === "success" ? "bg-emerald-500" : "bg-red-500"
+        } text-white`;
         notification.textContent = message;
         document.body.appendChild(notification);
 
@@ -865,5 +949,11 @@
     </script>
 
     <!-- Floating Action Button removed per request -->
+    {% if session.get('user_id') and current_user %}
+    <script>
+      window.LIFELINE_CURRENT_USER_ID = {{ current_user.id }};
+    </script>
+    <script src="{{ url_for('static', filename='js/realtime_counts.js') }}"></script>
+    {% endif %}
   </body>
 </html>

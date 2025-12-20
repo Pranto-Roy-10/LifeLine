@@ -1060,6 +1060,37 @@ def serialize_message(msg: ChatMessage):
     }
 
 
+def _compute_unread_chat_count(user_id: int) -> int:
+    try:
+        return int(
+            ChatMessage.query.join(Conversation, ChatMessage.conversation_id == Conversation.id)
+            .filter(ChatMessage.read == False)
+            .filter(ChatMessage.sender_id != int(user_id))
+            .filter((Conversation.user_a == int(user_id)) | (Conversation.user_b == int(user_id)))
+            .count()
+        )
+    except Exception:
+        return 0
+
+
+def _emit_counts_update(user_id: int):
+    """Push authoritative unread counts to the user's personal socket room."""
+    try:
+        u = User.query.get(int(user_id))
+        notif_count = get_notification_count(u) if u else 0
+        chat_unread = _compute_unread_chat_count(int(user_id))
+        socketio.emit(
+            "counts_update",
+            {
+                "notification_count": int(notif_count or 0),
+                "unread_chat_count": int(chat_unread or 0),
+            },
+            room=f"user_{int(user_id)}",
+        )
+    except Exception:
+        pass
+
+
 # ------------------ AUTH HELPERS ------------------
 def login_user(user: User):
     # Persist session across reloads (important for webviews)
@@ -1218,18 +1249,7 @@ def inject_user():
 
     user = current_user()
 
-    unread_chat_count = 0
-    try:
-        if user:
-            unread_chat_count = (
-                ChatMessage.query.join(Conversation, ChatMessage.conversation_id == Conversation.id)
-                .filter(ChatMessage.read == False)
-                .filter(ChatMessage.sender_id != user.id)
-                .filter((Conversation.user_a == user.id) | (Conversation.user_b == user.id))
-                .count()
-            )
-    except Exception:
-        unread_chat_count = 0
+    unread_chat_count = _compute_unread_chat_count(user.id) if user else 0
 
     return dict(
         current_user=user,
@@ -3617,6 +3637,12 @@ def chat_with_user(other_user_id):
         db.session.commit()
     except Exception:
         db.session.rollback()
+
+    # Push updated counts (avoid stale badges after reading in chat)
+    try:
+        _emit_counts_update(user.id)
+    except Exception:
+        pass
     # serialize messages for JSON/template safety
     messages_serialized = [serialize_message(m) for m in messages]
     return render_template("chat.html", conversation=conv, other_user=other, messages=messages_serialized, conversations=conversations_list)
@@ -5025,6 +5051,11 @@ def api_mark_conversation_read(conv_id):
         except Exception:
             db.session.rollback()
 
+        try:
+            _emit_counts_update(user.id)
+        except Exception:
+            pass
+
         return jsonify({"marked": len(ids)})
     except Exception:
         db.session.rollback()
@@ -5325,6 +5356,10 @@ def on_send_message(data):
                 message=f"💬 {user.name}: {preview}",
                 link=url_for('chat_with_user', other_user_id=user.id),
             )
+
+            # Real-time: refresh receiver badges + dropdown immediately
+            _emit_counts_update(other_user.id)
+            socketio.emit("notification_new", {"type": "chat"}, room=f"user_{other_user.id}")
     except Exception as e:
         print("[NOTIFICATION] Chat notify error:", e)
 
@@ -5385,6 +5420,16 @@ def on_message_read(data):
     db.session.commit()
     room = f"chat_{msg.conversation_id}"
     emit("read", {"message_id": mid}, room=room)
+
+    # If receiver read it, clear related chat notification and push updated counts.
+    try:
+        link = url_for("chat_with_user", other_user_id=msg.sender_id)
+        Notification.query.filter_by(user_id=user.id, is_read=False, type="chat", link=link).update({"is_read": True})
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    _emit_counts_update(user.id)
 
 
 @app.route("/chat/<int:conv_id>/delete", methods=["POST"])

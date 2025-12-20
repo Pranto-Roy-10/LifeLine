@@ -164,6 +164,15 @@
     // if message is from other user, ack delivered
     if (m.sender_id !== CURRENT_USER_ID) {
       socket.emit("message_delivered", { message_id: m.id });
+
+      // If the user is currently viewing this chat, treat it as read.
+      // This prevents showing unread counts after the user already saw the message.
+      try {
+        if (document.visibilityState === "visible") {
+          socket.emit("message_read", { message_id: m.id });
+        }
+      } catch (e) {}
+
       // auto-translate if requested
       if (translateSelect && autoTranslateChk) {
         const tgt = translateSelect.value;
