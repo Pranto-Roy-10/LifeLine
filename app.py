@@ -8,8 +8,18 @@ try:
 except Exception:
     pass
 
-from datetime import datetime, timedelta
+# If running with an async worker (Render/Gunicorn + eventlet), patch stdlib early.
+# This prevents hard-to-debug threading/lock issues with DB pooling and sockets.
 import os
+if os.name == "posix" and os.getenv("USE_EVENTLET", "1") == "1":
+    try:
+        import eventlet  # type: ignore
+
+        eventlet.monkey_patch()
+    except Exception:
+        pass
+
+from datetime import datetime, timedelta
 import math
 import time
 import random
