@@ -4,7 +4,7 @@ block content %}
   class="w-full min-h-screen bg-gradient-to-b from-slate-950 via-slate-950/90 to-slate-900 text-slate-100 px-6 md:px-12 py-10 space-y-8 page-transition"
 >
   {% if sos_review_req and sos_review_helper %}
-  <div class="bg-gradient-to-r from-slate-900/60 to-emerald-900/20 border border-emerald-500/40 rounded-2xl p-6 shadow-lg card-hover">
+  <div class="bg-gradient-to-r from-slate-900/60 to-emerald-900/20 border border-emerald-500/40 rounded-2xl p-6 shadow-lg card-hover stagger-item">
     <div
       class="flex flex-col md:flex-row md:items-center md:justify-between gap-3"
     >
@@ -111,7 +111,7 @@ block content %}
   {% endif %}
 
   <div
-    class="flex flex-col md:flex-row justify-between items-start md:items-center"
+    class="flex flex-col md:flex-row justify-between items-start md:items-center stagger-item"
   >
     <div>
       <h1 class="text-3xl font-bold mb-1">Welcome back, {{ user.name }} 👋</h1>
@@ -151,7 +151,7 @@ block content %}
   </div>
 
   <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-    <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-6">
+    <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 stagger-item">
       <p class="text-slate-400">People Helped</p>
       <h2
         id="people-helped-val"
@@ -160,13 +160,13 @@ block content %}
         {{ stats.helped }}
       </h2>
     </div>
-    <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-6">
+    <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 stagger-item">
       <p class="text-slate-400">Total Hours</p>
       <h2 id="total-hours-val" class="text-4xl font-bold text-emerald-400 mt-3">
         {{ stats.total_hours }}h
       </h2>
     </div>
-    <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-6">
+    <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 stagger-item">
       <p class="text-slate-400">Trust Score</p>
       <div class="w-full bg-slate-700 h-3 rounded-full mt-4">
         <div
@@ -184,7 +184,7 @@ block content %}
 
   <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
     <div
-      class="bg-slate-900/80 p-8 rounded-3xl shadow-lg text-center border border-slate-800 flex flex-col items-center justify-center"
+      class="bg-slate-900/80 p-8 rounded-3xl shadow-lg text-center border border-slate-800 flex flex-col items-center justify-center stagger-item"
     >
       <h2 class="text-xl font-bold mb-4">Your Kindness Score</h2>
       <div class="relative w-40 h-40">

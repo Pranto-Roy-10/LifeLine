@@ -5,7 +5,11 @@
 >
   <div class="flex items-center justify-between mb-8 gap-4">
     <div>
-      <h1 class="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-emerald-300 to-cyan-300">Your Profile</h1>
+      <h1
+        class="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-emerald-300 to-cyan-300"
+      >
+        Your Profile
+      </h1>
       <p class="text-slate-400 text-sm mt-2">
         Manage your identity, contact info, and helper stats.
       </p>
@@ -28,7 +32,7 @@
         method="POST"
         action="{{ url_for('update_profile') }}"
         enctype="multipart/form-data"
-        class="bg-gradient-to-br from-slate-900/60 to-slate-950/80 border border-emerald-500/20 rounded-2xl p-8 space-y-6 shadow-2xl card-hover"
+        class="bg-gradient-to-br from-slate-900/60 to-slate-950/80 border border-emerald-500/20 rounded-2xl p-8 space-y-6 shadow-2xl card-hover stagger-item"
       >
         <div
           class="flex flex-col sm:flex-row items-start sm:items-center gap-6"
@@ -159,7 +163,7 @@
 
     <div class="space-y-6">
       <div
-        class="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-[0_18px_60px_rgba(0,0,0,0.5)]"
+        class="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-[0_18px_60px_rgba(0,0,0,0.5)] card-hover stagger-item"
       >
         <p class="text-xs uppercase tracking-[0.2em] text-slate-500 mb-3">
           Identity Status
@@ -206,7 +210,7 @@
       </div>
 
       <div
-        class="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-[0_18px_60px_rgba(0,0,0,0.5)]"
+        class="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-[0_18px_60px_rgba(0,0,0,0.5)] card-hover stagger-item"
       >
         {% set kindness = user.kindness_score or 0 %} {% set trust =
         user.trust_score or 0 %} {% if kindness >= 121 %} {% set badge_label =
