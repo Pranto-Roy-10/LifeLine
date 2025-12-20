@@ -21,6 +21,8 @@ from smart_suggestion_service import (
     SmartSuggestionService, WeatherService, LocationMatcher, DemandAnalyzer
 )
 from sqlalchemy import func
+from sqlalchemy.engine import make_url as sqlalchemy_make_url
+from sqlalchemy.exc import ArgumentError as SQLAlchemyArgumentError
 from flask_cors import CORS
 
 from flask import (
@@ -96,14 +98,16 @@ app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "dev-jwt-secret")
 # - Fallback: SQLite at SQLITE_PATH (use a Render disk mount like /var/data)
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
-database_url = os.getenv("DATABASE_URL", "").strip()
+database_url = os.getenv("DATABASE_URL", "").strip().strip("\"").strip("'")
 if database_url:
     # Render and some providers use the legacy `postgres://` scheme.
     if database_url.startswith("postgres://"):
         database_url = database_url.replace("postgres://", "postgresql://", 1)
     app.config["SQLALCHEMY_DATABASE_URI"] = database_url
 else:
-    sqlite_path = os.getenv("SQLITE_PATH", os.path.join(BASE_DIR, "lifeline.db")).strip()
+    sqlite_path = os.getenv("SQLITE_PATH", os.path.join(BASE_DIR, "lifeline.db")).strip().strip("\"").strip("'")
+    if not sqlite_path:
+        sqlite_path = os.path.join(BASE_DIR, "lifeline.db")
     sqlite_dir = os.path.dirname(sqlite_path)
     if sqlite_dir:
         os.makedirs(sqlite_dir, exist_ok=True)
@@ -142,6 +146,13 @@ def allowed_image(filename):
     ext = filename.rsplit(".", 1)[1].lower()
     return ext in app.config["ALLOWED_IMAGE_EXTENSIONS"]
 
+
+try:
+    sqlalchemy_make_url(app.config["SQLALCHEMY_DATABASE_URI"])
+except SQLAlchemyArgumentError as e:
+    print(f"[DB] Invalid SQLALCHEMY_DATABASE_URI; falling back to SQLite. Error: {e}")
+    fallback_sqlite_path = os.path.join(BASE_DIR, "lifeline.db")
+    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + fallback_sqlite_path
 
 db = SQLAlchemy(app)
 jwt = JWTManager(app)
