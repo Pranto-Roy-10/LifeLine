@@ -1420,70 +1420,78 @@ block content %}
       const isSos = (r.category || "").toLowerCase() === "sos";
       const viewerResponded = !!r.viewer_sos_responded;
 
-      let tagLabel = "Help needed";
-      let tagColor = "text-emerald-300 bg-emerald-500/10 border-emerald-400/40";
+      const urgency = (r.urgency || "").toLowerCase();
+      const urgencyClass =
+        urgency === "emergency"
+          ? "text-rose-400"
+          : urgency === "high"
+          ? "text-amber-300"
+          : urgency === "normal"
+          ? "text-sky-300"
+          : urgency
+          ? "text-emerald-300"
+          : "text-slate-400";
 
-      if (isSos) {
-        tagLabel = "SOS Signal";
-        tagColor = "text-rose-300 bg-rose-500/10 border-rose-400/40";
-      }
+      const outer = document.createElement("div");
+      outer.className = "rounded-2xl border border-slate-800 bg-slate-900/70 overflow-hidden";
 
-      if (!isSos && isOffer) {
-        tagLabel = "Helper (general)";
-        tagColor = "text-sky-300 bg-sky-500/10 border-sky-400/40";
-      } else if (!isSos && r.type === "medicine") {
-        tagLabel = "Medicine run";
-        tagColor = "text-sky-300 bg-sky-500/10 border-sky-400/40";
-      } else if (!isSos && r.type === "ride") {
-        tagLabel = "Ride offer";
-        tagColor = "text-amber-300 bg-amber-500/10 border-amber-400/40";
-      }
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "w-full flex items-start justify-between px-4 py-3 text-left hover:bg-slate-900/90 transition";
+      btn.dataset.requestId = r.id;
 
-      const urgencyText = r.urgency ? r.urgency : null;
+      btn.innerHTML = `
+        <div class="flex-1 min-w-0">
+          <div class="flex flex-wrap items-center gap-2">
+            <p class="font-semibold text-sm text-slate-100 truncate">${r.title || ""}</p>
 
-      const card = document.createElement("button");
-      card.type = "button";
-      card.className = isSos
-        ? "btn-sheen card-hover stagger-item w-full text-left rounded-2xl border border-rose-500/30 bg-slate-900/90 px-3 py-2.5 hover:border-rose-400 hover:bg-slate-900 transition flex flex-col gap-1"
-        : "btn-sheen card-hover stagger-item w-full text-left rounded-2xl border border-slate-800 bg-slate-900/90 px-3 py-2.5 hover:border-emerald-400 hover:bg-slate-900 transition flex flex-col gap-1";
-      card.dataset.requestId = r.id;
+            <span class="text-[11px] px-2 py-0.5 rounded-full border border-slate-600 text-slate-200 bg-slate-800/80">
+              ${(r.category || "Other").charAt(0).toUpperCase() + (r.category || "Other").slice(1)}
+            </span>
 
-      card.innerHTML = `
-        <div class="flex items-center justify-between gap-2">
-          <p class="font-semibold text-slate-100 text-[13px] line-clamp-1">${
-            r.title
-          }</p>
-          <span class="text-[10px] px-2 py-1 rounded-full border ${tagColor}">
-            ${tagLabel}
-          </span>
+            ${
+              isSos
+                ? `<span class="text-[11px] px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-300 border border-rose-500/40 font-bold">🚨 SOS</span>`
+                : ""
+            }
+
+            ${
+              isOffer
+                ? `<span class="text-[11px] px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-300 border border-sky-500/40">Offer help</span>`
+                : `<span class="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/40">Needs help</span>`
+            }
+
+            ${
+              isSos && IS_TRUSTED_HELPER && viewerResponded
+                ? `<span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-700 text-emerald-400 border border-slate-600 font-bold">✓ Responded</span>`
+                : ""
+            }
+          </div>
+
+          <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-400">
+            <span class="text-emerald-300">~ ${r.distance_km} km away</span>
+            ${
+              r.urgency
+                ? `<span>⏱️ Urgency: <span class="${urgencyClass}">${
+                    String(r.urgency).charAt(0).toUpperCase() + String(r.urgency).slice(1)
+                  }</span></span>`
+                : ""
+            }
+          </div>
         </div>
-        <p class="text-[11px] text-slate-400 line-clamp-2">
-          ${r.description || ""}
-        </p>
-        <p class="text-[11px] text-emerald-300 mt-1">
-          ~ ${r.distance_km} km away
-          ${r.is_offer && r.radius_pref ? ` • radius ${r.radius_pref} km` : ""}
-        </p>
-        ${
-          urgencyText
-            ? `<p class="text-[10px] ${
-                isSos ? "text-rose-300" : "text-orange-300"
-              } mt-0.5 capitalize">Urgency: ${urgencyText}</p>`
-            : ""
-        }
-        ${
-          isSos && IS_TRUSTED_HELPER && viewerResponded
-            ? `<p class="text-[10px] text-emerald-400 font-semibold mt-0.5">✓ You responded</p>`
-            : ""
-        }
+
+        <div class="ml-3 mt-0.5">
+          <span class="inline-block text-slate-500">›</span>
+        </div>
       `;
 
-      card.addEventListener("click", () => {
+      btn.addEventListener("click", () => {
         const mode = r.is_offer ? "offer" : "need";
         window.location.href = `/requests?mode=${mode}&open=${r.id}`;
       });
 
-      listEl.appendChild(card);
+      outer.appendChild(btn);
+      listEl.appendChild(outer);
     }
 
     // Ensure newly inserted cards animate (stagger observer runs at page load only)
