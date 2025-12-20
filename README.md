@@ -10,6 +10,14 @@ Render runs the app with:
 
 `gunicorn -k eventlet -w 1 -b 0.0.0.0:$PORT app:app`
 
+### Python version
+
+Render defaults to Python 3.13.x for new services unless you pin a version.
+This repo pins Python to 3.11.9 via:
+
+- `.python-version`
+- `PYTHON_VERSION=3.11.9` in `render.yaml`
+
 ### Database (SQLite)
 
 By default the app uses SQLite. On Render you must use a persistent disk.
