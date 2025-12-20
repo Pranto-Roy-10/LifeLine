@@ -1,13 +1,15 @@
 {% extends "base.html" %} {% block content %}
 
-<div class="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-  <h1 class="text-2xl sm:text-3xl font-bold text-white mb-4 sm:mb-6">
+<div class="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 page-transition">
+  <h1
+    class="text-2xl sm:text-3xl font-bold text-white mb-4 sm:mb-6 stagger-item"
+  >
     Community Events Map
   </h1>
 
   <div
     id="map"
-    class="w-full h-[60vh] min-h-[320px] md:h-[500px] rounded-xl border border-gray-700"
+    class="w-full h-[60vh] min-h-[320px] md:h-[500px] rounded-xl border border-gray-700 card-hover stagger-item"
   ></div>
 </div>
 

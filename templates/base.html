@@ -871,13 +871,31 @@
         });
       }, observerOptions);
 
-      // Observe elements with stagger class
-      document.querySelectorAll(".stagger-item").forEach((item) => {
-        item.style.opacity = "0";
-        item.style.transform = "translateY(20px)";
-        item.style.transition = "all 0.6s ease";
-        observer.observe(item);
-      });
+      function observeStaggerItems(root) {
+        const scope = root || document;
+        if (!scope.querySelectorAll) return;
+
+        scope.querySelectorAll(".stagger-item").forEach((item) => {
+          // Prevent double-observing the same node
+          if (item.dataset && item.dataset.staggerObserved === "1") return;
+          try {
+            item.dataset.staggerObserved = "1";
+          } catch (e) {}
+
+          item.style.opacity = "0";
+          item.style.transform = "translateY(20px)";
+          item.style.transition = "all 0.6s ease";
+          observer.observe(item);
+        });
+      }
+
+      // Expose so pages can animate JS-inserted content (e.g., map sidebar cards)
+      try {
+        window.lifelineObserveStaggerItems = observeStaggerItems;
+      } catch (e) {}
+
+      // Initial observe
+      observeStaggerItems(document);
 
       // Enhanced form focus effects
       document.querySelectorAll("input, textarea, select").forEach((input) => {
