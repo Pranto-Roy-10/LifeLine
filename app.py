@@ -686,24 +686,46 @@ def build_flagged_map_for_requests(requests_list):
         return {}
 
     now = datetime.utcnow()
-    window_start = now - timedelta(days=30)
+    # Keep a generous lookback so duplicate detection doesn't silently vanish
+    # when a user reposts after a few weeks.
+    window_start = now - timedelta(days=120)
 
     user_ids = {r.user_id for r in requests_list if getattr(r, "user_id", None) is not None}
     if not user_ids:
         return {}
 
     recent_by_user = {uid: [] for uid in user_ids}
+    recent_rows = []
     try:
+        # Fast path: filter by created_at when the column/typing supports it.
         recent_rows = (
-            Request.query.filter(Request.user_id.in_(list(user_ids)), Request.created_at >= window_start)
+            Request.query.filter(
+                Request.user_id.in_(list(user_ids)),
+                Request.created_at.isnot(None),
+                Request.created_at >= window_start,
+            )
             .order_by(Request.created_at.desc())
             .limit(500)
             .all()
         )
-        for rr in recent_rows:
-            recent_by_user.setdefault(rr.user_id, []).append(rr)
     except Exception:
-        recent_by_user = {uid: [] for uid in user_ids}
+        # Fallback: if created_at filtering fails for any reason (schema drift,
+        # nulls, sqlite typing quirks), still fetch a bounded recent sample.
+        try:
+            recent_rows = (
+                Request.query.filter(Request.user_id.in_(list(user_ids)))
+                .order_by(Request.id.desc())
+                .limit(500)
+                .all()
+            )
+        except Exception:
+            recent_rows = []
+
+    for rr in recent_rows:
+        try:
+            recent_by_user.setdefault(rr.user_id, []).append(rr)
+        except Exception:
+            continue
 
     flagged_map = {}
     for r in requests_list:
