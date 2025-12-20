@@ -3,14 +3,14 @@ block content %}
 
 <!-- HERO: MAIN BANNER (modernized) -->
 <section class="home-hero relative overflow-hidden">
-  <div class="hero-backdrop"></div>
+  <div class="hero-backdrop float-slow"></div>
   <div class="w-full px-6 md:px-12 py-10 md:py-16 grid lg:grid-cols-2 gap-10 items-center relative z-10">
     <!-- LEFT: TEXT + PRIMARY ACTIONS + STATS -->
     <div class="space-y-7 animate-fadeIn">
       <div class="space-y-4">
         <p class="text-[11px] font-semibold tracking-[0.35em] text-emerald-300 uppercase">LIFELINE · NEIGHBORHOOD NETWORK</p>
         <h1 class="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight text-white">
-          Get or offer help <span class="text-emerald-400">in your neighborhood</span> in minutes.
+          Get or offer help <span class="text-emerald-400 gradient-animate">in your neighborhood</span> in minutes.
         </h1>
         <p class="text-sm md:text-base text-slate-300 max-w-xl leading-relaxed">
           Stuck at home, need medicine, looking for a ride, or just feeling low? LifeLine connects you with nearby people who can help – safely, quickly, and with a real sense of community.
@@ -77,8 +77,8 @@ block content %}
 
     <!-- RIGHT: LIVE PANEL -->
     <div class="relative animate-fadeInUp">
-      <div class="hero-glow-a"></div>
-      <div class="hero-glow-b"></div>
+      <div class="hero-glow-a float-slow"></div>
+      <div class="hero-glow-b float-slow" style="animation-delay: 1.8s"></div>
       <div class="live-panel glass-card-enhanced p-6 space-y-4 card-hover">
         <div class="flex justify-between items-center pb-3 border-b border-slate-800/60">
           <div>
@@ -117,12 +117,12 @@ block content %}
     </div>
 
     <!-- ACTION GRID -->
-    <div class="grid md:grid-cols-3 gap-6 text-sm">
+    <div class="grid md:grid-cols-3 gap-6 text-sm action-grid">
       <!-- COLUMN 1 -->
       <div class="space-y-3 animate-fadeInUp" style="animation-delay: 0.1s">
         <a
           href="/requests"
-          class="block rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-900/50 to-slate-900/30 px-5 py-4 hover:border-emerald-400/80 transition-all duration-300 hover:bg-gradient-to-br hover:from-emerald-500/10 hover:to-slate-900/40 group hover:shadow-lg hover:shadow-emerald-500/20"
+          class="block btn-sheen rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-900/50 to-slate-900/30 px-5 py-4 hover:border-emerald-400/80 transition-all duration-300 hover:bg-gradient-to-br hover:from-emerald-500/10 hover:to-slate-900/40 group hover:shadow-lg hover:shadow-emerald-500/20"
         >
           <p class="text-xs font-semibold text-emerald-300 mb-2 group-hover:text-emerald-200 transition-colors">
             ↓ Ask for something
@@ -135,7 +135,7 @@ block content %}
 
         <a
           href="/requests?mode=offer"
-          class="block rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-900/50 to-slate-900/30 px-5 py-4 hover:border-emerald-400/80 transition-all duration-300 hover:bg-gradient-to-br hover:from-emerald-500/10 hover:to-slate-900/40 group hover:shadow-lg hover:shadow-emerald-500/20"
+          class="block btn-sheen rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-900/50 to-slate-900/30 px-5 py-4 hover:border-emerald-400/80 transition-all duration-300 hover:bg-gradient-to-br hover:from-emerald-500/10 hover:to-slate-900/40 group hover:shadow-lg hover:shadow-emerald-500/20"
         >
           <p class="text-xs font-semibold text-emerald-300 mb-2 group-hover:text-emerald-200 transition-colors">
             ↑ Give something
@@ -148,7 +148,7 @@ block content %}
 
         <a
           href="/resources"
-          class="block rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-900/50 to-slate-900/30 px-5 py-4 hover:border-emerald-400/80 transition-all duration-300 hover:bg-gradient-to-br hover:from-emerald-500/10 hover:to-slate-900/40 group hover:shadow-lg hover:shadow-emerald-500/20"
+          class="block btn-sheen rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-900/50 to-slate-900/30 px-5 py-4 hover:border-emerald-400/80 transition-all duration-300 hover:bg-gradient-to-br hover:from-emerald-500/10 hover:to-slate-900/40 group hover:shadow-lg hover:shadow-emerald-500/20"
         >
           <p class="text-xs font-semibold text-emerald-300 mb-2 group-hover:text-emerald-200 transition-colors">
             📦 Share items
@@ -164,7 +164,7 @@ block content %}
       <div class="space-y-3 animate-fadeInUp" style="animation-delay: 0.2s">
         <a
           href="/map"
-          class="block rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-900/50 to-slate-900/30 px-5 py-4 hover:border-sky-400/80 transition-all duration-300 hover:bg-gradient-to-br hover:from-sky-500/10 hover:to-slate-900/40 group hover:shadow-lg hover:shadow-sky-500/20"
+          class="block btn-sheen rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-900/50 to-slate-900/30 px-5 py-4 hover:border-sky-400/80 transition-all duration-300 hover:bg-gradient-to-br hover:from-sky-500/10 hover:to-slate-900/40 group hover:shadow-lg hover:shadow-sky-500/20"
         >
           <p class="text-xs font-semibold text-sky-300 mb-2 group-hover:text-sky-200 transition-colors">
             🗺️ See around
@@ -177,7 +177,7 @@ block content %}
 
         <a
           href="/events"
-          class="block rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-900/50 to-slate-900/30 px-5 py-4 hover:border-sky-400/80 transition-all duration-300 hover:bg-gradient-to-br hover:from-sky-500/10 hover:to-slate-900/40 group hover:shadow-lg hover:shadow-sky-500/20"
+          class="block btn-sheen rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-900/50 to-slate-900/30 px-5 py-4 hover:border-sky-400/80 transition-all duration-300 hover:bg-gradient-to-br hover:from-sky-500/10 hover:to-slate-900/40 group hover:shadow-lg hover:shadow-sky-500/20"
         >
           <p class="text-xs font-semibold text-sky-300 mb-2 group-hover:text-sky-200 transition-colors">
             📅 Join together
@@ -190,7 +190,7 @@ block content %}
 
         <a
           href="/chat"
-          class="block rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-900/50 to-slate-900/30 px-5 py-4 hover:border-sky-400/80 transition-all duration-300 hover:bg-gradient-to-br hover:from-sky-500/10 hover:to-slate-900/40 group hover:shadow-lg hover:shadow-sky-500/20"
+          class="block btn-sheen rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-900/50 to-slate-900/30 px-5 py-4 hover:border-sky-400/80 transition-all duration-300 hover:bg-gradient-to-br hover:from-sky-500/10 hover:to-slate-900/40 group hover:shadow-lg hover:shadow-sky-500/20"
         >
           <p class="text-xs font-semibold text-sky-300 mb-2 group-hover:text-sky-200 transition-colors">
             💬 Talk live
@@ -207,7 +207,7 @@ block content %}
         <a
           href="javascript:void(0)"
           id="oneTapSosCard"
-          class="block rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-900/50 to-slate-900/30 px-5 py-4 hover:border-rose-400/80 transition-all duration-300 hover:bg-gradient-to-br hover:from-rose-500/15 hover:to-slate-900/40 group hover:shadow-lg hover:shadow-rose-500/20 cursor-pointer"
+          class="block btn-sheen rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-900/50 to-slate-900/30 px-5 py-4 hover:border-rose-400/80 transition-all duration-300 hover:bg-gradient-to-br hover:from-rose-500/15 hover:to-slate-900/40 group hover:shadow-lg hover:shadow-rose-500/20 cursor-pointer"
         >
           <p class="text-xs font-semibold text-rose-300 mb-2 group-hover:text-rose-200 transition-colors">
             🚨 Emergency
@@ -220,7 +220,7 @@ block content %}
 
         <a
           href="{{ url_for('emotional_ping_placeholder') }}"
-          class="block rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-900/50 to-slate-900/30 px-5 py-4 hover:border-violet-400/80 transition-all duration-300 hover:bg-gradient-to-br hover:from-violet-500/10 hover:to-slate-900/40 group hover:shadow-lg hover:shadow-violet-500/20"
+          class="block btn-sheen rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-900/50 to-slate-900/30 px-5 py-4 hover:border-violet-400/80 transition-all duration-300 hover:bg-gradient-to-br hover:from-violet-500/10 hover:to-slate-900/40 group hover:shadow-lg hover:shadow-violet-500/20"
         >
           <p class="text-xs font-semibold text-violet-300 mb-2 group-hover:text-violet-200 transition-colors">
             💜 Support
@@ -233,7 +233,7 @@ block content %}
 
         <a
           href="/dashboard"
-          class="block rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-900/50 to-slate-900/30 px-5 py-4 hover:border-amber-400/80 transition-all duration-300 hover:bg-gradient-to-br hover:from-amber-500/10 hover:to-slate-900/40 group hover:shadow-lg hover:shadow-amber-500/20"
+          class="block btn-sheen rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-900/50 to-slate-900/30 px-5 py-4 hover:border-amber-400/80 transition-all duration-300 hover:bg-gradient-to-br hover:from-amber-500/10 hover:to-slate-900/40 group hover:shadow-lg hover:shadow-amber-500/20"
         >
           <p class="text-xs font-semibold text-amber-300 mb-2 group-hover:text-amber-200 transition-colors">
             ⭐ Your journey

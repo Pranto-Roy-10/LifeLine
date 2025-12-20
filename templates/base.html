@@ -741,7 +741,7 @@
       });
 
       // Enhanced button interactions
-      document.querySelectorAll('.btn-primary, .btn-secondary, .btn-ghost, .btn-map').forEach(btn => {
+      document.querySelectorAll('.btn-primary, .btn-secondary, .btn-ghost, .btn-map, .btn-sheen').forEach(btn => {
         btn.addEventListener('mousedown', function() {
           this.style.transform = 'scale(0.98)';
         });
@@ -773,12 +773,19 @@
       };
 
       const observer = new IntersectionObserver((entries) => {
+        const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         entries.forEach((entry, index) => {
           if (entry.isIntersecting) {
-            setTimeout(() => {
+            if (reduceMotion) {
               entry.target.style.opacity = '1';
               entry.target.style.transform = 'translateY(0)';
-            }, index * 100);
+            } else {
+              // Use CSS animation class for smoother control and allow per-item delay
+              if (!entry.target.classList.contains('animate-fadeInUp')) {
+                entry.target.style.animationDelay = `${index * 120}ms`;
+                entry.target.classList.add('animate-fadeInUp');
+              }
+            }
           }
         });
       }, observerOptions);
@@ -857,11 +864,6 @@
       window.showNotification = showNotification;
     </script>
 
-    <!-- Floating Action Button for Quick SOS -->
-    {% if session.get('user_id') %}
-    <a href="{{ url_for('trigger_sos') }}" class="fab interactive-element" title="Quick SOS - Emergency Help">
-      <span>🚨</span>
-    </a>
-    {% endif %}
+    <!-- Floating Action Button removed per request -->
   </body>
 </html>
