@@ -254,11 +254,32 @@ block content %}
                 >{{ req.category }}</span
               >
             </div>
-            <span
-              class="text-xs font-bold px-2 py-1 rounded uppercase {% if req.status == 'open' %} bg-blue-900 text-blue-300 {% else %} bg-amber-900 text-amber-300 {% endif %}"
-            >
-              {{ req.status }}
-            </span>
+            <div class="flex items-start gap-2">
+              <span
+                class="text-xs font-bold px-2 py-1 rounded uppercase {% if req.status == 'open' %} bg-blue-900 text-blue-300 {% else %} bg-amber-900 text-amber-300 {% endif %}"
+              >
+                {{ req.status }}
+              </span>
+
+              {% set _expired = (req.expires_at is not none) and (now is defined) and (req.expires_at <= now) %}
+              {% if _expired %}
+                {% set _resp_count = (req.sos_responses|length if (req.category or '')|lower == 'sos' else req.offers|length) %}
+                {% if _resp_count == 0 %}
+                  <form
+                    action="{{ url_for('remove_expired_unanswered_request', request_id=req.id) }}"
+                    method="POST"
+                    onsubmit="return confirm('Remove this expired post?');"
+                  >
+                    <button
+                      type="submit"
+                      class="text-xs bg-rose-600 hover:bg-rose-500 text-white px-2 py-1 rounded"
+                    >
+                      Remove
+                    </button>
+                  </form>
+                {% endif %}
+              {% endif %}
+            </div>
           </div>
 
           {% if req.status == 'open' %}

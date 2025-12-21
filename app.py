@@ -3892,6 +3892,7 @@ def dashboard():
 
     # Dashboard task lists: query explicitly (avoid relying on relationship loader behavior)
     now = datetime.utcnow()
+
     my_posts = (
         Request.query.filter(
             Request.user_id == user.id,
@@ -3900,6 +3901,44 @@ def dashboard():
         .order_by(Request.created_at.desc())
         .all()
     )
+
+    # Also include expired posts that received no responses, so the user can remove them.
+    # (These are often auto-closed and would otherwise not show up in the dashboard list.)
+    try:
+        expired_candidates = (
+            Request.query.filter(
+                Request.user_id == user.id,
+                Request.expires_at <= now,
+                Request.helper_id == None,  # noqa: E711
+            )
+            .order_by(Request.created_at.desc())
+            .limit(200)
+            .all()
+        )
+        expired_unanswered = []
+        for r in expired_candidates:
+            cat = (getattr(r, "category", "") or "").lower()
+            if cat == "sos":
+                if SOSResponse.query.filter(SOSResponse.request_id == r.id).count() == 0:
+                    expired_unanswered.append(r)
+            else:
+                if Offer.query.filter(Offer.request_id == r.id).count() == 0:
+                    expired_unanswered.append(r)
+
+        if expired_unanswered:
+            seen = {int(r.id) for r in my_posts if getattr(r, "id", None) is not None}
+            for r in expired_unanswered:
+                rid = getattr(r, "id", None)
+                if rid is None:
+                    continue
+                if int(rid) in seen:
+                    continue
+                my_posts.append(r)
+                seen.add(int(rid))
+            # keep newest first
+            my_posts.sort(key=lambda x: x.created_at or datetime.min, reverse=True)
+    except Exception:
+        pass
     active_engagements = (
         Request.query.filter(
             Request.helper_id == user.id,
@@ -3956,7 +3995,40 @@ def dashboard():
         pending_offers=pending_offers,
         sos_review_req=sos_review_req,
         sos_review_helper=sos_review_helper,
+        now=now,
     )
+
+
+@app.route("/requests/<int:request_id>/remove-expired-unanswered", methods=["POST"])
+@login_required
+def remove_expired_unanswered_request(request_id):
+    """Remove a request only when it is expired AND has zero responses."""
+    user = current_user()
+    r = Request.query.get_or_404(request_id)
+
+    if r.user_id != user.id:
+        flash("You are not allowed to remove this post.", "error")
+        return redirect(url_for("dashboard"))
+
+    now = datetime.utcnow()
+    if not getattr(r, "expires_at", None) or r.expires_at > now:
+        flash("You can only remove a post after it expires.", "error")
+        return redirect(url_for("dashboard"))
+
+    cat = (getattr(r, "category", "") or "").lower()
+    if cat == "sos":
+        resp_count = SOSResponse.query.filter(SOSResponse.request_id == r.id).count()
+    else:
+        resp_count = Offer.query.filter(Offer.request_id == r.id).count()
+
+    if resp_count and int(resp_count) > 0:
+        flash("You can't remove this post because someone already responded.", "error")
+        return redirect(url_for("dashboard"))
+
+    db.session.delete(r)
+    db.session.commit()
+    flash("Post removed.", "success")
+    return redirect(url_for("dashboard"))
 
 # ------------------ API: Dashboard & Impact  ------------------
 
