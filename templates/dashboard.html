@@ -1,10 +1,10 @@
 {% extends "base.html" %} {% block title %}Dashboard – LifeLine{% endblock %} {%
 block content %}
 <div
-  class="w-full min-h-screen bg-gradient-to-b from-slate-950 via-slate-950/90 to-slate-900 text-slate-100 px-6 md:px-12 py-10 space-y-8 page-transition"
+  class="w-full min-h-screen home-hero text-slate-100 px-6 md:px-12 py-10 space-y-8 page-transition"
 >
   {% if sos_review_req and sos_review_helper %}
-  <div class="bg-gradient-to-r from-slate-900/60 to-emerald-900/20 border border-emerald-500/40 rounded-2xl p-6 shadow-lg card-hover">
+  <div class="bg-gradient-to-r from-slate-900/60 to-emerald-900/20 border border-emerald-500/40 rounded-2xl p-6 shadow-lg card-hover stagger-item">
     <div
       class="flex flex-col md:flex-row md:items-center md:justify-between gap-3"
     >
@@ -20,7 +20,7 @@ block content %}
       </div>
       <a
         href="{{ url_for('chat_with_user', other_user_id=sos_review_helper.id) }}"
-        class="inline-flex items-center justify-center px-4 py-2.5 rounded-lg font-semibold transition border bg-gradient-to-r from-emerald-500/10 to-cyan-500/10 border-emerald-500/40 text-emerald-300 hover:from-emerald-500/20 hover:to-cyan-500/20 hover:border-emerald-500/60 shadow-lg"
+        class="btn-sheen inline-flex items-center justify-center px-4 py-2.5 rounded-lg font-semibold transition border bg-gradient-to-r from-emerald-500/10 to-cyan-500/10 border-emerald-500/40 text-emerald-300 hover:from-emerald-500/20 hover:to-cyan-500/20 hover:border-emerald-500/60 shadow-lg"
       >
         Chat
       </a>
@@ -111,7 +111,7 @@ block content %}
   {% endif %}
 
   <div
-    class="flex flex-col md:flex-row justify-between items-start md:items-center"
+    class="flex flex-col md:flex-row justify-between items-start md:items-center stagger-item"
   >
     <div>
       <h1 class="text-3xl font-bold mb-1">Welcome back, {{ user.name }} 👋</h1>
@@ -125,25 +125,25 @@ block content %}
     <div class="mt-4 md:mt-0">
       <a
         href="{{ url_for('need_help') }}"
-        class="inline-flex items-center justify-center px-4 py-2 rounded-lg font-medium mr-2 transition border bg-slate-900/40 border-rose-500/30 text-rose-200 hover:bg-slate-900/60 hover:border-rose-400/50"
+        class="btn-sheen inline-flex items-center justify-center px-4 py-2 rounded-lg font-medium mr-2 transition border bg-slate-900/40 border-rose-500/30 text-rose-200 hover:bg-slate-900/60 hover:border-rose-400/50"
       >
         Request Help
       </a>
       <a
         href="{{ url_for('can_help') }}"
-        class="inline-flex items-center justify-center px-4 py-2 rounded-lg font-medium mr-2 transition border bg-slate-900/40 border-emerald-500/30 text-emerald-200 hover:bg-slate-900/60 hover:border-emerald-400/50"
+        class="btn-sheen inline-flex items-center justify-center px-4 py-2 rounded-lg font-medium mr-2 transition border bg-slate-900/40 border-emerald-500/30 text-emerald-200 hover:bg-slate-900/60 hover:border-emerald-400/50"
       >
         Offer Help
       </a>
       <a
         href="{{ url_for('emotional_ping_placeholder') }}"
-        class="inline-flex items-center justify-center px-4 py-2 rounded-lg font-medium mr-2 transition border bg-slate-900/40 border-cyan-500/30 text-cyan-200 hover:bg-slate-900/60 hover:border-cyan-400/50"
+        class="btn-sheen inline-flex items-center justify-center px-4 py-2 rounded-lg font-medium mr-2 transition border bg-slate-900/40 border-cyan-500/30 text-cyan-200 hover:bg-slate-900/60 hover:border-cyan-400/50"
       >
         Emotional Ping
       </a>
       <a
         href="{{ url_for('create_event') }}"
-        class="inline-flex items-center justify-center px-4 py-2 rounded-lg font-medium transition border bg-slate-900/40 border-indigo-500/30 text-indigo-200 hover:bg-slate-900/60 hover:border-indigo-400/50"
+        class="btn-sheen inline-flex items-center justify-center px-4 py-2 rounded-lg font-medium transition border bg-slate-900/40 border-indigo-500/30 text-indigo-200 hover:bg-slate-900/60 hover:border-indigo-400/50"
       >
         Create Event
       </a>
@@ -151,7 +151,7 @@ block content %}
   </div>
 
   <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-    <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-6">
+    <div class="glass-card-enhanced rounded-2xl p-6 stagger-item card-hover">
       <p class="text-slate-400">People Helped</p>
       <h2
         id="people-helped-val"
@@ -160,13 +160,13 @@ block content %}
         {{ stats.helped }}
       </h2>
     </div>
-    <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-6">
+    <div class="glass-card-enhanced rounded-2xl p-6 stagger-item card-hover">
       <p class="text-slate-400">Total Hours</p>
       <h2 id="total-hours-val" class="text-4xl font-bold text-emerald-400 mt-3">
         {{ stats.total_hours }}h
       </h2>
     </div>
-    <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-6">
+    <div class="glass-card-enhanced rounded-2xl p-6 stagger-item card-hover">
       <p class="text-slate-400">Trust Score</p>
       <div class="w-full bg-slate-700 h-3 rounded-full mt-4">
         <div
@@ -184,7 +184,7 @@ block content %}
 
   <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
     <div
-      class="bg-slate-900/80 p-8 rounded-3xl shadow-lg text-center border border-slate-800 flex flex-col items-center justify-center"
+      class="glass-card-enhanced p-8 rounded-3xl text-center flex flex-col items-center justify-center stagger-item card-hover"
     >
       <h2 class="text-xl font-bold mb-4">Your Kindness Score</h2>
       <div class="relative w-40 h-40">
@@ -220,7 +220,7 @@ block content %}
       </p>
     </div>
     <div
-      class="bg-slate-900/80 p-8 rounded-3xl shadow-lg border border-slate-800"
+      class="glass-card-enhanced p-8 rounded-3xl border border-slate-800 stagger-item card-hover"
     >
       <h2 class="text-xl font-bold mb-6">Your Progress Over Time</h2>
       <div class="w-full" style="height: 260px">
@@ -230,7 +230,7 @@ block content %}
   </div>
 
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-    <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-6">
+    <div class="glass-card-enhanced border border-slate-800 rounded-2xl p-6 card-hover stagger-item">
       <h2 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
         <span class="bg-indigo-500 w-2 h-6 rounded-full"></span>
         My Posts & Incoming Requests
@@ -244,7 +244,7 @@ block content %}
       {% else %}
       <div class="space-y-4">
         {% for req in my_posts %}
-        <div id="review-request-{{ req.id }}" class="bg-slate-950 border border-slate-800 p-4 rounded-xl">
+        <div id="review-request-{{ req.id }}" class="bg-slate-950 border border-slate-800 p-4 rounded-xl card-hover">
           <div class="flex justify-between items-start mb-2">
             <div>
               <h3 class="font-semibold text-lg text-slate-200">
@@ -254,11 +254,32 @@ block content %}
                 >{{ req.category }}</span
               >
             </div>
-            <span
-              class="text-xs font-bold px-2 py-1 rounded uppercase {% if req.status == 'open' %} bg-blue-900 text-blue-300 {% else %} bg-amber-900 text-amber-300 {% endif %}"
-            >
-              {{ req.status }}
-            </span>
+            <div class="flex items-start gap-2">
+              <span
+                class="text-xs font-bold px-2 py-1 rounded uppercase {% if req.status == 'open' %} bg-blue-900 text-blue-300 {% else %} bg-amber-900 text-amber-300 {% endif %}"
+              >
+                {{ req.status }}
+              </span>
+
+              {% set _expired = (req.expires_at is not none) and (now is defined) and (req.expires_at <= now) %}
+              {% if _expired %}
+                {% set _resp_count = (req.sos_responses|length if (req.category or '')|lower == 'sos' else req.offers|length) %}
+                {% if _resp_count == 0 %}
+                  <form
+                    action="{{ url_for('remove_expired_unanswered_request', request_id=req.id) }}"
+                    method="POST"
+                    onsubmit="return confirm('Remove this expired post?');"
+                  >
+                    <button
+                      type="submit"
+                      class="text-xs bg-rose-600 hover:bg-rose-500 text-white px-2 py-1 rounded"
+                    >
+                      Remove
+                    </button>
+                  </form>
+                {% endif %}
+              {% endif %}
+            </div>
           </div>
 
           {% if req.status == 'open' %}
@@ -466,7 +487,7 @@ block content %}
       {% endif %}
     </div>
 
-    <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-6">
+    <div class="glass-card-enhanced border border-slate-800 rounded-2xl p-6 card-hover stagger-item">
       <h2 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
         <span class="bg-emerald-500 w-2 h-6 rounded-full"></span>
         My Activity (Sent)
@@ -498,7 +519,7 @@ block content %}
           {% for task in active_engagements %}
           <div
             id="review-request-{{ task.id }}"
-            class="bg-slate-950 border border-emerald-900/30 p-4 rounded-xl relative overflow-hidden mb-2"
+            class="bg-slate-950 border border-emerald-900/30 p-4 rounded-xl relative overflow-hidden mb-2 card-hover"
           >
             <div
               class="absolute left-0 top-0 bottom-0 w-1 bg-emerald-500"
@@ -586,7 +607,7 @@ block content %}
           </p>
           {% for offer in pending_offers %}
           <div
-            class="flex justify-between items-center bg-slate-950/50 p-3 rounded border border-dashed border-slate-800 mb-2"
+            class="flex justify-between items-center bg-slate-950/50 p-3 rounded border border-dashed border-slate-800 mb-2 card-hover"
           >
             <div class="flex flex-col">
               <span class="text-sm text-slate-300 font-semibold"
@@ -610,7 +631,7 @@ block content %}
   </div>
 
   <!-- My Events Section -->
-  <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-6">
+  <div class="glass-card-enhanced border border-slate-800 rounded-2xl p-6 card-hover stagger-item">
     <div class="flex justify-between items-center mb-4">
       <h2 class="text-xl font-bold text-white flex items-center gap-2">
         <span class="bg-indigo-500 w-2 h-6 rounded-full"></span>
@@ -626,7 +647,7 @@ block content %}
     {% if user_events %}
     <div class="space-y-4">
       {% for event in user_events %}
-      <div class="bg-slate-950 border border-slate-800 p-4 rounded-xl">
+      <div class="bg-slate-950 border border-slate-800 p-4 rounded-xl card-hover">
         <div class="flex justify-between items-start mb-2">
           <div>
             <h3 class="font-semibold text-lg text-slate-200">
@@ -679,7 +700,7 @@ block content %}
     {% endif %}
   </div>
 
-  <div>
+  <div class="stagger-item">
     <div class="flex justify-between items-center mb-4">
       <h2 class="text-2xl font-bold">Recent Help History</h2>
       <a
@@ -692,7 +713,7 @@ block content %}
     <div class="space-y-4">
       {% for item in history %}
       <div
-        class="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 flex justify-between items-center"
+        class="glass-card-enhanced border border-slate-800 rounded-2xl p-5 flex justify-between items-center card-hover stagger-item"
       >
         <div>
           <p class="text-lg font-semibold text-slate-200">{{ item.title }}</p>

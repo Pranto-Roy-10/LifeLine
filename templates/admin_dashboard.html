@@ -1,278 +1,288 @@
 {% extends "base.html" %} {% block title %}Admin Dashboard{% endblock %} {%
 block content %}
-<div class="w-full max-w-6xl mx-auto px-6 py-10">
-  <div class="flex justify-between items-center mb-8">
-    <h1 class="text-3xl font-bold text-white">Admin Dashboard</h1>
-    <div class="text-right">
-      <p class="text-xs text-slate-400">Logged in as Admin</p>
+<div
+  class="w-full min-h-screen home-hero text-slate-100 px-6 md:px-12 py-10 space-y-8 page-transition"
+>
+  <div class="w-full max-w-6xl mx-auto">
+    <div class="flex justify-between items-center mb-8 stagger-item">
+      <h1 class="text-3xl font-bold text-white">Admin Dashboard</h1>
+      <div class="text-right">
+        <p class="text-xs text-slate-400">Logged in as Admin</p>
+      </div>
     </div>
-  </div>
 
-  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-    <div class="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-      <p class="text-xs text-slate-400 font-bold uppercase">Users</p>
-      <div class="mt-2 flex items-end justify-between gap-4">
-        <p class="text-3xl font-extrabold text-white">
-          {{ stats.total_users }}
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div class="rounded-2xl glass-card-enhanced p-5 card-hover stagger-item">
+        <p class="text-xs text-slate-400 font-bold uppercase">Users</p>
+        <div class="mt-2 flex items-end justify-between gap-4">
+          <p class="text-3xl font-extrabold text-white">
+            {{ stats.total_users }}
+          </p>
+          <p class="text-xs text-slate-400">
+            {{ stats.premium_users }} premium
+          </p>
+        </div>
+      </div>
+      <div class="rounded-2xl glass-card-enhanced p-5 card-hover stagger-item">
+        <p class="text-xs text-slate-400 font-bold uppercase">Requests</p>
+        <div class="mt-2 flex items-end justify-between gap-4">
+          <p class="text-3xl font-extrabold text-white">
+            {{ stats.open_requests }}
+          </p>
+          <p class="text-xs text-slate-400">
+            {{ stats.claimed_requests }} claimed · {{ stats.closed_requests }}
+            closed
+          </p>
+        </div>
+      </div>
+      <div class="rounded-2xl glass-card-enhanced p-5 card-hover stagger-item">
+        <p class="text-xs text-slate-400 font-bold uppercase">
+          Trusted Helpers
         </p>
-        <p class="text-xs text-slate-400">{{ stats.premium_users }} premium</p>
+        <div class="mt-2 flex items-end justify-between gap-4">
+          <p class="text-3xl font-extrabold text-white">
+            {{ stats.trusted_helpers }}
+          </p>
+          <p class="text-xs text-slate-400">
+            {{ stats.pending_helper_verifications }} pending verification
+          </p>
+        </div>
+      </div>
+      <div class="rounded-2xl glass-card-enhanced p-5 card-hover stagger-item">
+        <p class="text-xs text-slate-400 font-bold uppercase">Payments</p>
+        <div class="mt-2 flex items-end justify-between gap-4">
+          <p class="text-3xl font-extrabold text-white">
+            {{ stats.pending_payments }}
+          </p>
+          <p class="text-xs text-slate-400">pending approvals</p>
+        </div>
       </div>
     </div>
-    <div class="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-      <p class="text-xs text-slate-400 font-bold uppercase">Requests</p>
-      <div class="mt-2 flex items-end justify-between gap-4">
-        <p class="text-3xl font-extrabold text-white">
-          {{ stats.open_requests }}
-        </p>
-        <p class="text-xs text-slate-400">
-          {{ stats.claimed_requests }} claimed · {{ stats.closed_requests }}
-          closed
-        </p>
-      </div>
-    </div>
-    <div class="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-      <p class="text-xs text-slate-400 font-bold uppercase">Trusted Helpers</p>
-      <div class="mt-2 flex items-end justify-between gap-4">
-        <p class="text-3xl font-extrabold text-white">
-          {{ stats.trusted_helpers }}
-        </p>
-        <p class="text-xs text-slate-400">
-          {{ stats.pending_helper_verifications }} pending verification
-        </p>
-      </div>
-    </div>
-    <div class="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-      <p class="text-xs text-slate-400 font-bold uppercase">Payments</p>
-      <div class="mt-2 flex items-end justify-between gap-4">
-        <p class="text-3xl font-extrabold text-white">
-          {{ stats.pending_payments }}
-        </p>
-        <p class="text-xs text-slate-400">pending approvals</p>
-      </div>
-    </div>
-  </div>
 
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
-    <div class="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="text-sm font-bold text-slate-300 uppercase">
-          Requests Created (14 days)
-        </h2>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
+      <div class="rounded-2xl glass-card-enhanced p-6 card-hover stagger-item">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-sm font-bold text-slate-300 uppercase">
+            Requests Created (14 days)
+          </h2>
+        </div>
+        <div class="h-56">
+          <canvas id="requestsCreatedChart" class="w-full h-full"></canvas>
+        </div>
       </div>
-      <div class="h-56">
-        <canvas id="requestsCreatedChart" class="w-full h-full"></canvas>
+      <div class="rounded-2xl glass-card-enhanced p-6 card-hover stagger-item">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-sm font-bold text-slate-300 uppercase">
+            SOS + Payments (14 days)
+          </h2>
+        </div>
+        <div class="h-56">
+          <canvas id="sosPaymentsChart" class="w-full h-full"></canvas>
+        </div>
       </div>
     </div>
-    <div class="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="text-sm font-bold text-slate-300 uppercase">
-          SOS + Payments (14 days)
-        </h2>
-      </div>
-      <div class="h-56">
-        <canvas id="sosPaymentsChart" class="w-full h-full"></canvas>
-      </div>
-    </div>
-  </div>
 
-  <div
-    class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden mb-8"
-  >
     <div
-      class="px-6 py-4 border-b border-slate-800 bg-slate-800/50 flex justify-between items-center"
-    >
-      <h2 class="text-lg font-bold text-white">Pending Verifications</h2>
-      <span
-        class="bg-amber-500/20 text-amber-300 text-xs px-2 py-1 rounded-full font-bold"
-        >{{ pending|length }} Pending</span
-      >
-    </div>
-
-    {% if pending|length == 0 %}
-    <div class="p-8 text-center text-slate-500 italic">
-      No pending payments to verify.
-    </div>
-    {% else %}
-    <div class="overflow-x-auto">
-      <table class="w-full text-left text-sm text-slate-400">
-        <thead class="bg-slate-950 text-slate-500 uppercase text-xs">
-          <tr>
-            <th class="px-6 py-3">User</th>
-            <th class="px-6 py-3">bKash Number</th>
-            <th class="px-6 py-3">Trx ID</th>
-            <th class="px-6 py-3">Amount</th>
-            <th class="px-6 py-3">Time</th>
-            <th class="px-6 py-3 text-right">Actions</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-slate-800">
-          {% for p in pending %}
-          <tr class="hover:bg-slate-800/50 transition">
-            <td class="px-6 py-4 font-medium text-white">
-              {{ p.user.name }}<br />
-              <span class="text-xs text-slate-500">{{ p.user.email }}</span>
-            </td>
-            <td class="px-6 py-4">{{ p.bkash_number }}</td>
-            <td class="px-6 py-4 font-mono text-emerald-400">{{ p.trx_id }}</td>
-            <td class="px-6 py-4">৳{{ p.amount }}</td>
-            <td class="px-6 py-4 text-xs">
-              {{ p.created_at.strftime('%d %b, %H:%M') }}
-            </td>
-            <td class="px-6 py-4 text-right space-x-2">
-              <form
-                action="{{ url_for('admin_payment_action', payment_id=p.id, action='reject') }}"
-                method="POST"
-                class="inline"
-              >
-                <button
-                  onclick="return confirm('Reject this payment?')"
-                  class="text-rose-400 hover:text-rose-300 hover:underline text-xs font-bold"
-                >
-                  Reject
-                </button>
-              </form>
-              <form
-                action="{{ url_for('admin_payment_action', payment_id=p.id, action='approve') }}"
-                method="POST"
-                class="inline"
-              >
-                <button
-                  class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-lg shadow-emerald-900/20"
-                >
-                  Approve
-                </button>
-              </form>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% endif %}
-  </div>
-
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
-    <div
-      class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden"
+      class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden mb-8 card-hover stagger-item"
     >
       <div
         class="px-6 py-4 border-b border-slate-800 bg-slate-800/50 flex justify-between items-center"
       >
-        <h2 class="text-lg font-bold text-white">Latest Requests</h2>
-        <span class="text-xs text-slate-400">Most recent 10</span>
-      </div>
-      <div class="overflow-x-auto">
-        <table class="w-full text-left text-sm text-slate-400">
-          <thead class="bg-slate-950 text-slate-500 uppercase text-xs">
-            <tr>
-              <th class="px-6 py-3">Title</th>
-              <th class="px-6 py-3">User</th>
-              <th class="px-6 py-3">Status</th>
-              <th class="px-6 py-3">Time</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-slate-800">
-            {% for r in latest_requests %}
-            <tr class="hover:bg-slate-800/50 transition">
-              <td class="px-6 py-4 font-medium text-white">
-                {{ r.title }}
-                <div class="text-xs text-slate-500">
-                  {{ r.category }}{% if r.urgency %} · {{ r.urgency }}{% endif
-                  %}
-                </div>
-              </td>
-              <td class="px-6 py-4">
-                {{ r.user.name if r.user else 'Unknown' }}
-              </td>
-              <td class="px-6 py-4">
-                <span
-                  class="px-2 py-1 rounded text-xs font-bold uppercase {% if r.status == 'open' %}bg-amber-500/10 text-amber-300 {% elif r.status == 'claimed' %}bg-sky-500/10 text-sky-300 {% else %}bg-emerald-500/10 text-emerald-300{% endif %}"
-                >
-                  {{ r.status }}
-                </span>
-              </td>
-              <td class="px-6 py-4 text-xs">
-                {{ r.created_at.strftime('%d %b, %H:%M') }}
-              </td>
-            </tr>
-            {% else %}
-            <tr>
-              <td class="px-6 py-6 text-slate-500 italic" colspan="4">
-                No requests found.
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <div
-      class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden"
-    >
-      <div
-        class="px-6 py-4 border-b border-slate-800 bg-slate-800/50 flex justify-between items-center"
-      >
-        <h2 class="text-lg font-bold text-white">Latest SOS Responses</h2>
-        <span class="text-xs text-slate-400">Most recent 10</span>
-      </div>
-      <div class="overflow-x-auto">
-        <table class="w-full text-left text-sm text-slate-400">
-          <thead class="bg-slate-950 text-slate-500 uppercase text-xs">
-            <tr>
-              <th class="px-6 py-3">Request</th>
-              <th class="px-6 py-3">Helper</th>
-              <th class="px-6 py-3">Time</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-slate-800">
-            {% for s in latest_sos %}
-            <tr class="hover:bg-slate-800/50 transition">
-              <td class="px-6 py-4 font-medium text-white">
-                #{{ s.request_id }}
-              </td>
-              <td class="px-6 py-4">
-                {{ s.helper.name if s.helper else 'Unknown' }}
-              </td>
-              <td class="px-6 py-4 text-xs">
-                {{ s.created_at.strftime('%d %b, %H:%M') }}
-              </td>
-            </tr>
-            {% else %}
-            <tr>
-              <td class="px-6 py-6 text-slate-500 italic" colspan="3">
-                No SOS responses found.
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-    <h3 class="text-sm font-bold text-slate-400 uppercase mb-4">
-      Recent History
-    </h3>
-    <ul class="space-y-2">
-      {% for h in history %}
-      <li
-        class="flex justify-between items-center text-xs p-3 rounded bg-slate-950 border border-slate-800"
-      >
-        <span class="text-slate-300"
-          >{{ h.user.name }} ({{ h.bkash_number }}) - {{ h.trx_id }}</span
-        >
+        <h2 class="text-lg font-bold text-white">Pending Verifications</h2>
         <span
-          class="px-2 py-1 rounded font-bold uppercase {% if h.status == 'approved' %}bg-emerald-500/10 text-emerald-400{% else %}bg-rose-500/10 text-rose-400{% endif %}"
+          class="bg-amber-500/20 text-amber-300 text-xs px-2 py-1 rounded-full font-bold"
+          >{{ pending|length }} Pending</span
         >
-          {{ h.status }}
-        </span>
-      </li>
+      </div>
+
+      {% if pending|length == 0 %}
+      <div class="p-8 text-center text-slate-500 italic">
+        No pending payments to verify.
+      </div>
       {% else %}
-      <li class="text-slate-500 italic text-xs">No history yet.</li>
-      {% endfor %}
-    </ul>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm text-slate-400">
+          <thead class="bg-slate-950 text-slate-500 uppercase text-xs">
+            <tr>
+              <th class="px-6 py-3">User</th>
+              <th class="px-6 py-3">bKash Number</th>
+              <th class="px-6 py-3">Trx ID</th>
+              <th class="px-6 py-3">Amount</th>
+              <th class="px-6 py-3">Time</th>
+              <th class="px-6 py-3 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-800">
+            {% for p in pending %}
+            <tr class="hover:bg-slate-800/50 transition">
+              <td class="px-6 py-4 font-medium text-white">
+                {{ p.user.name }}<br />
+                <span class="text-xs text-slate-500">{{ p.user.email }}</span>
+              </td>
+              <td class="px-6 py-4">{{ p.bkash_number }}</td>
+              <td class="px-6 py-4 font-mono text-emerald-400">
+                {{ p.trx_id }}
+              </td>
+              <td class="px-6 py-4">৳{{ p.amount }}</td>
+              <td class="px-6 py-4 text-xs">
+                {{ p.created_at.strftime('%d %b, %H:%M') }}
+              </td>
+              <td class="px-6 py-4 text-right space-x-2">
+                <form
+                  action="{{ url_for('admin_payment_action', payment_id=p.id, action='reject') }}"
+                  method="POST"
+                  class="inline"
+                >
+                  <button
+                    onclick="return confirm('Reject this payment?')"
+                    class="text-rose-400 hover:text-rose-300 hover:underline text-xs font-bold"
+                  >
+                    Reject
+                  </button>
+                </form>
+                <form
+                  action="{{ url_for('admin_payment_action', payment_id=p.id, action='approve') }}"
+                  method="POST"
+                  class="inline"
+                >
+                  <button
+                    class="btn-sheen bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-lg shadow-emerald-900/20"
+                  >
+                    Approve
+                  </button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
+      <div
+        class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden card-hover stagger-item"
+      >
+        <div
+          class="px-6 py-4 border-b border-slate-800 bg-slate-800/50 flex justify-between items-center"
+        >
+          <h2 class="text-lg font-bold text-white">Latest Requests</h2>
+          <span class="text-xs text-slate-400">Most recent 10</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm text-slate-400">
+            <thead class="bg-slate-950 text-slate-500 uppercase text-xs">
+              <tr>
+                <th class="px-6 py-3">Title</th>
+                <th class="px-6 py-3">User</th>
+                <th class="px-6 py-3">Status</th>
+                <th class="px-6 py-3">Time</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800">
+              {% for r in latest_requests %}
+              <tr class="hover:bg-slate-800/50 transition">
+                <td class="px-6 py-4 font-medium text-white">
+                  {{ r.title }}
+                  <div class="text-xs text-slate-500">
+                    {{ r.category }}{% if r.urgency %} · {{ r.urgency }}{% endif
+                    %}
+                  </div>
+                </td>
+                <td class="px-6 py-4">
+                  {{ r.user.name if r.user else 'Unknown' }}
+                </td>
+                <td class="px-6 py-4">
+                  <span
+                    class="px-2 py-1 rounded text-xs font-bold uppercase {% if r.status == 'open' %}bg-amber-500/10 text-amber-300 {% elif r.status == 'claimed' %}bg-sky-500/10 text-sky-300 {% else %}bg-emerald-500/10 text-emerald-300{% endif %}"
+                  >
+                    {{ r.status }}
+                  </span>
+                </td>
+                <td class="px-6 py-4 text-xs">
+                  {{ r.created_at.strftime('%d %b, %H:%M') }}
+                </td>
+              </tr>
+              {% else %}
+              <tr>
+                <td class="px-6 py-6 text-slate-500 italic" colspan="4">
+                  No requests found.
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div
+        class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden card-hover stagger-item"
+      >
+        <div
+          class="px-6 py-4 border-b border-slate-800 bg-slate-800/50 flex justify-between items-center"
+        >
+          <h2 class="text-lg font-bold text-white">Latest SOS Responses</h2>
+          <span class="text-xs text-slate-400">Most recent 10</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm text-slate-400">
+            <thead class="bg-slate-950 text-slate-500 uppercase text-xs">
+              <tr>
+                <th class="px-6 py-3">Request</th>
+                <th class="px-6 py-3">Helper</th>
+                <th class="px-6 py-3">Time</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800">
+              {% for s in latest_sos %}
+              <tr class="hover:bg-slate-800/50 transition">
+                <td class="px-6 py-4 font-medium text-white">
+                  #{{ s.request_id }}
+                </td>
+                <td class="px-6 py-4">
+                  {{ s.helper.name if s.helper else 'Unknown' }}
+                </td>
+                <td class="px-6 py-4 text-xs">
+                  {{ s.created_at.strftime('%d %b, %H:%M') }}
+                </td>
+              </tr>
+              {% else %}
+              <tr>
+                <td class="px-6 py-6 text-slate-500 italic" colspan="3">
+                  No SOS responses found.
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+      <h3 class="text-sm font-bold text-slate-400 uppercase mb-4">
+        Recent History
+      </h3>
+      <ul class="space-y-2">
+        {% for h in history %}
+        <li
+          class="flex justify-between items-center text-xs p-3 rounded bg-slate-950 border border-slate-800"
+        >
+          <span class="text-slate-300"
+            >{{ h.user.name }} ({{ h.bkash_number }}) - {{ h.trx_id }}</span
+          >
+          <span
+            class="px-2 py-1 rounded font-bold uppercase {% if h.status == 'approved' %}bg-emerald-500/10 text-emerald-400{% else %}bg-rose-500/10 text-rose-400{% endif %}"
+          >
+            {{ h.status }}
+          </span>
+        </li>
+        {% else %}
+        <li class="text-slate-500 italic text-xs">No history yet.</li>
+        {% endfor %}
+      </ul>
+    </div>
   </div>
 </div>
 

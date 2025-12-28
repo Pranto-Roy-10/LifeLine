@@ -4,16 +4,30 @@ block content %}
 <!-- HERO: MAIN BANNER (modernized) -->
 <section class="home-hero relative overflow-hidden">
   <div class="hero-backdrop float-slow"></div>
-  <div class="w-full px-6 md:px-12 py-10 md:py-16 grid lg:grid-cols-2 gap-10 items-center relative z-10">
+  <div
+    class="w-full px-6 md:px-12 py-10 md:py-16 grid lg:grid-cols-2 gap-10 items-center relative z-10"
+  >
     <!-- LEFT: TEXT + PRIMARY ACTIONS + STATS -->
-    <div class="space-y-7 animate-fadeIn">
-      <div class="space-y-4">
-        <p class="text-[11px] font-semibold tracking-[0.35em] text-emerald-300 uppercase">LIFELINE · NEIGHBORHOOD NETWORK</p>
-        <h1 class="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight text-white">
-          Get or offer help <span class="text-emerald-400 gradient-animate">in your neighborhood</span> in minutes.
+    <div class="space-y-6">
+      <div class="space-y-3 animate-fadeInUp">
+        <p
+          class="text-xs font-semibold tracking-[0.25em] text-emerald-300 uppercase"
+        >
+          LIFELINE · NEIGHBORHOOD NETWORK
+        </p>
+        <h1
+          class="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight text-white"
+        >
+          Get or offer help
+          <span class="text-emerald-400 gradient-animate"
+            >in your neighborhood</span
+          >
+          in minutes.
         </h1>
         <p class="text-sm md:text-base text-slate-300 max-w-xl leading-relaxed">
-          Stuck at home, need medicine, looking for a ride, or just feeling low? LifeLine connects you with nearby people who can help – safely, quickly, and with a real sense of community.
+          Stuck at home, need medicine, looking for a ride, or just feeling low?
+          LifeLine connects you with nearby people who can help – safely,
+          quickly, and with a real sense of community.
         </p>
       </div>
 
@@ -21,33 +35,42 @@ block content %}
       <div class="grid sm:grid-cols-3 gap-4 stagger-children">
         <div class="glass-card-enhanced p-4 stagger-item card-hover">
           <p class="text-[11px] text-slate-400 font-medium">Helped this week</p>
-          <p class="text-3xl font-bold text-emerald-300 mt-1 tabular-nums" id="stat-helped">0</p>
+          <p
+            class="text-3xl font-bold text-emerald-300 mt-1 tabular-nums"
+            id="stat-helped"
+          >
+            0
+          </p>
           <p class="text-[11px] text-slate-500">neighbors in your area</p>
         </div>
         <div class="glass-card-enhanced p-4 stagger-item card-hover">
           <p class="text-[11px] text-slate-400 font-medium">Open requests</p>
-          <p class="text-3xl font-bold text-sky-300 mt-1 tabular-nums" id="stat-requests">0</p>
+          <p
+            class="text-3xl font-bold text-sky-300 mt-1 tabular-nums"
+            id="stat-requests"
+          >
+            0
+          </p>
           <p class="text-[11px] text-slate-500">waiting for volunteers</p>
         </div>
         <div class="glass-card-enhanced p-4 stagger-item card-hover">
           <p class="text-[11px] text-slate-400 font-medium">Volunteer hours</p>
-          <p class="text-3xl font-bold text-amber-300 mt-1 tabular-nums" id="stat-hours">0</p>
+          <p
+            class="text-3xl font-bold text-amber-300 mt-1 tabular-nums"
+            id="stat-hours"
+          >
+            0
+          </p>
           <p class="text-[11px] text-slate-500">your total</p>
         </div>
       </div>
 
       <!-- PRIMARY ACTION BUTTONS -->
       <div class="flex flex-wrap gap-3">
-        <a
-          href="{{ url_for('need_help') }}"
-          class="btn-primary"
-        >
+        <a href="{{ url_for('need_help') }}" class="btn-primary">
           I Need Help
         </a>
-        <a
-          href="{{ url_for('can_help') }}"
-          class="btn-secondary"
-        >
+        <a href="{{ url_for('can_help') }}" class="btn-secondary">
           I Can Help
         </a>
         <a
@@ -57,12 +80,7 @@ block content %}
         >
           View Suggestions
         </a>
-        <a
-          href="/map"
-          class="btn-map"
-        >
-          Open Neighborhood Map
-        </a>
+        <a href="/map" class="btn-map"> Open Neighborhood Map </a>
       </div>
 
       <!-- SECONDARY QUICK LINK -->
@@ -70,7 +88,9 @@ block content %}
         href="{{ url_for('emotional_ping_placeholder') }}"
         class="inline-flex items-center gap-2 text-xs text-violet-300 hover:text-violet-200 group transition-all duration-300"
       >
-        <span class="h-2 w-2 rounded-full bg-violet-400 animate-pulse group-hover:scale-125 transition-transform"></span>
+        <span
+          class="h-2 w-2 rounded-full bg-violet-400 animate-pulse group-hover:scale-125 transition-transform"
+        ></span>
         Feeling low? Talk to a listener nearby →
       </a>
     </div>
@@ -80,10 +100,14 @@ block content %}
       <div class="hero-glow-a float-slow"></div>
       <div class="hero-glow-b float-slow" style="animation-delay: 1.8s"></div>
       <div class="live-panel glass-card-enhanced p-6 space-y-4 card-hover">
-        <div class="flex justify-between items-center pb-3 border-b border-slate-800/60">
+        <div
+          class="flex justify-between items-center pb-3 border-b border-slate-800/60"
+        >
           <div>
             <p class="text-xs font-semibold text-slate-200">Nearby activity</p>
-            <p class="text-[11px] text-slate-400">Real-time requests in your area</p>
+            <p class="text-[11px] text-slate-400">
+              Real-time requests in your area
+            </p>
           </div>
           <span class="live-pill">Live</span>
         </div>
@@ -95,7 +119,10 @@ block content %}
           </div>
         </div>
 
-        <div class="mt-4 pt-4 border-t border-slate-800/60 resources-widget" id="resources-widget-container">
+        <div
+          class="mt-4 pt-4 border-t border-slate-800/60 resources-widget"
+          id="resources-widget-container"
+        >
           {% include '_resources_widget.html' %}
         </div>
       </div>
@@ -104,15 +131,21 @@ block content %}
 </section>
 
 <!-- WHAT YOU CAN DO WITH LIFELINE -->
-<section id="features" class="border-t border-slate-800/50 bg-gradient-to-b from-slate-950/40 to-slate-950/60">
+<section
+  id="features"
+  class="border-t border-slate-800/50 bg-gradient-to-b from-slate-950/40 to-slate-950/60"
+>
   <div class="w-full px-6 md:px-12 py-12 md:py-16">
     <div class="mb-10 animate-fadeInUp">
-      <h3 class="text-2xl md:text-3xl font-bold mb-3 bg-clip-text text-transparent bg-gradient-to-r from-slate-100 to-slate-300">
+      <h3
+        class="text-2xl md:text-3xl font-bold mb-3 bg-clip-text text-transparent bg-gradient-to-r from-slate-100 to-slate-300"
+      >
         What you can do with LifeLine
       </h3>
       <p class="text-sm text-slate-400 max-w-3xl leading-relaxed">
-        LifeLine is more than a chat app. It's a complete ecosystem of tools to make your
-        neighborhood kinder, safer, and more connected – from daily help to emergency SOS.
+        LifeLine is more than a chat app. It's a complete ecosystem of tools to
+        make your neighborhood kinder, safer, and more connected – from daily
+        help to emergency SOS.
       </p>
     </div>
 
@@ -124,12 +157,21 @@ block content %}
           href="/requests"
           class="block btn-sheen rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-900/50 to-slate-900/30 px-5 py-4 hover:border-emerald-400/80 transition-all duration-300 hover:bg-gradient-to-br hover:from-emerald-500/10 hover:to-slate-900/40 group hover:shadow-lg hover:shadow-emerald-500/20"
         >
-          <p class="text-xs font-semibold text-emerald-300 mb-2 group-hover:text-emerald-200 transition-colors">
+          <p
+            class="text-xs font-semibold text-emerald-300 mb-2 group-hover:text-emerald-200 transition-colors"
+          >
             ↓ Ask for something
           </p>
-          <p class="font-semibold mb-2 group-hover:text-white transition-colors">Request help</p>
-          <p class="text-[11px] text-slate-400 group-hover:text-slate-300 transition-colors">
-            Need medicine, groceries, a quick repair, or tutoring? Post a request.
+          <p
+            class="font-semibold mb-2 group-hover:text-white transition-colors"
+          >
+            Request help
+          </p>
+          <p
+            class="text-[11px] text-slate-400 group-hover:text-slate-300 transition-colors"
+          >
+            Need medicine, groceries, a quick repair, or tutoring? Post a
+            request.
           </p>
         </a>
 
@@ -137,12 +179,21 @@ block content %}
           href="/requests?mode=offer"
           class="block btn-sheen rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-900/50 to-slate-900/30 px-5 py-4 hover:border-emerald-400/80 transition-all duration-300 hover:bg-gradient-to-br hover:from-emerald-500/10 hover:to-slate-900/40 group hover:shadow-lg hover:shadow-emerald-500/20"
         >
-          <p class="text-xs font-semibold text-emerald-300 mb-2 group-hover:text-emerald-200 transition-colors">
+          <p
+            class="text-xs font-semibold text-emerald-300 mb-2 group-hover:text-emerald-200 transition-colors"
+          >
             ↑ Give something
           </p>
-          <p class="font-semibold mb-2 group-hover:text-white transition-colors">Offer help</p>
-          <p class="text-[11px] text-slate-400 group-hover:text-slate-300 transition-colors">
-            Post what you can offer – rides, skills, or time – and match with neighbors.
+          <p
+            class="font-semibold mb-2 group-hover:text-white transition-colors"
+          >
+            Offer help
+          </p>
+          <p
+            class="text-[11px] text-slate-400 group-hover:text-slate-300 transition-colors"
+          >
+            Post what you can offer – rides, skills, or time – and match with
+            neighbors.
           </p>
         </a>
 
@@ -150,11 +201,19 @@ block content %}
           href="/resources"
           class="block btn-sheen rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-900/50 to-slate-900/30 px-5 py-4 hover:border-emerald-400/80 transition-all duration-300 hover:bg-gradient-to-br hover:from-emerald-500/10 hover:to-slate-900/40 group hover:shadow-lg hover:shadow-emerald-500/20"
         >
-          <p class="text-xs font-semibold text-emerald-300 mb-2 group-hover:text-emerald-200 transition-colors">
+          <p
+            class="text-xs font-semibold text-emerald-300 mb-2 group-hover:text-emerald-200 transition-colors"
+          >
             📦 Share items
           </p>
-          <p class="font-semibold mb-2 group-hover:text-white transition-colors">Neighborhood resources</p>
-          <p class="text-[11px] text-slate-400 group-hover:text-slate-300 transition-colors">
+          <p
+            class="font-semibold mb-2 group-hover:text-white transition-colors"
+          >
+            Neighborhood resources
+          </p>
+          <p
+            class="text-[11px] text-slate-400 group-hover:text-slate-300 transition-colors"
+          >
             Share or donate items like rice, books, tools, or electronics.
           </p>
         </a>
@@ -166,12 +225,21 @@ block content %}
           href="/map"
           class="block btn-sheen rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-900/50 to-slate-900/30 px-5 py-4 hover:border-sky-400/80 transition-all duration-300 hover:bg-gradient-to-br hover:from-sky-500/10 hover:to-slate-900/40 group hover:shadow-lg hover:shadow-sky-500/20"
         >
-          <p class="text-xs font-semibold text-sky-300 mb-2 group-hover:text-sky-200 transition-colors">
+          <p
+            class="text-xs font-semibold text-sky-300 mb-2 group-hover:text-sky-200 transition-colors"
+          >
             🗺️ See around
           </p>
-          <p class="font-semibold mb-2 group-hover:text-white transition-colors">Live neighborhood map</p>
-          <p class="text-[11px] text-slate-400 group-hover:text-slate-300 transition-colors">
-            View help requests on a map with categories like medicine, food, and rides.
+          <p
+            class="font-semibold mb-2 group-hover:text-white transition-colors"
+          >
+            Live neighborhood map
+          </p>
+          <p
+            class="text-[11px] text-slate-400 group-hover:text-slate-300 transition-colors"
+          >
+            View help requests on a map with categories like medicine, food, and
+            rides.
           </p>
         </a>
 
@@ -179,24 +247,48 @@ block content %}
           href="/events"
           class="block btn-sheen rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-900/50 to-slate-900/30 px-5 py-4 hover:border-sky-400/80 transition-all duration-300 hover:bg-gradient-to-br hover:from-sky-500/10 hover:to-slate-900/40 group hover:shadow-lg hover:shadow-sky-500/20"
         >
-          <p class="text-xs font-semibold text-sky-300 mb-2 group-hover:text-sky-200 transition-colors">
+          <p
+            class="text-xs font-semibold text-sky-300 mb-2 group-hover:text-sky-200 transition-colors"
+          >
             📅 Join together
           </p>
-          <p class="font-semibold mb-2 group-hover:text-white transition-colors">Community events</p>
-          <p class="text-[11px] text-slate-400 group-hover:text-slate-300 transition-colors">
+          <p
+            class="font-semibold mb-2 group-hover:text-white transition-colors"
+          >
+            Community events
+          </p>
+          <p
+            class="text-[11px] text-slate-400 group-hover:text-slate-300 transition-colors"
+          >
             Discover donation drives, repair camps, and clean-up days near you.
           </p>
         </a>
 
         <a
           href="/chat"
-          class="block btn-sheen rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-900/50 to-slate-900/30 px-5 py-4 hover:border-sky-400/80 transition-all duration-300 hover:bg-gradient-to-br hover:from-sky-500/10 hover:to-slate-900/40 group hover:shadow-lg hover:shadow-sky-500/20"
+          class="relative block btn-sheen rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-900/50 to-slate-900/30 px-5 py-4 hover:border-sky-400/80 transition-all duration-300 hover:bg-gradient-to-br hover:from-sky-500/10 hover:to-slate-900/40 group hover:shadow-lg hover:shadow-sky-500/20"
         >
-          <p class="text-xs font-semibold text-sky-300 mb-2 group-hover:text-sky-200 transition-colors">
+          <span
+            id="home-chat-unread-badge"
+            class="absolute top-3 right-3 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-emerald-500 text-slate-950 text-[11px] font-bold {% if not unread_chat_count or unread_chat_count <= 0 %}hidden{% endif %}"
+          >
+            {% if unread_chat_count and unread_chat_count > 9 %}9+{% elif
+            unread_chat_count and unread_chat_count > 0 %}{{ unread_chat_count
+            }}{% else %}0{% endif %}
+          </span>
+          <p
+            class="text-xs font-semibold text-sky-300 mb-2 group-hover:text-sky-200 transition-colors"
+          >
             💬 Talk live
           </p>
-          <p class="font-semibold mb-2 group-hover:text-white transition-colors">One-to-one chat</p>
-          <p class="text-[11px] text-slate-400 group-hover:text-slate-300 transition-colors">
+          <p
+            class="font-semibold mb-2 group-hover:text-white transition-colors"
+          >
+            One-to-one chat
+          </p>
+          <p
+            class="text-[11px] text-slate-400 group-hover:text-slate-300 transition-colors"
+          >
             Secure, real-time chat with typing indicators and translation.
           </p>
         </a>
@@ -209,12 +301,21 @@ block content %}
           id="oneTapSosCard"
           class="block btn-sheen rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-900/50 to-slate-900/30 px-5 py-4 hover:border-rose-400/80 transition-all duration-300 hover:bg-gradient-to-br hover:from-rose-500/15 hover:to-slate-900/40 group hover:shadow-lg hover:shadow-rose-500/20 cursor-pointer"
         >
-          <p class="text-xs font-semibold text-rose-300 mb-2 group-hover:text-rose-200 transition-colors">
+          <p
+            class="text-xs font-semibold text-rose-300 mb-2 group-hover:text-rose-200 transition-colors"
+          >
             🚨 Emergency
           </p>
-          <p class="font-semibold mb-2 group-hover:text-white transition-colors">One-tap SOS alert</p>
-          <p class="text-[11px] text-slate-400 group-hover:text-slate-300 transition-colors">
-            In danger? Send a single-tap alert to trusted helpers and auto-call contacts.
+          <p
+            class="font-semibold mb-2 group-hover:text-white transition-colors"
+          >
+            One-tap SOS alert
+          </p>
+          <p
+            class="text-[11px] text-slate-400 group-hover:text-slate-300 transition-colors"
+          >
+            In danger? Send a single-tap alert to trusted helpers and auto-call
+            contacts.
           </p>
         </a>
 
@@ -222,11 +323,19 @@ block content %}
           href="{{ url_for('emotional_ping_placeholder') }}"
           class="block btn-sheen rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-900/50 to-slate-900/30 px-5 py-4 hover:border-violet-400/80 transition-all duration-300 hover:bg-gradient-to-br hover:from-violet-500/10 hover:to-slate-900/40 group hover:shadow-lg hover:shadow-violet-500/20"
         >
-          <p class="text-xs font-semibold text-violet-300 mb-2 group-hover:text-violet-200 transition-colors">
+          <p
+            class="text-xs font-semibold text-violet-300 mb-2 group-hover:text-violet-200 transition-colors"
+          >
             💜 Support
           </p>
-          <p class="font-semibold mb-2 group-hover:text-white transition-colors">Emotional Ping</p>
-          <p class="text-[11px] text-slate-400 group-hover:text-slate-300 transition-colors">
+          <p
+            class="font-semibold mb-2 group-hover:text-white transition-colors"
+          >
+            Emotional Ping
+          </p>
+          <p
+            class="text-[11px] text-slate-400 group-hover:text-slate-300 transition-colors"
+          >
             Connect with kind listeners nearby for support and motivation.
           </p>
         </a>
@@ -235,11 +344,19 @@ block content %}
           href="/dashboard"
           class="block btn-sheen rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-900/50 to-slate-900/30 px-5 py-4 hover:border-amber-400/80 transition-all duration-300 hover:bg-gradient-to-br hover:from-amber-500/10 hover:to-slate-900/40 group hover:shadow-lg hover:shadow-amber-500/20"
         >
-          <p class="text-xs font-semibold text-amber-300 mb-2 group-hover:text-amber-200 transition-colors">
+          <p
+            class="text-xs font-semibold text-amber-300 mb-2 group-hover:text-amber-200 transition-colors"
+          >
             ⭐ Your journey
           </p>
-          <p class="font-semibold mb-2 group-hover:text-white transition-colors">Trust, badges & impact</p>
-          <p class="text-[11px] text-slate-400 group-hover:text-slate-300 transition-colors">
+          <p
+            class="font-semibold mb-2 group-hover:text-white transition-colors"
+          >
+            Trust, badges & impact
+          </p>
+          <p
+            class="text-[11px] text-slate-400 group-hover:text-slate-300 transition-colors"
+          >
             Track your kindness score and progress toward achievements.
           </p>
         </a>
@@ -249,23 +366,36 @@ block content %}
 </section>
 
 <!-- IMPACT / STATS -->
-<section id="impact" class="border-t border-slate-800/50 bg-gradient-to-b from-slate-950/60 to-slate-950/40">
+<section
+  id="impact"
+  class="border-t border-slate-800/50 bg-gradient-to-b from-slate-950/60 to-slate-950/40"
+>
   <div class="w-full px-6 md:px-12 py-12 md:py-16">
     <div class="mb-10 animate-fadeInUp">
-      <h3 class="text-2xl md:text-3xl font-bold mb-3 bg-clip-text text-transparent bg-gradient-to-r from-slate-100 to-slate-300">
+      <h3
+        class="text-2xl md:text-3xl font-bold mb-3 bg-clip-text text-transparent bg-gradient-to-r from-slate-100 to-slate-300"
+      >
         Community Impact Dashboard
       </h3>
 
       <p class="text-sm text-slate-400 max-w-3xl leading-relaxed">
-        Real-time visualization of our community's collective contributions: hours
-        volunteered, items shared, and carbon savings from shared rides.
+        Real-time visualization of our community's collective contributions:
+        hours volunteered, items shared, and carbon savings from shared rides.
       </p>
     </div>
 
-    <div class="grid md:grid-cols-3 gap-6 text-sm mb-8 animate-fadeInUp" style="animation-delay: 0.1s">
-      <div class="rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 to-slate-900/40 p-6 transition-all duration-300 hover:border-emerald-400/60 hover:bg-emerald-500/15 hover:shadow-lg hover:shadow-emerald-500/20 group">
+    <div
+      class="grid md:grid-cols-3 gap-6 text-sm mb-8 animate-fadeInUp"
+      style="animation-delay: 0.1s"
+    >
+      <div
+        class="rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 to-slate-900/40 p-6 transition-all duration-300 hover:border-emerald-400/60 hover:bg-emerald-500/15 hover:shadow-lg hover:shadow-emerald-500/20 group"
+      >
         <p class="text-xs text-slate-400 mb-2 font-medium">Neighbors Helped</p>
-        <p class="text-4xl font-bold text-emerald-300 mb-2 tabular-nums group-hover:text-emerald-200 transition-colors" id="total-helped">
+        <p
+          class="text-4xl font-bold text-emerald-300 mb-2 tabular-nums group-hover:text-emerald-200 transition-colors"
+          id="total-helped"
+        >
           0
         </p>
         <p class="text-[11px] text-slate-500">
@@ -273,17 +403,29 @@ block content %}
         </p>
       </div>
 
-      <div class="rounded-2xl border border-sky-500/30 bg-gradient-to-br from-sky-500/10 to-slate-900/40 p-6 transition-all duration-300 hover:border-sky-400/60 hover:bg-sky-500/15 hover:shadow-lg hover:shadow-sky-500/20 group">
+      <div
+        class="rounded-2xl border border-sky-500/30 bg-gradient-to-br from-sky-500/10 to-slate-900/40 p-6 transition-all duration-300 hover:border-sky-400/60 hover:bg-sky-500/15 hover:shadow-lg hover:shadow-sky-500/20 group"
+      >
         <p class="text-xs text-slate-400 mb-2 font-medium">Volunteer Hours</p>
-        <p class="text-4xl font-bold text-sky-300 mb-2 tabular-nums group-hover:text-sky-200 transition-colors" id="total-hours">0 h</p>
+        <p
+          class="text-4xl font-bold text-sky-300 mb-2 tabular-nums group-hover:text-sky-200 transition-colors"
+          id="total-hours"
+        >
+          0 h
+        </p>
         <p class="text-[11px] text-slate-500">
           Total time contributed by volunteers.
         </p>
       </div>
 
-      <div class="rounded-2xl border border-violet-500/30 bg-gradient-to-br from-violet-500/10 to-slate-900/40 p-6 transition-all duration-300 hover:border-violet-400/60 hover:bg-violet-500/15 hover:shadow-lg hover:shadow-violet-500/20 group">
+      <div
+        class="rounded-2xl border border-violet-500/30 bg-gradient-to-br from-violet-500/10 to-slate-900/40 p-6 transition-all duration-300 hover:border-violet-400/60 hover:bg-violet-500/15 hover:shadow-lg hover:shadow-violet-500/20 group"
+      >
         <p class="text-xs text-slate-400 mb-2 font-medium">CO₂ Saved</p>
-        <p class="text-4xl font-bold text-violet-300 mb-2 tabular-nums group-hover:text-violet-200 transition-colors" id="total-carbon">
+        <p
+          class="text-4xl font-bold text-violet-300 mb-2 tabular-nums group-hover:text-violet-200 transition-colors"
+          id="total-carbon"
+        >
           0 kg
         </p>
         <p class="text-[11px] text-slate-500">
@@ -293,8 +435,13 @@ block content %}
     </div>
 
     <!-- Impact Graphs -->
-    <div class="bg-gradient-to-br from-slate-900/60 to-slate-950/60 border border-slate-700/50 rounded-2xl p-6 transition-all duration-300 hover:border-slate-600/80 hover:shadow-lg hover:shadow-sky-500/10 animate-fadeInUp" style="animation-delay: 0.2s">
-      <h4 class="text-lg font-semibold mb-4 text-slate-100">Community Impact Over Time</h4>
+    <div
+      class="bg-gradient-to-br from-slate-900/60 to-slate-950/60 border border-slate-700/50 rounded-2xl p-6 transition-all duration-300 hover:border-slate-600/80 hover:shadow-lg hover:shadow-sky-500/10 animate-fadeInUp"
+      style="animation-delay: 0.2s"
+    >
+      <h4 class="text-lg font-semibold mb-4 text-slate-100">
+        Community Impact Over Time
+      </h4>
       <canvas id="impactChart" width="400" height="200"></canvas>
     </div>
   </div>
@@ -340,21 +487,30 @@ block content %}
     const distance = formatDistance(req.distance_km);
     const expires = formatTimeRemaining(req.seconds_remaining);
     const category = (req.category || "Help").replace(/_/g, " ");
-    const description = (req.description || "Community help needed").slice(0, 120);
+    const description = (req.description || "Community help needed").slice(
+      0,
+      120
+    );
     const recency = formatRecency(req.created_at);
     const targetMode = req.is_offer ? "offer" : "need";
-    const detailsHref = `/requests?mode=${encodeURIComponent(targetMode)}&open=${encodeURIComponent(req.id)}`;
+    const detailsHref = `/requests?mode=${encodeURIComponent(
+      targetMode
+    )}&open=${encodeURIComponent(req.id)}`;
     const alreadyOffered = !!req.already_offered;
     const actionLabel = req.is_offer ? "Request help" : "Offer help";
     const sentLabel = req.is_offer ? "Request sent" : "Offer sent";
     const ctaLabel = alreadyOffered ? sentLabel : actionLabel;
 
     return `
-      <div class="live-card" data-href="${detailsHref}" tabindex="0" role="button" style="animation-delay:${index * 0.05}s">
+      <div class="live-card" data-href="${detailsHref}" tabindex="0" role="button" style="animation-delay:${
+      index * 0.05
+    }s">
         <div class="live-card-top">
           <div class="live-card-body">
             <div class="flex items-center gap-2 mb-1">
-              <p class="text-slate-100 font-semibold leading-tight">${req.title || "Help request"}</p>
+              <p class="text-slate-100 font-semibold leading-tight">${
+                req.title || "Help request"
+              }</p>
               ${req.area ? `<span class="micro-pill">${req.area}</span>` : ""}
             </div>
             <p class="text-[11px] text-slate-400 mt-1">${description}</p>
@@ -381,11 +537,14 @@ block content %}
   };
 
   async function sendLiveOffer(requestId) {
-    const resp = await fetch(`/requests/${encodeURIComponent(requestId)}/offer`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-    });
+    const resp = await fetch(
+      `/requests/${encodeURIComponent(requestId)}/offer`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      }
+    );
 
     // If auth middleware redirected to HTML login, treat as not-authenticated
     const contentType = resp.headers.get("content-type") || "";
@@ -404,9 +563,30 @@ block content %}
       const data = await res.json();
       summaryCache = data;
 
-      animateNumber("stat-requests", parseInt(document.getElementById("stat-requests").textContent) || 0, data.open_requests || 0, 600);
-      animateNumber("stat-hours", parseFloat((document.getElementById("stat-hours").textContent || "0").replace(/[^0-9.]/g, "")) || 0, data.volunteer_hours || 0, 600, " h");
-      animateNumber("stat-helped", parseInt(document.getElementById("stat-helped").textContent) || 0, data.neighbors_helped || 0, 600);
+      animateNumber(
+        "stat-requests",
+        parseInt(document.getElementById("stat-requests").textContent) || 0,
+        data.open_requests || 0,
+        600
+      );
+      animateNumber(
+        "stat-hours",
+        parseFloat(
+          (document.getElementById("stat-hours").textContent || "0").replace(
+            /[^0-9.]/g,
+            ""
+          )
+        ) || 0,
+        data.volunteer_hours || 0,
+        600,
+        " h"
+      );
+      animateNumber(
+        "stat-helped",
+        parseInt(document.getElementById("stat-helped").textContent) || 0,
+        data.neighbors_helped || 0,
+        600
+      );
 
       setText("chip-helpers", `${data.helpers || 0} helpers`);
       setText("chip-requests", `${data.open_requests || 0} requests`);
@@ -483,12 +663,16 @@ block content %}
         if (!container) return;
 
         // Only replace the widget body so the header/link stays stable and clickable.
-        const existingBody = container.querySelector('[data-resources-widget="body"]');
+        const existingBody = container.querySelector(
+          '[data-resources-widget="body"]'
+        );
         if (existingBody) {
           try {
             const parser = new DOMParser();
             const doc = parser.parseFromString(html, "text/html");
-            const incomingBody = doc.querySelector('[data-resources-widget="body"]');
+            const incomingBody = doc.querySelector(
+              '[data-resources-widget="body"]'
+            );
             if (incomingBody) {
               existingBody.innerHTML = incomingBody.innerHTML;
               return;
@@ -507,9 +691,31 @@ block content %}
     fetch("/api/community/impact")
       .then((response) => response.json())
       .then((data) => {
-        animateNumber("total-helped", parseInt(document.getElementById("total-helped").textContent) || 0, data.total_helped, 800);
-        animateNumber("total-hours", parseFloat((document.getElementById("total-hours").textContent || "0").replace(/[^0-9.]/g, "")) || 0, data.total_hours, 800, " h");
-        animateNumber("total-carbon", parseInt(document.getElementById("total-carbon").textContent) || 0, data.total_carbon, 800, " kg");
+        animateNumber(
+          "total-helped",
+          parseInt(document.getElementById("total-helped").textContent) || 0,
+          data.total_helped,
+          800
+        );
+        animateNumber(
+          "total-hours",
+          parseFloat(
+            (document.getElementById("total-hours").textContent || "0").replace(
+              /[^0-9.]/g,
+              ""
+            )
+          ) || 0,
+          data.total_hours,
+          800,
+          " h"
+        );
+        animateNumber(
+          "total-carbon",
+          parseInt(document.getElementById("total-carbon").textContent) || 0,
+          data.total_carbon,
+          800,
+          " kg"
+        );
       })
       .catch((error) => console.log("Impact data error:", error));
   }
@@ -523,7 +729,10 @@ block content %}
 
     const timer = setInterval(() => {
       current += increment;
-      if ((increment > 0 && current >= end) || (increment < 0 && current <= end)) {
+      if (
+        (increment > 0 && current >= end) ||
+        (increment < 0 && current <= end)
+      ) {
         current = end;
         clearInterval(timer);
       }
@@ -538,7 +747,7 @@ block content %}
       .then((data) => {
         const ctx = document.getElementById("impactChart");
         if (window.impactChartInstance) {
-            window.impactChartInstance.destroy();
+          window.impactChartInstance.destroy();
         }
         window.impactChartInstance = new Chart(ctx, {
           type: "line",
@@ -660,7 +869,9 @@ block content %}
         try {
           const result = await sendLiveOffer(requestId);
           if (result.redirectToLogin) {
-            window.location.href = `/login?next=${encodeURIComponent(detailsHref)}`;
+            window.location.href = `/login?next=${encodeURIComponent(
+              detailsHref
+            )}`;
             return;
           }
 
@@ -688,7 +899,8 @@ block content %}
       liveContainer.addEventListener("click", (ev) => {
         const card = ev.target?.closest?.(".live-card[data-href]");
         if (!card) return;
-        if (ev.target?.closest?.("a, button, input, textarea, select, label")) return;
+        if (ev.target?.closest?.("a, button, input, textarea, select, label"))
+          return;
         const href = card.getAttribute("data-href");
         if (href) window.location.href = href;
       });
