@@ -5708,9 +5708,20 @@ def _run_startup_migrations_and_bootstrap_admin():
 
 if __name__ == "__main__":
     debug_mode = os.getenv("FLASK_DEBUG", "0") == "1"
+
+    # Explicit host/port so we can always print a reliable link in the terminal.
+    host = os.getenv("HOST") or os.getenv("FLASK_RUN_HOST") or "127.0.0.1"
+    port_raw = os.getenv("PORT") or os.getenv("FLASK_RUN_PORT") or "5000"
+    try:
+        port = int(port_raw)
+    except Exception:
+        port = 5000
     with app.app_context():
         db.create_all()  # create tables if not exist
         _run_startup_migrations_and_bootstrap_admin()
 
     # Use reloader=False with Socket.IO to avoid double-start issues.
-    socketio.run(app, debug=debug_mode, use_reloader=False)
+    print(f"[startup] LifeLine running on: http://{host}:{port}")
+    if host == "0.0.0.0":
+        print(f"[startup] (local) http://127.0.0.1:{port}")
+    socketio.run(app, host=host, port=port, debug=debug_mode, use_reloader=False)
