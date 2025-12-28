@@ -622,7 +622,10 @@
 
           // If the server doesn't indicate an active SOS (and we're not explicitly
           // in an SOS caller flow), clear any stale stored ID to avoid 403 polling.
-          if (!LIFELINE_ACTIVE_SOS_REQUEST_ID && !(focusId && lifelineGetQueryParamBool("sos_caller"))) {
+          if (
+            !LIFELINE_ACTIVE_SOS_REQUEST_ID &&
+            !(focusId && lifelineGetQueryParamBool("sos_caller"))
+          ) {
             sessionStorage.removeItem("lifeline_active_sos_request_id");
             sessionStorage.removeItem("lifeline_active_sos_called");
           }
