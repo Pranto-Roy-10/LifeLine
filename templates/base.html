@@ -57,21 +57,13 @@
       }
 
       /* Page loading animation */
-      .page-loading {
-        opacity: 0;
-        animation: pageFadeIn 0.5s ease-out 0.1s forwards;
-      }
-
-      @keyframes pageFadeIn {
-        to {
-          opacity: 1;
-        }
-      }
+      /* NOTE: Avoid hiding the whole page initially (opacity:0).
+         It can cause Lighthouse to report NO_LCP on some runs. */
     </style>
   </head>
 
   <body
-    class="page-shell text-slate-100 min-h-screen flex flex-col overflow-x-hidden page-loading"
+    class="page-shell text-slate-100 min-h-screen flex flex-col overflow-x-hidden"
   >
     <header class="top-nav">
       <nav class="nav-shell">
@@ -175,13 +167,20 @@
               aria-expanded="false"
             >
               {% set photo = current_user.profile_photo or 'default.png' %} {%
-              if 'http' in photo %}
+              if (photo == 'default.png') %}
+              <img
+                src="{{ url_for('static', filename='images/lifeline_logo.png') }}"
+                class="nav-avatar"
+                alt="Avatar"
+              />
+              {% elif 'http' in photo %}
               <img src="{{ photo }}" class="nav-avatar" alt="Avatar" />
               {% else %}
               <img
                 src="{{ url_for('static', filename='uploads/profile_photos/' ~ photo) }}"
                 class="nav-avatar"
                 alt="Avatar"
+                onerror="this.onerror=null;this.src='{{ url_for('static', filename='images/lifeline_logo.png') }}';"
               />
               {% endif %}
               <span class="hidden md:inline text-xs text-slate-200 truncate"
@@ -619,6 +618,13 @@
               String(focusId)
             );
             sessionStorage.setItem("lifeline_active_sos_called", "0");
+          }
+
+          // If the server doesn't indicate an active SOS (and we're not explicitly
+          // in an SOS caller flow), clear any stale stored ID to avoid 403 polling.
+          if (!LIFELINE_ACTIVE_SOS_REQUEST_ID && !(focusId && lifelineGetQueryParamBool("sos_caller"))) {
+            sessionStorage.removeItem("lifeline_active_sos_request_id");
+            sessionStorage.removeItem("lifeline_active_sos_called");
           }
 
           const stored = sessionStorage.getItem(
