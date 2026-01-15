@@ -278,9 +278,39 @@ block content %}
 
   const otpForm = document.getElementById("otp-request-form");
   if (otpForm && otpSendBtn && otpCountdownSpan) {
-    otpForm.addEventListener("submit", () => {
-      localStorage.setItem(STORAGE_KEY, String(Date.now()));
-      startOtpCooldown();
+    otpForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      otpSendBtn.disabled = true;
+      const originalText = otpSendBtn.innerText;
+      otpSendBtn.innerText = "Sending...";
+      otpCountdownSpan.textContent = "";
+
+      try {
+        const formData = new FormData(otpForm);
+        const resp = await fetch(otpForm.action, {
+          method: "POST",
+          body: formData,
+          headers: { "X-Requested-With": "XMLHttpRequest" },
+        });
+
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+          otpCountdownSpan.textContent = data.error || "Failed to send OTP.";
+          return;
+        }
+
+        otpCountdownSpan.textContent = data.message || "OTP sent.";
+        localStorage.setItem(STORAGE_KEY, String(Date.now()));
+        startOtpCooldown();
+      } catch (err) {
+        console.error("OTP request error:", err);
+        otpCountdownSpan.textContent = "Network error. Please try again.";
+      } finally {
+        otpSendBtn.innerText = originalText;
+        // keep disabled if cooldown is active
+        startOtpCooldown();
+      }
     });
   }
 </script>

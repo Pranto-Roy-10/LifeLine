@@ -192,6 +192,7 @@ app.config["MAIL_USE_TLS"] = True
 app.config["MAIL_USERNAME"] = EMAIL_ADDRESS
 app.config["MAIL_PASSWORD"] = EMAIL_PASSWORD
 app.config["MAIL_DEFAULT_SENDER"] = EMAIL_ADDRESS
+app.config["MAIL_TIMEOUT"] = int(os.getenv("MAIL_TIMEOUT", "10"))
 
 # Fix cookie issues for localhost (Chrome blocks otherwise)
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
@@ -1807,8 +1808,23 @@ def login_otp_request():
     email = request.form.get("email", "").strip().lower()
     user = User.query.filter_by(email=email).first()
 
+    wants_json = (
+        request.headers.get("X-Requested-With") == "XMLHttpRequest"
+        or request.accept_mimetypes.best == "application/json"
+    )
+
     if not user:
-        flash("No account with this email.", "error")
+        msg = "No account with this email."
+        if wants_json:
+            return jsonify({"ok": False, "error": msg}), 404
+        flash(msg, "error")
+        return redirect(url_for("login", mode="otp"))
+
+    if not (EMAIL_ADDRESS and EMAIL_PASSWORD):
+        msg = "OTP email is not configured on the server. Please use password login for now."
+        if wants_json:
+            return jsonify({"ok": False, "error": msg}), 503
+        flash(msg, "error")
         return redirect(url_for("login", mode="otp"))
 
     now = datetime.utcnow()
@@ -1824,7 +1840,10 @@ def login_otp_request():
 
     # Rate limiting: no more than OTP_MAX_PER_HOUR per hour
     if len(log["request_times"]) >= OTP_MAX_PER_HOUR:
-        flash("Too many OTP requests. Please try again later.", "error")
+        msg = "Too many OTP requests. Please try again later."
+        if wants_json:
+            return jsonify({"ok": False, "error": msg}), 429
+        flash(msg, "error")
         otp_store[email] = log
         return redirect(url_for("login", mode="otp"))
 
@@ -1834,7 +1853,10 @@ def login_otp_request():
         elapsed = (now - last_request).total_seconds()
         if elapsed < OTP_COOLDOWN_SECONDS:
             remaining = int(OTP_COOLDOWN_SECONDS - elapsed)
-            flash(f"Please wait {remaining}s before requesting a new OTP.", "error")
+            msg = f"Please wait {remaining}s before requesting a new OTP."
+            if wants_json:
+                return jsonify({"ok": False, "error": msg, "retry_after": remaining}), 429
+            flash(msg, "error")
             otp_store[email] = log
             return redirect(url_for("login", mode="otp"))
 
@@ -1855,7 +1877,25 @@ def login_otp_request():
         f"(valid for {OTP_TTL_SECONDS // 60} minutes)."
     )
     msg.html = build_otp_email_html(user, code)
-    mail.send(msg)
+    try:
+        mail.send(msg)
+    except Exception as e:
+        print("[OTP] Email send failed:", e)
+        try:
+            user.clear_otp()
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+        err = "Could not send OTP email. Please try again later."
+        if wants_json:
+            return jsonify({"ok": False, "error": err}), 502
+        flash(err, "error")
+        return redirect(url_for("login", mode="otp"))
+
+    ok_msg = "OTP sent. Check your inbox and spam/junk folder."
+    if wants_json:
+        return jsonify({"ok": True, "message": ok_msg, "cooldown": OTP_COOLDOWN_SECONDS}), 200
 
     flash("OTP sent to your email.", "success")
     return redirect(url_for("login", mode="otp"))
@@ -2001,7 +2041,10 @@ def auth_google():
 
         # Helpful, common failures
         if "default firebase app" in low and "does not exist" in low:
-            return "Firebase Admin is not initialized on the server (check firebase-service-account.json)."
+            return (
+                "Firebase Admin is not initialized on the server. Configure Firebase Admin credentials "
+                "(e.g., FIREBASE_SERVICE_ACCOUNT_JSON / FIREBASE_SERVICE_ACCOUNT_JSON_BASE64)."
+            )
         if "error while fetching public key certificates" in low or "fetching public key" in low or "x509" in low:
             return "Server cannot reach Google to verify the token (check internet/proxy/firewall)."
         if "expired" in low or "token used too late" in low:
