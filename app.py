@@ -9,6 +9,7 @@ except Exception:
     pass
 
 from datetime import datetime, timedelta
+import json
 import os
 import math
 import time
@@ -50,7 +51,19 @@ from flask_socketio import SocketIO, emit, join_room, leave_room
 # Initialize Firebase Admin SDK ONCE
 try:
     if not firebase_admin._apps:
-        cred = credentials.Certificate("firebase-service-account.json")
+        service_account_json = (os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON") or "").strip()
+        service_account_path = (os.getenv("FIREBASE_SERVICE_ACCOUNT_PATH") or "firebase-service-account.json").strip()
+
+        if service_account_json:
+            cred = credentials.Certificate(json.loads(service_account_json))
+        else:
+            if not service_account_path or not os.path.exists(service_account_path):
+                raise FileNotFoundError(
+                    "Firebase Admin credentials not found. Set FIREBASE_SERVICE_ACCOUNT_JSON "
+                    "or provide a file via FIREBASE_SERVICE_ACCOUNT_PATH."
+                )
+            cred = credentials.Certificate(service_account_path)
+
         firebase_admin.initialize_app(cred)
         print("[FCM] Firebase Admin initialized.")
     else:
@@ -181,10 +194,7 @@ app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
 mail = Mail(app)
 
 # Your Google Maps API key
-GOOGLE_MAPS_API_KEY = os.getenv(
-    "GOOGLE_MAPS_API_KEY",
-    "AIzaSyAVtLNl7YZaPZeSnuA_5Gxm8VdtFXxreYo"  
-)
+GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "").strip()
 
 EMERGENCY_GUEST_EMAIL = "guest_emergency@lifeline.local"
 
