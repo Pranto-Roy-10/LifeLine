@@ -9,6 +9,7 @@ except Exception:
     pass
 
 from datetime import datetime, timedelta
+import base64
 import json
 import os
 import math
@@ -52,25 +53,36 @@ from flask_socketio import SocketIO, emit, join_room, leave_room
 try:
     if not firebase_admin._apps:
         service_account_json = (os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON") or "").strip()
-        service_account_path = (os.getenv("FIREBASE_SERVICE_ACCOUNT_PATH") or "firebase-service-account.json").strip()
+        service_account_json_b64 = (os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON_BASE64") or "").strip()
+        service_account_path = (os.getenv("FIREBASE_SERVICE_ACCOUNT_PATH") or "").strip()
+        google_app_creds_path = (os.getenv("GOOGLE_APPLICATION_CREDENTIALS") or "").strip()
 
+        cred = None
         if service_account_json:
             cred = credentials.Certificate(json.loads(service_account_json))
+        elif service_account_json_b64:
+            decoded = base64.b64decode(service_account_json_b64.encode("utf-8")).decode("utf-8")
+            cred = credentials.Certificate(json.loads(decoded))
         else:
-            if not service_account_path or not os.path.exists(service_account_path):
-                raise FileNotFoundError(
-                    "Firebase Admin credentials not found. Set FIREBASE_SERVICE_ACCOUNT_JSON "
-                    "or provide a file via FIREBASE_SERVICE_ACCOUNT_PATH."
-                )
-            cred = credentials.Certificate(service_account_path)
+            for path in (service_account_path, google_app_creds_path, "firebase-service-account.json"):
+                if path and os.path.exists(path):
+                    cred = credentials.Certificate(path)
+                    break
 
-        firebase_admin.initialize_app(cred)
-        print("[FCM] Firebase Admin initialized.")
+        if cred is not None:
+            firebase_admin.initialize_app(cred)
+            print("[FCM] Firebase Admin initialized.")
+        else:
+            # No credentials configured: keep app running; push notifications disabled.
+            print(
+                "[FCM] Firebase Admin not configured; push notifications disabled. "
+                "Set FIREBASE_SERVICE_ACCOUNT_JSON (or FIREBASE_SERVICE_ACCOUNT_JSON_BASE64), "
+                "or provide a credentials file via FIREBASE_SERVICE_ACCOUNT_PATH/GOOGLE_APPLICATION_CREDENTIALS."
+            )
     else:
         print("[FCM] Firebase Admin already initialized.")
 except Exception as e:
-    print(f"[FCM] Error initializing Firebase Admin SDK: {e}")
-    print("[FCM] Push notifications will be disabled on this machine.")
+    print(f"[FCM] Firebase Admin init failed; push notifications disabled. Error: {e}")
 
 
 # Translation libraries: try official Google Cloud first, fallback to googletrans
