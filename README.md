@@ -130,6 +130,3 @@ Set secrets in the Render dashboard (don’t commit them):
 - Smart Suggestions: `QUICK_START.md`, `SMART_SUGGESTIONS_GUIDE.md`
 - Availability Radar: `DOCUMENTATION_INDEX.md` (entry point)
 
-## License
-
-Add a license file if you plan to open-source this project.
