@@ -57,6 +57,7 @@
   <body class="page-shell text-slate-100 min-h-screen flex flex-col overflow-x-hidden page-loading">
     <header class="top-nav">
       <nav class="nav-shell">
+        {% if request.endpoint != 'home' %}
         <a href="{{ url_for('home') }}" class="nav-brand">
           <div class="nav-logo-wrap">
             <img
@@ -72,8 +73,10 @@
             <p class="nav-subtitle truncate">Neighborhood Help & Emergency Network</p>
           </div>
         </a>
+        {% endif %}
 
-        <div class="nav-links">
+        <div class="nav-links" role="navigation" aria-label="Primary">
+          <a href="{{ url_for('home') }}" id="nav-home-btn" class="nav-link">Home</a>
           <a href="{{ url_for('home') }}#features" class="nav-link">Features</a>
           <a href="{{ url_for('home') }}#impact" class="nav-link">Impact</a>
         </div>
@@ -865,5 +868,25 @@
     </script>
 
     <!-- Floating Action Button removed per request -->
+    <script>
+      // Smooth-scroll behavior for the Home button: if already on home, scroll to top smoothly
+      (function() {
+        const homeBtn = document.getElementById('nav-home-btn');
+        if (!homeBtn) return;
+        homeBtn.addEventListener('click', function(e) {
+          try {
+            const targetUrl = new URL(this.href, window.location.origin);
+            const samePath = window.location.pathname === targetUrl.pathname;
+            if (samePath) {
+              e.preventDefault();
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+            // if not samePath, allow normal navigation to root
+          } catch (err) {
+            // noop - fallback to normal navigation
+          }
+        });
+      })();
+    </script>
   </body>
 </html>

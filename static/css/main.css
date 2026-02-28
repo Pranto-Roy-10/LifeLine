@@ -107,23 +107,24 @@ pre {
 }
 
 .nav-logo-wrap {
-  height: 42px;
-  width: 42px;
-  border-radius: 12px;
-  background: #ffffff;
+  height: 56px;
+  width: 56px;
+  border-radius: 8px;
+  background: transparent; /* removed white box */
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+  box-shadow: none; /* remove the square shadow */
   overflow: hidden;
 }
 
 .nav-logo-fallback {
   display: none;
-  color: #f43f5e;
+  color: #9ef3c4; /* mint heart */
   font-weight: 700;
   font-size: 22px;
-  line-height: 42px;
+  line-height: 56px;
+  background: transparent;
 }
 
 .nav-title {
@@ -152,6 +153,10 @@ p[class*="text-[11px]"][class*="text-emerald-300"] {
   gap: 10px;
   font-weight: 600;
   color: #cbd5e1;
+  position: absolute; /* center the nav links in the navbar */
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20; /* keep centered links behind action buttons */
 }
 
 @media (min-width: 768px) {
@@ -179,6 +184,9 @@ p[class*="text-[11px]"][class*="text-emerald-300"] {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-left: auto; /* keep actions right aligned even when nav-links are centered */
+  position: relative;
+  z-index: 40; /* ensure actions sit above centered nav-links */
 }
 
 .nav-btn {
