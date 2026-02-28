@@ -1,0 +1,211 @@
+/* Hero animation styles */
+.home-hero { position: relative; overflow: hidden; /* stretch to full viewport below nav */
+  min-height: calc(100vh - var(--nav-offset, 72px));
+  height: calc(100vh - var(--nav-offset, 72px));
+  display: flex;
+  align-items: center;
+  /* give the hero more breathing room so content fills the screen */
+  padding-top: 2rem;
+  padding-bottom: 3.5rem;
+}
+.hero-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+  mix-blend-mode: normal; /* show colors clearly */
+  opacity: 0.95;
+  transition: opacity 0.35s ease;
+  will-change: transform, opacity;
+}
+}
+
+/* Keep content above the canvas */
+.home-hero > .w-full { position: relative; z-index: 10; padding-top: 0; padding-bottom: 2rem; }
+
+/* Floating soft glows */
+.hero-glow-a, .hero-glow-b {
+  position: absolute;
+  width: 420px;
+  height: 420px;
+  border-radius: 50%;
+  filter: blur(40px);
+  opacity: 0.28;
+  pointer-events: none;
+  z-index: 2;
+}
+.hero-glow-a { left: -8%; top: -14%; background: radial-gradient(circle at 30% 30%, rgba(16,185,129,0.75), transparent 38%); animation: floatY 10s ease-in-out infinite; }
+.hero-glow-b { right: -8%; bottom: -8%; background: radial-gradient(circle at 70% 70%, rgba(14,165,233,0.7), transparent 38%); animation: floatY 12s ease-in-out infinite; }
+
+@keyframes floatY { 0% { transform: translateY(0) scale(1); } 50% { transform: translateY(-18px) scale(1.02); } 100% { transform: translateY(0) scale(1); } }
+
+/* Subtle gradient overlay to give depth */
+.home-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(6,12,24,0.25) 0%, rgba(6,12,24,0.5) 70%);
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Themed live pill with sheen and pulsing indicator */
+.live-pill {
+  display: inline-block;
+  position: relative;
+  padding: 6px 14px 6px 36px; /* leave space for the pulsing dot */
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(16,185,129,0.12), rgba(14,165,233,0.09));
+  color: #dffdf3;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  border: 1px solid rgba(34,197,94,0.08);
+  box-shadow: 0 10px 30px rgba(6,12,32,0.45), inset 0 -1px 0 rgba(255,255,255,0.02);
+  transition: transform 180ms ease, box-shadow 180ms ease;
+  overflow: hidden;
+}
+
+.live-pill::before {
+  /* subtle sheen that travels across the pill */
+  content: "";
+  position: absolute;
+  left: -40%;
+  top: 0;
+  width: 40%;
+  height: 100%;
+  background: linear-gradient(90deg, rgba(255,255,255,0.06), rgba(255,255,255,0));
+  transform: skewX(-18deg);
+  filter: blur(2px);
+  animation: pillSheen 3.2s linear infinite;
+  pointer-events: none;
+}
+
+.live-pill::after {
+  /* pulsing status dot */
+  content: "";
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #ffffff 0%, rgba(255,255,255,0.6) 12%, rgba(16,185,129,1) 45%, rgba(14,165,233,1) 100%);
+  box-shadow: 0 0 14px rgba(14,165,233,0.55), 0 0 30px rgba(16,185,129,0.14);
+  animation: livePulse 1.9s infinite;
+}
+
+@keyframes pillSheen {
+  0% { left: -40%; }
+  50% { left: 110%; }
+  100% { left: 110%; }
+}
+
+@keyframes livePulse {
+  0% { transform: translateY(-50%) scale(0.88); opacity: 0.85; }
+  50% { transform: translateY(-50%) scale(1.16); opacity: 1; }
+  100% { transform: translateY(-50%) scale(0.88); opacity: 0.85; }
+}
+
+.live-pill:hover { transform: translateY(-3px); box-shadow: 0 22px 50px rgba(6,12,32,0.6); }
+
+@media (prefers-reduced-motion: reduce) {
+  .live-pill::before, .live-pill::after { animation: none !important; }
+  .live-pill { transition: none !important; }
+}
+
+/* Stagger reveal helper (JS will add .revealed) */
+.stagger-item { opacity: 0; transform: translateY(20px) scale(0.994); transition: transform 520ms cubic-bezier(.2,.9,.2,1), opacity 520ms ease; }
+.stagger-item.revealed { opacity:1; transform: translateY(0) scale(1); }
+
+/* Slightly lift cards on hover for modern feel */
+.card-hover:hover { transform: translateY(-8px) scale(1.004); box-shadow: 0 20px 48px rgba(6,12,32,0.5); }
+
+/* Make the right live-panel take up more vertical space so the layout feels balanced */
+.live-panel { min-height: 420px; display: flex; flex-direction: column; justify-content: space-between; }
+
+/* Increase spacing between major blocks to fill tall screens */
+.home-hero .space-y-7 { gap: 5rem; }
+.home-hero .grid.sm\:grid-cols-3 { gap: 1.75rem; }
+
+/* Targeted spacing tweaks */
+/* space between header block (intro text) and the stat cards */
+.home-hero .space-y-7 > .space-y-4 { margin-bottom: 2.25rem; }
+
+/* space between the stat cards row and primary action buttons */
+.home-hero .space-y-7 > .grid { margin-bottom: 2rem; }
+
+/* slightly larger live-panel so right column balances vertical height */
+.live-panel { min-height: 480px; }
+
+/* Home-specific logo above hero intro */
+/* Place the home logo in the normal content flow above the intro text (left column) */
+.home-hero-logo-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  /* pull the logo up toward the navbar so it hugs the top-left and overlap the first line */
+  /* move up by nav height minus a small offset so the logo sits just under the nav */
+  margin-top: calc(-1 * var(--nav-offset, 72px) + 8px);
+  /* bring the first line immediately under the logo */
+  margin-bottom: -10px;
+  /* explicit cropping box so we can scale the actual image to hide transparent padding */
+  width: 220px;
+  height: 200px;
+  overflow: hidden;
+  background: transparent;
+  border-radius: 0; /* keep full-bleed crop */
+  z-index: 5; /* keep below the top-nav (which is z-index:1000) */
+}
+.home-hero-logo {
+  /* make the image fill the wrapper and slightly scale up to crop any transparent border in the file */
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+  object-fit: cover;
+  box-shadow: none;
+  border: none;
+  pointer-events: auto; /* allow clicks so users can refresh by clicking the logo */
+  cursor: pointer;
+  transform-origin: center center;
+  /* stronger scale + negative translate to hide any visible padding (pull up to crop bottom) */
+  transform: scale(1.28) translate(-6px, -18px);
+  object-position: center center;
+}
+.home-hero-logo-fallback {
+  display: none !important;
+}
+
+@media (max-width: 1024px) {
+  .home-hero-logo { width: 100%; height: 100%; transform: scale(1.18) translate(-3px, -10px); }
+  .home-hero-logo-wrap { width: 120px; height: 110px; }
+}
+@media (min-width: 768px) {
+  /* align logo horizontally with the content padding so it lines up with heading text */
+  .home-hero-logo-wrap { margin-left: 0; }
+}
+@media (max-width: 640px) {
+  .home-hero-logo { width: 100%; height: 100%; transform: none; }
+  .home-hero-logo-wrap { width: 84px; height: 84px; }
+}
+
+
+/* Responsive improvements */
+@media (max-width: 1024px) {
+  .home-hero { min-height: calc(100vh - 64px); height: calc(100vh - 64px); }
+}
+@media (max-width: 768px) {
+  .hero-glow-a, .hero-glow-b { width: 280px; height: 280px; filter: blur(30px); }
+  .home-hero { padding-top: 56px; padding-bottom: 56px; }
+}
+
+/* reduce canvas opacity on small devices for readability */
+@media (max-width: 640px) {
+  .hero-canvas { opacity: 0.45; }
+}
