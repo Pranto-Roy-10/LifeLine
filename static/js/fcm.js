@@ -2,6 +2,25 @@
 
 let messagingInstance = null;
 
+function lifelineCanUseFCM() {
+  // Push + Service Workers require a secure context (HTTPS) or localhost.
+  if (!window.isSecureContext) return false;
+  if (!("serviceWorker" in navigator)) return false;
+  if (!("Notification" in window)) return false;
+  if (!("PushManager" in window)) return false;
+  if (typeof firebase === "undefined") return false;
+  return true;
+}
+
+function lifelineDefer(fn) {
+  // Defer work off the critical render path.
+  if ("requestIdleCallback" in window) {
+    window.requestIdleCallback(() => fn(), { timeout: 3000 });
+  } else {
+    setTimeout(fn, 1500);
+  }
+}
+
 const firebaseConfig = {
   apiKey: "AIzaSyBXr5LOHnwm4T9mg3epZmpTnY924F3-4J0",
   authDomain: "lifeline-4ebf0.firebaseapp.com",
@@ -16,24 +35,27 @@ const VAPID_KEY =
   "BNtodCll0PFmNnzBJ8grhcsGIUMLgM54_miSxfkY8GvR4-upDVIjzuJlh_9JkwhUWrqBs3OdaoDb-43yyB6zI9w";
 
 async function initFCM() {
-  console.log("[FCM] initFCM called");
+  // Only attempt once per page load.
+  if (window.__lifelineFCMInitAttempted) return;
+  window.__lifelineFCMInitAttempted = true;
+
+  if (!lifelineCanUseFCM()) {
+    return;
+  }
+
+  // Never prompt on page load (hurts UX + Lighthouse). If already granted, proceed.
+  if (Notification.permission !== "granted") {
+    return;
+  }
 
   // 1) Init Firebase
   try {
     if (!firebase.apps.length) {
       firebase.initializeApp(firebaseConfig);
-      console.log("[FCM] Firebase App initialized.");
     }
   } catch (e) {
-    console.error("[FCM FATAL] Firebase init failed:", e);
-    return;
-  }
-
-  // 2) Notification permission
-  const permission = await Notification.requestPermission();
-  console.log("[FCM] Notification permission:", permission);
-  if (permission !== "granted") {
-    console.log("[FCM] Permission not granted, aborting FCM");
+    // Non-fatal: notifications are optional.
+    console.warn("[FCM] Firebase init failed:", e);
     return;
   }
 
@@ -42,15 +64,18 @@ async function initFCM() {
     const messaging = firebase.messaging();
     messagingInstance = messaging;
 
-    const reg = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
-    console.log("[FCM] Service worker registered", reg);
+    const reg = await navigator.serviceWorker.register(
+      "/firebase-messaging-sw.js"
+    );
 
     const token = await messaging.getToken({
       vapidKey: VAPID_KEY,
       serviceWorkerRegistration: reg,
     });
 
-    console.log("[FCM] Got FCM token:", token);
+    if (!token) {
+      return;
+    }
 
     // 4) Register token with backend (session cookie auth)
     try {
@@ -62,29 +87,46 @@ async function initFCM() {
       });
 
       const respData = await resp.json().catch(() => ({}));
-      console.log("[FCM] Backend register response:", resp.status, respData);
+      // Keep console noise low in production; still useful for debugging.
+      // eslint-disable-next-line no-console
+      console.log("[FCM] Token register:", resp.status, respData);
     } catch (err) {
-      console.error("[FCM] Failed to register token with backend:", err);
+      console.warn("[FCM] Failed to register token with backend:", err);
     }
 
     // 5) Foreground handler (show popup when tab is open)
     messaging.onMessage((payload) => {
-      console.log("[FCM] Foreground message:", payload);
-
       const data = payload?.data || {};
       const title = data.title || payload?.notification?.title || "LifeLine";
-      const body = data.body || payload?.notification?.body || "You have a new notification";
+      const body =
+        data.body ||
+        payload?.notification?.body ||
+        "You have a new notification";
 
       if (Notification.permission === "granted") {
         new Notification(title, { body, data });
       }
     });
   } catch (e) {
-    console.error("[FCM FATAL] Crash during FCM process:", e);
+    // Common in Lighthouse / some browser setups: AbortError: Registration failed - push service error
+    const msg = String(e && (e.message || e)).toLowerCase();
+    const name = String(e && e.name).toLowerCase();
+    const isPushServiceError =
+      name.includes("aborterror") ||
+      msg.includes("push service") ||
+      msg.includes("registration failed");
+
+    if (isPushServiceError) {
+      console.warn("[FCM] Push not available in this browser context.");
+      return;
+    }
+
+    console.warn("[FCM] FCM init error:", e);
   }
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-  console.log("[FCM] DOMContentLoaded, calling initFCM()");
-  initFCM().catch((e) => console.error("[FCM] Top-level initFCM error", e));
+  lifelineDefer(() => {
+    initFCM().catch(() => {});
+  });
 });

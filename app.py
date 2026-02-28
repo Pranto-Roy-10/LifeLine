@@ -9,6 +9,8 @@ except Exception:
     pass
 
 from datetime import datetime, timedelta
+import base64
+import json
 import os
 import math
 import time
@@ -50,14 +52,37 @@ from flask_socketio import SocketIO, emit, join_room, leave_room
 # Initialize Firebase Admin SDK ONCE
 try:
     if not firebase_admin._apps:
-        cred = credentials.Certificate("firebase-service-account.json")
-        firebase_admin.initialize_app(cred)
-        print("[FCM] Firebase Admin initialized.")
+        service_account_json = (os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON") or "").strip()
+        service_account_json_b64 = (os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON_BASE64") or "").strip()
+        service_account_path = (os.getenv("FIREBASE_SERVICE_ACCOUNT_PATH") or "").strip()
+        google_app_creds_path = (os.getenv("GOOGLE_APPLICATION_CREDENTIALS") or "").strip()
+
+        cred = None
+        if service_account_json:
+            cred = credentials.Certificate(json.loads(service_account_json))
+        elif service_account_json_b64:
+            decoded = base64.b64decode(service_account_json_b64.encode("utf-8")).decode("utf-8")
+            cred = credentials.Certificate(json.loads(decoded))
+        else:
+            for path in (service_account_path, google_app_creds_path, "firebase-service-account.json"):
+                if path and os.path.exists(path):
+                    cred = credentials.Certificate(path)
+                    break
+
+        if cred is not None:
+            firebase_admin.initialize_app(cred)
+            print("[FCM] Firebase Admin initialized.")
+        else:
+            # No credentials configured: keep app running; push notifications disabled.
+            print(
+                "[FCM] Firebase Admin not configured; push notifications disabled. "
+                "Set FIREBASE_SERVICE_ACCOUNT_JSON (or FIREBASE_SERVICE_ACCOUNT_JSON_BASE64), "
+                "or provide a credentials file via FIREBASE_SERVICE_ACCOUNT_PATH/GOOGLE_APPLICATION_CREDENTIALS."
+            )
     else:
         print("[FCM] Firebase Admin already initialized.")
 except Exception as e:
-    print(f"[FCM] Error initializing Firebase Admin SDK: {e}")
-    print("[FCM] Push notifications will be disabled on this machine.")
+    print(f"[FCM] Firebase Admin init failed; push notifications disabled. Error: {e}")
 
 
 # Translation libraries: try official Google Cloud first, fallback to googletrans
@@ -90,13 +115,49 @@ CORS(app, supports_credentials=True)
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-change-me")
 app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "dev-jwt-secret")
 
-# SQLite for now (file lifeline.db in project root).
-# app.config["SQLALCHEMY_DATABASE_URI"] = "postgresql+psycopg2://postgres:error101@localhost:5432/lifeline_db"
-import os
-
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-DB_PATH = os.path.join(BASE_DIR, "lifeline.db")   # keep it in project root
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + DB_PATH
+
+def _normalize_database_url(url: str) -> str:
+    url = (url or "").strip()
+    if not url:
+        return ""
+
+    # Common copy/paste format: psql 'postgresql://...'
+    lower = url.lower()
+    if lower.startswith("psql "):
+        url = url[5:].strip()
+
+    # Strip surrounding quotes (single or double)
+    if len(url) >= 2 and url[0] in ("'", '"') and url[-1] == url[0]:
+        url = url[1:-1].strip()
+
+    # Heroku-style scheme compatibility
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://"):]
+
+    return url
+
+
+# Prefer DATABASE_URL (Render/Neon). Fallback to local SQLite for dev.
+# Also accept alternative env var names to reduce deployment friction.
+_raw_db_url = (
+    os.getenv("DATABASE_URL")
+    or os.getenv("RENDER_DATABASE_URL")
+    or os.getenv("POSTGRES_URL")
+    or os.getenv("POSTGRESQL_URL")
+    or ""
+)
+_env_db_url = _normalize_database_url(_raw_db_url)
+if _env_db_url:
+    app.config["SQLALCHEMY_DATABASE_URI"] = _env_db_url
+    # Production-friendly defaults for Postgres.
+    app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+        "pool_pre_ping": True,
+        "pool_recycle": 280,
+    }
+else:
+    DB_PATH = os.path.join(BASE_DIR, "lifeline.db")  # keep it in project root
+    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + DB_PATH
 
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["UPLOAD_FOLDER"] = os.path.join("static", "uploads", "profile_photos")
@@ -131,10 +192,11 @@ app.config["MAIL_USE_TLS"] = True
 app.config["MAIL_USERNAME"] = EMAIL_ADDRESS
 app.config["MAIL_PASSWORD"] = EMAIL_PASSWORD
 app.config["MAIL_DEFAULT_SENDER"] = EMAIL_ADDRESS
+app.config["MAIL_TIMEOUT"] = int(os.getenv("MAIL_TIMEOUT", "10"))
 
 # Fix cookie issues for localhost (Chrome blocks otherwise)
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
-app.config["SESSION_COOKIE_SECURE"] = False
+app.config["SESSION_COOKIE_SECURE"] = os.getenv("SESSION_COOKIE_SECURE", "0") == "1"
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 
 # Some embedded webviews (including VS Code Simple Browser) can be aggressive about
@@ -145,10 +207,7 @@ app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
 mail = Mail(app)
 
 # Your Google Maps API key
-GOOGLE_MAPS_API_KEY = os.getenv(
-    "GOOGLE_MAPS_API_KEY",
-    "AIzaSyAVtLNl7YZaPZeSnuA_5Gxm8VdtFXxreYo"  
-)
+GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "").strip()
 
 EMERGENCY_GUEST_EMAIL = "guest_emergency@lifeline.local"
 
@@ -650,24 +709,46 @@ def build_flagged_map_for_requests(requests_list):
         return {}
 
     now = datetime.utcnow()
-    window_start = now - timedelta(days=30)
+    # Keep a generous lookback so duplicate detection doesn't silently vanish
+    # when a user reposts after a few weeks.
+    window_start = now - timedelta(days=120)
 
     user_ids = {r.user_id for r in requests_list if getattr(r, "user_id", None) is not None}
     if not user_ids:
         return {}
 
     recent_by_user = {uid: [] for uid in user_ids}
+    recent_rows = []
     try:
+        # Fast path: filter by created_at when the column/typing supports it.
         recent_rows = (
-            Request.query.filter(Request.user_id.in_(list(user_ids)), Request.created_at >= window_start)
+            Request.query.filter(
+                Request.user_id.in_(list(user_ids)),
+                Request.created_at.isnot(None),
+                Request.created_at >= window_start,
+            )
             .order_by(Request.created_at.desc())
             .limit(500)
             .all()
         )
-        for rr in recent_rows:
-            recent_by_user.setdefault(rr.user_id, []).append(rr)
     except Exception:
-        recent_by_user = {uid: [] for uid in user_ids}
+        # Fallback: if created_at filtering fails for any reason (schema drift,
+        # nulls, sqlite typing quirks), still fetch a bounded recent sample.
+        try:
+            recent_rows = (
+                Request.query.filter(Request.user_id.in_(list(user_ids)))
+                .order_by(Request.id.desc())
+                .limit(500)
+                .all()
+            )
+        except Exception:
+            recent_rows = []
+
+    for rr in recent_rows:
+        try:
+            recent_by_user.setdefault(rr.user_id, []).append(rr)
+        except Exception:
+            continue
 
     flagged_map = {}
     for r in requests_list:
@@ -1024,6 +1105,37 @@ def serialize_message(msg: ChatMessage):
     }
 
 
+def _compute_unread_chat_count(user_id: int) -> int:
+    try:
+        return int(
+            ChatMessage.query.join(Conversation, ChatMessage.conversation_id == Conversation.id)
+            .filter(ChatMessage.read == False)
+            .filter(ChatMessage.sender_id != int(user_id))
+            .filter((Conversation.user_a == int(user_id)) | (Conversation.user_b == int(user_id)))
+            .count()
+        )
+    except Exception:
+        return 0
+
+
+def _emit_counts_update(user_id: int):
+    """Push authoritative unread counts to the user's personal socket room."""
+    try:
+        u = User.query.get(int(user_id))
+        notif_count = get_notification_count(u) if u else 0
+        chat_unread = _compute_unread_chat_count(int(user_id))
+        socketio.emit(
+            "counts_update",
+            {
+                "notification_count": int(notif_count or 0),
+                "unread_chat_count": int(chat_unread or 0),
+            },
+            room=f"user_{int(user_id)}",
+        )
+    except Exception:
+        pass
+
+
 # ------------------ AUTH HELPERS ------------------
 def login_user(user: User):
     # Persist session across reloads (important for webviews)
@@ -1179,7 +1291,16 @@ def inject_user():
         translation_enabled = True
     elif globals().get('gt_translator'):
         translation_enabled = True
-    return dict(current_user=current_user(), translation_enabled=translation_enabled)
+
+    user = current_user()
+
+    unread_chat_count = _compute_unread_chat_count(user.id) if user else 0
+
+    return dict(
+        current_user=user,
+        translation_enabled=translation_enabled,
+        unread_chat_count=int(unread_chat_count or 0),
+    )
 
 # ------------------ GEO UTILS ------------------
 def haversine_distance_km(lat1, lon1, lat2, lon2):
@@ -1687,8 +1808,23 @@ def login_otp_request():
     email = request.form.get("email", "").strip().lower()
     user = User.query.filter_by(email=email).first()
 
+    wants_json = (
+        request.headers.get("X-Requested-With") == "XMLHttpRequest"
+        or request.accept_mimetypes.best == "application/json"
+    )
+
     if not user:
-        flash("No account with this email.", "error")
+        msg = "No account with this email."
+        if wants_json:
+            return jsonify({"ok": False, "error": msg}), 404
+        flash(msg, "error")
+        return redirect(url_for("login", mode="otp"))
+
+    if not (EMAIL_ADDRESS and EMAIL_PASSWORD):
+        msg = "OTP email is not configured on the server. Please use password login for now."
+        if wants_json:
+            return jsonify({"ok": False, "error": msg}), 503
+        flash(msg, "error")
         return redirect(url_for("login", mode="otp"))
 
     now = datetime.utcnow()
@@ -1704,7 +1840,10 @@ def login_otp_request():
 
     # Rate limiting: no more than OTP_MAX_PER_HOUR per hour
     if len(log["request_times"]) >= OTP_MAX_PER_HOUR:
-        flash("Too many OTP requests. Please try again later.", "error")
+        msg = "Too many OTP requests. Please try again later."
+        if wants_json:
+            return jsonify({"ok": False, "error": msg}), 429
+        flash(msg, "error")
         otp_store[email] = log
         return redirect(url_for("login", mode="otp"))
 
@@ -1714,7 +1853,10 @@ def login_otp_request():
         elapsed = (now - last_request).total_seconds()
         if elapsed < OTP_COOLDOWN_SECONDS:
             remaining = int(OTP_COOLDOWN_SECONDS - elapsed)
-            flash(f"Please wait {remaining}s before requesting a new OTP.", "error")
+            msg = f"Please wait {remaining}s before requesting a new OTP."
+            if wants_json:
+                return jsonify({"ok": False, "error": msg, "retry_after": remaining}), 429
+            flash(msg, "error")
             otp_store[email] = log
             return redirect(url_for("login", mode="otp"))
 
@@ -1735,7 +1877,25 @@ def login_otp_request():
         f"(valid for {OTP_TTL_SECONDS // 60} minutes)."
     )
     msg.html = build_otp_email_html(user, code)
-    mail.send(msg)
+    try:
+        mail.send(msg)
+    except Exception as e:
+        print("[OTP] Email send failed:", e)
+        try:
+            user.clear_otp()
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+        err = "Could not send OTP email. Please try again later."
+        if wants_json:
+            return jsonify({"ok": False, "error": err}), 502
+        flash(err, "error")
+        return redirect(url_for("login", mode="otp"))
+
+    ok_msg = "OTP sent. Check your inbox and spam/junk folder."
+    if wants_json:
+        return jsonify({"ok": True, "message": ok_msg, "cooldown": OTP_COOLDOWN_SECONDS}), 200
 
     flash("OTP sent to your email.", "success")
     return redirect(url_for("login", mode="otp"))
@@ -1881,7 +2041,10 @@ def auth_google():
 
         # Helpful, common failures
         if "default firebase app" in low and "does not exist" in low:
-            return "Firebase Admin is not initialized on the server (check firebase-service-account.json)."
+            return (
+                "Firebase Admin is not initialized on the server. Configure Firebase Admin credentials "
+                "(e.g., FIREBASE_SERVICE_ACCOUNT_JSON / FIREBASE_SERVICE_ACCOUNT_JSON_BASE64)."
+            )
         if "error while fetching public key certificates" in low or "fetching public key" in low or "x509" in low:
             return "Server cannot reach Google to verify the token (check internet/proxy/firewall)."
         if "expired" in low or "token used too late" in low:
@@ -3553,6 +3716,20 @@ def chat_with_user(other_user_id):
     except Exception:
         # best-effort only; don't block rendering on notification errors
         db.session.rollback()
+
+    # Best-effort: mark chat notifications for this conversation as read.
+    try:
+        link = url_for("chat_with_user", other_user_id=other.id)
+        Notification.query.filter_by(user_id=user.id, is_read=False, type="chat", link=link).update({"is_read": True})
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    # Push updated counts (avoid stale badges after reading in chat)
+    try:
+        _emit_counts_update(user.id)
+    except Exception:
+        pass
     # serialize messages for JSON/template safety
     messages_serialized = [serialize_message(m) for m in messages]
     return render_template("chat.html", conversation=conv, other_user=other, messages=messages_serialized, conversations=conversations_list)
@@ -3587,9 +3764,19 @@ def chat_index():
             "unread_count": unread_count,
         })
 
+    # Sort by newest last message so recent chats appear at top.
+    conversations.sort(key=lambda x: (x.get("last_time") or 0), reverse=True)
+
+    conversation_ids = [item["conversation"].id for item in conversations]
+
     # also show some nearby helpers to start a new chat (trusted helpers)
     helpers = User.query.filter(User.is_trusted_helper == True, User.id != user.id).limit(10).all()
-    return render_template("chat_index.html", conversations=conversations, helpers=helpers)
+    return render_template(
+        "chat_index.html",
+        conversations=conversations,
+        helpers=helpers,
+        conversation_ids=conversation_ids,
+    )
 
 @app.route("/suggestions")
 @login_required
@@ -3770,6 +3957,7 @@ def dashboard():
 
     # Dashboard task lists: query explicitly (avoid relying on relationship loader behavior)
     now = datetime.utcnow()
+
     my_posts = (
         Request.query.filter(
             Request.user_id == user.id,
@@ -3778,6 +3966,44 @@ def dashboard():
         .order_by(Request.created_at.desc())
         .all()
     )
+
+    # Also include expired posts that received no responses, so the user can remove them.
+    # (These are often auto-closed and would otherwise not show up in the dashboard list.)
+    try:
+        expired_candidates = (
+            Request.query.filter(
+                Request.user_id == user.id,
+                Request.expires_at <= now,
+                Request.helper_id == None,  # noqa: E711
+            )
+            .order_by(Request.created_at.desc())
+            .limit(200)
+            .all()
+        )
+        expired_unanswered = []
+        for r in expired_candidates:
+            cat = (getattr(r, "category", "") or "").lower()
+            if cat == "sos":
+                if SOSResponse.query.filter(SOSResponse.request_id == r.id).count() == 0:
+                    expired_unanswered.append(r)
+            else:
+                if Offer.query.filter(Offer.request_id == r.id).count() == 0:
+                    expired_unanswered.append(r)
+
+        if expired_unanswered:
+            seen = {int(r.id) for r in my_posts if getattr(r, "id", None) is not None}
+            for r in expired_unanswered:
+                rid = getattr(r, "id", None)
+                if rid is None:
+                    continue
+                if int(rid) in seen:
+                    continue
+                my_posts.append(r)
+                seen.add(int(rid))
+            # keep newest first
+            my_posts.sort(key=lambda x: x.created_at or datetime.min, reverse=True)
+    except Exception:
+        pass
     active_engagements = (
         Request.query.filter(
             Request.helper_id == user.id,
@@ -3834,7 +4060,40 @@ def dashboard():
         pending_offers=pending_offers,
         sos_review_req=sos_review_req,
         sos_review_helper=sos_review_helper,
+        now=now,
     )
+
+
+@app.route("/requests/<int:request_id>/remove-expired-unanswered", methods=["POST"])
+@login_required
+def remove_expired_unanswered_request(request_id):
+    """Remove a request only when it is expired AND has zero responses."""
+    user = current_user()
+    r = Request.query.get_or_404(request_id)
+
+    if r.user_id != user.id:
+        flash("You are not allowed to remove this post.", "error")
+        return redirect(url_for("dashboard"))
+
+    now = datetime.utcnow()
+    if not getattr(r, "expires_at", None) or r.expires_at > now:
+        flash("You can only remove a post after it expires.", "error")
+        return redirect(url_for("dashboard"))
+
+    cat = (getattr(r, "category", "") or "").lower()
+    if cat == "sos":
+        resp_count = SOSResponse.query.filter(SOSResponse.request_id == r.id).count()
+    else:
+        resp_count = Offer.query.filter(Offer.request_id == r.id).count()
+
+    if resp_count and int(resp_count) > 0:
+        flash("You can't remove this post because someone already responded.", "error")
+        return redirect(url_for("dashboard"))
+
+    db.session.delete(r)
+    db.session.commit()
+    flash("Post removed.", "success")
+    return redirect(url_for("dashboard"))
 
 # ------------------ API: Dashboard & Impact  ------------------
 
@@ -4942,6 +5201,20 @@ def api_mark_conversation_read(conv_id):
                     socketio.emit('read', {'message_id': mid, 'conversation_id': conv.id}, room=f"chat_{conv.id}")
                 except Exception:
                     pass
+        # Also mark chat notifications related to this conversation as read.
+        try:
+            other_id = conv.user_a if conv.user_b == user.id else conv.user_b
+            link = url_for("chat_with_user", other_user_id=other_id)
+            Notification.query.filter_by(user_id=user.id, is_read=False, type="chat", link=link).update({"is_read": True})
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+        try:
+            _emit_counts_update(user.id)
+        except Exception:
+            pass
+
         return jsonify({"marked": len(ids)})
     except Exception:
         db.session.rollback()
@@ -5032,16 +5305,53 @@ def firebase_sw():
 online_users = set()
 sid_to_user = {}
 
-# --- REPLACED/MODIFIED BLOCK (for Step 1) ---
 @socketio.on("join")
-@jwt_required()
 def on_join(data):
-    user_id = int(get_jwt_identity())
+    """Join rooms for real-time updates.
+
+    Supports:
+    - session-authenticated web users (primary)
+    - optional JWT-authenticated clients (if they connect with auth headers)
+
+    Expected payload: {conversation_id?: int}
+    """
+    data = data or {}
+
+    user = current_user()
+    user_id = user.id if user else None
+
+    # Best-effort: allow JWT identity if present (does not require it).
+    if user_id is None:
+        try:
+            from flask_jwt_extended import verify_jwt_in_request
+
+            verify_jwt_in_request(optional=True)
+            ident = get_jwt_identity()
+            if ident is not None:
+                user_id = int(ident)
+        except Exception:
+            pass
+
+    if user_id is None:
+        return
 
     sid_to_user[request.sid] = user_id
     online_users.add(user_id)
 
+    # Personal room for notifications/pings.
     join_room(f"user_{user_id}")
+
+    # Optional: conversation room for chat streaming.
+    conv_id = data.get("conversation_id")
+    if conv_id:
+        try:
+            conv = Conversation.query.get(int(conv_id))
+            if conv and int(user_id) in conv.participants():
+                join_room(f"chat_{conv.id}")
+                print(f"[SOCKETIO] User {user_id} joined chat room chat_{conv.id}")
+        except Exception as e:
+            print(f"[SOCKETIO] join chat room failed: {e}")
+
     print(f"[SOCKETIO] User {user_id} joined personal room user_{user_id}")
 
 
@@ -5173,57 +5483,53 @@ def on_send_message(data):
 
     payload = serialize_message(msg)
 
-
-    
-    # Include file data in payload if present
+    # Include file data in payload if present (not persisted to DB)
     if file_data:
         payload['file_data'] = file_data
         payload['file_name'] = file_name
         payload['file_size'] = file_size
         payload['is_image'] = is_image
         print(f"[SEND_MESSAGE] Including file in payload: {file_name}, is_image: {is_image}")
-    
+
     # include the client's temporary id so client can replace optimistic UI
     if temp_id:
         payload['temp_id'] = temp_id
-    room = f"chat_{conv_id}"
-    print(f"[SEND_MESSAGE] Broadcasting to room {room}")
-    # send to room; clients should acknowledge
-    emit("new_message", payload, room=room)
-    # return payload as acknowledgement to sender (Socket.IO ack)
-    return payload
-
-
-    payload["temp_id"] = temp_id
-
-
-    payload["has_file"] = True
-    payload["file_name"] = file_name
-    payload["file_size"] = file_size
-    payload["is_image"] = is_image
 
     room = f"chat_{conv.id}"
-    print(f"[SEND_MESSAGE] Emitting 'new_message' to room {room}")
+    print(f"[SEND_MESSAGE] Broadcasting to room {room}")
     emit("new_message", payload, room=room)
 
     # ---------- Determine the other participant ----------
     other_id = conv.user_a if conv.user_b == user.id else conv.user_b
     other_user = User.query.get(other_id) if other_id else None
-    has_token = bool(other_user and getattr(other_user, 'fcm_tokens', None) and other_user.fcm_tokens.count() > 0)
-    print(f"[SEND_MESSAGE] Other participant user_id={other_id}, has_token={has_token}")
 
-    # ---------- Send push to the other participant ----------
-
+    # ---------- Create bell notification for the receiver ----------
     try:
-        # Check if the other user exists and is not the sender
         if other_user and other_user.id != user.id:
-            # Check if the user has any registered FCM tokens using the new relationship
+            preview = (text or "").strip() or "[Attachment]"
+            if len(preview) > 120:
+                preview = preview[:120] + "…"
+            push_notification(
+                user_id=other_user.id,
+                type="chat",
+                message=f"💬 {user.name}: {preview}",
+                link=url_for('chat_with_user', other_user_id=user.id),
+            )
+
+            # Real-time: refresh receiver badges + dropdown immediately
+            _emit_counts_update(other_user.id)
+            socketio.emit("notification_new", {"type": "chat"}, room=f"user_{other_user.id}")
+    except Exception as e:
+        print("[NOTIFICATION] Chat notify error:", e)
+
+    # ---------- Optional FCM push to the receiver (best-effort) ----------
+    try:
+        if other_user and other_user.id != user.id and hasattr(other_user, "fcm_tokens"):
             if other_user.fcm_tokens.count() > 0:
-                preview = text or "[Attachment]"
+                preview = (text or "").strip() or "[Attachment]"
                 if len(preview) > 80:
                     preview = preview[:80] + "…"
 
-                # Use the new multi-token handler function
                 success = send_fcm_to_user(
                     other_user,
                     title=f"New message from {user.name}",
@@ -5234,19 +5540,13 @@ def on_send_message(data):
                         "sender_id": str(user.id),
                     },
                 )
-                
                 if success:
                     print(f"[FCM] Chat push sent to user {other_user.id}")
-                else:
-                    # This branch means the server received failure from Firebase
-                    print(f"[FCM] Chat push failed to send to user {other_user.id} (Firebase error)")
-            else:
-                # This branch means no tokens were registered for the user
-                print(f"[FCM] Other user {other_user.id} has no registered FCM tokens; skipping chat push")
-                
     except Exception as e:
-        # This will now catch other errors, not the persistent AttributeError
         print("[FCM] Error sending chat push:", e)
+
+    # return payload as acknowledgement to sender (Socket.IO ack)
+    return payload
 
 
 
@@ -5279,6 +5579,16 @@ def on_message_read(data):
     db.session.commit()
     room = f"chat_{msg.conversation_id}"
     emit("read", {"message_id": mid}, room=room)
+
+    # If receiver read it, clear related chat notification and push updated counts.
+    try:
+        link = url_for("chat_with_user", other_user_id=msg.sender_id)
+        Notification.query.filter_by(user_id=user.id, is_read=False, type="chat", link=link).update({"is_read": True})
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    _emit_counts_update(user.id)
 
 
 @app.route("/chat/<int:conv_id>/delete", methods=["POST"])
@@ -5713,4 +6023,5 @@ if __name__ == "__main__":
         _run_startup_migrations_and_bootstrap_admin()
 
     # Use reloader=False with Socket.IO to avoid double-start issues.
-    socketio.run(app, debug=debug_mode, use_reloader=False)
+    port = int(os.getenv("PORT", "5000"))
+    socketio.run(app, host="0.0.0.0", port=port, debug=debug_mode, use_reloader=False)

@@ -12,6 +12,13 @@ __pycache__/
 venv/
 .venv/
 
+# Sensitive credentials
+firebase-service-account.json
+*service-account*.json
+
+# Editor/backup files that can accidentally contain secrets
+*.bak
+
 # ===============================
 # Flask instance & DB
 # ===============================

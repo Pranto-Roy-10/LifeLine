@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: lifeline
+    env: python
+    plan: free
+    autoDeploy: true
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --worker-class eventlet --workers 1 --bind 0.0.0.0:$PORT wsgi:app
+    envVars:
+      - key: FLASK_DEBUG
+        value: "0"
+      # Set these in Render Dashboard (do not commit secrets):
+      # - SECRET_KEY
+      # - JWT_SECRET_KEY
+      # - DATABASE_URL
+      # Optional:
+      # - SESSION_COOKIE_SECURE (set to "1" on HTTPS)

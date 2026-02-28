@@ -1,10 +1,12 @@
 {% extends "base.html" %} {% block title %}LifeLine – Live Map{% endblock %} {%
 block content %}
 
-<section class="w-full px-6 md:px-12 py-8 md:py-10 space-y-4">
+<section
+  class="w-full min-h-screen home-hero text-slate-100 px-6 md:px-12 py-8 md:py-10 space-y-4 page-transition"
+>
   <!-- Header -->
   <div
-    class="flex flex-col md:flex-row md:items-center md:justify-between gap-3"
+    class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 stagger-item"
   >
     <div>
       <h2 class="text-xl md:text-2xl font-semibold mb-1">
@@ -21,12 +23,16 @@ block content %}
       <!-- Radar button -->
       <button
         id="radar-toggle-btn"
-        class="px-4 py-2 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm font-semibold hover:opacity-90 transition flex items-center justify-center gap-2 shadow-lg"
+        class="btn-sheen px-4 py-2 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm font-semibold hover:opacity-90 transition flex items-center justify-center gap-2 shadow-lg"
         type="button"
         title="Activate Human Availability Radar"
       >
         <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+          <path
+            fill-rule="evenodd"
+            d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+            clip-rule="evenodd"
+          />
         </svg>
         Availability Radar
       </button>
@@ -64,11 +70,11 @@ block content %}
   <!-- Main content: Map + Sidebar -->
   <div class="grid lg:grid-cols-3 gap-4 lg:gap-6">
     <!-- MAP COLUMN -->
-    <div class="lg:col-span-2 relative">
+    <div class="lg:col-span-2 relative stagger-item">
       <!-- Top overlay controls -->
       <div class="absolute z-20 top-3 left-3 flex flex-col gap-2">
         <div
-          class="rounded-2xl bg-slate-900/80 border border-slate-700/70 px-3 py-2 text-[11px] text-slate-200 shadow-lg"
+          class="rounded-2xl bg-slate-900/80 border border-slate-700/70 px-3 py-2 text-[11px] text-slate-200 shadow-lg card-hover"
         >
           <div class="flex items-center gap-2">
             <span
@@ -87,7 +93,7 @@ block content %}
       <!-- Bottom-left recenter button -->
       <button
         id="recenter-btn"
-        class="absolute z-20 bottom-3 left-3 px-3 py-1.5 rounded-full bg-slate-900/80 border border-slate-700 text-[11px] text-slate-200 hover:border-emerald-400 hover:text-emerald-300 transition shadow-lg"
+        class="btn-sheen absolute z-20 bottom-3 left-3 px-3 py-1.5 rounded-full bg-slate-900/80 border border-slate-700 text-[11px] text-slate-200 hover:border-emerald-400 hover:text-emerald-300 transition shadow-lg"
         type="button"
       >
         Recenter on me
@@ -95,41 +101,41 @@ block content %}
 
       <!-- MAP BOX -->
       <div
-        id="map"
-        class="w-full rounded-3xl border border-slate-800 bg-slate-900"
-        style="height: 500px"
-      ></div>
+        class="w-full rounded-2xl border border-slate-800 bg-slate-900/70 backdrop-blur-md shadow-xl overflow-hidden card-hover"
+      >
+        <div id="map" class="w-full" style="height: 500px"></div>
+      </div>
     </div>
 
     <!-- SIDEBAR: LIST OF REQUESTS -->
     <div
-      class="flex flex-col rounded-3xl border border-slate-800 bg-slate-900/80 backdrop-blur p-4 shadow-xl max-h-[500px]"
+      class="flex flex-col rounded-3xl glass-card-enhanced backdrop-blur p-4 shadow-xl max-h-[500px] card-hover stagger-item"
     >
       <!-- Filters -->
       <div class="flex flex-wrap gap-2 mb-3 text-[11px]">
         <button
-          class="filter-btn px-3 py-1.5 rounded-full border border-emerald-400/60 bg-emerald-500/10 text-emerald-200 font-semibold"
+          class="filter-btn btn-sheen px-3 py-1.5 rounded-full border border-emerald-400/60 bg-emerald-500/10 text-emerald-200 font-semibold"
           data-filter="all"
           type="button"
         >
           All
         </button>
         <button
-          class="filter-btn px-3 py-1.5 rounded-full border border-slate-700 text-slate-300 hover:border-emerald-400 hover:text-emerald-300 transition"
+          class="filter-btn btn-sheen px-3 py-1.5 rounded-full border border-slate-700 text-slate-300 hover:border-emerald-400 hover:text-emerald-300 transition"
           data-filter="help"
           type="button"
         >
           Help Needed
         </button>
         <button
-          class="filter-btn px-3 py-1.5 rounded-full border border-slate-700 text-slate-300 hover:border-sky-400 hover:text-sky-300 transition"
+          class="filter-btn btn-sheen px-3 py-1.5 rounded-full border border-slate-700 text-slate-300 hover:border-sky-400 hover:text-sky-300 transition"
           data-filter="medicine"
           type="button"
         >
           Medicine Run
         </button>
         <button
-          class="filter-btn px-3 py-1.5 rounded-full border border-slate-700 text-slate-300 hover:border-amber-400 hover:text-amber-300 transition"
+          class="filter-btn btn-sheen px-3 py-1.5 rounded-full border border-slate-700 text-slate-300 hover:border-amber-400 hover:text-amber-300 transition"
           data-filter="ride"
           type="button"
         >
@@ -759,7 +765,7 @@ block content %}
       const posLat = typeof position.lat === 'function' ? position.lat() : position.lat;
       const posLng = typeof position.lng === 'function' ? position.lng() : position.lng;
         console.log("Activity ping with lat:", posLat, "lng:", posLng);
-      
+
       const response = await fetch("/api/activity/ping", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -924,9 +930,9 @@ block content %}
       // Handle both {lat, lng} objects and Google Maps LatLng objects
       const posLat = typeof position.lat === 'function' ? position.lat() : position.lat;
       const posLng = typeof position.lng === 'function' ? position.lng() : position.lng;
-      
+
       console.log("Heatmap request with lat:", posLat, "lng:", posLng);
-      
+
       const resp = await fetch("/api/radar/heatmap", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1063,7 +1069,7 @@ block content %}
         const radiusLbl = document.getElementById("radius-label");
         if (radiusLbl) radiusLbl.textContent = `${currentRadiusKm} km`;
       console.log("Turning radar ON");
-      
+
       // Use map center as fallback if geolocation not available
       const rawPos = userPosition || map.getCenter();
       console.log("Radar raw position:", rawPos);
@@ -1414,71 +1420,86 @@ block content %}
       const isSos = (r.category || "").toLowerCase() === "sos";
       const viewerResponded = !!r.viewer_sos_responded;
 
-      let tagLabel = "Help needed";
-      let tagColor = "text-emerald-300 bg-emerald-500/10 border-emerald-400/40";
+      const urgency = (r.urgency || "").toLowerCase();
+      const urgencyClass =
+        urgency === "emergency"
+          ? "text-rose-400"
+          : urgency === "high"
+          ? "text-amber-300"
+          : urgency === "normal"
+          ? "text-sky-300"
+          : urgency
+          ? "text-emerald-300"
+          : "text-slate-400";
 
-      if (isSos) {
-        tagLabel = "SOS Signal";
-        tagColor = "text-rose-300 bg-rose-500/10 border-rose-400/40";
-      }
+      const outer = document.createElement("div");
+      outer.className = "rounded-2xl border border-slate-800 bg-slate-900/70 overflow-hidden";
 
-      if (!isSos && isOffer) {
-        tagLabel = "Helper (general)";
-        tagColor = "text-sky-300 bg-sky-500/10 border-sky-400/40";
-      } else if (!isSos && r.type === "medicine") {
-        tagLabel = "Medicine run";
-        tagColor = "text-sky-300 bg-sky-500/10 border-sky-400/40";
-      } else if (!isSos && r.type === "ride") {
-        tagLabel = "Ride offer";
-        tagColor = "text-amber-300 bg-amber-500/10 border-amber-400/40";
-      }
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "w-full flex items-start justify-between px-4 py-3 text-left hover:bg-slate-900/90 transition";
+      btn.dataset.requestId = r.id;
 
-      const urgencyText = r.urgency ? r.urgency : null;
+      btn.innerHTML = `
+        <div class="flex-1 min-w-0">
+          <div class="flex flex-wrap items-center gap-2">
+            <p class="font-semibold text-sm text-slate-100 truncate">${r.title || ""}</p>
 
-      const card = document.createElement("button");
-      card.type = "button";
-      card.className = isSos
-        ? "w-full text-left rounded-2xl border border-rose-500/30 bg-slate-900/90 px-3 py-2.5 hover:border-rose-400 hover:bg-slate-900 transition flex flex-col gap-1"
-        : "w-full text-left rounded-2xl border border-slate-800 bg-slate-900/90 px-3 py-2.5 hover:border-emerald-400 hover:bg-slate-900 transition flex flex-col gap-1";
-      card.dataset.requestId = r.id;
+            <span class="text-[11px] px-2 py-0.5 rounded-full border border-slate-600 text-slate-200 bg-slate-800/80">
+              ${(r.category || "Other").charAt(0).toUpperCase() + (r.category || "Other").slice(1)}
+            </span>
 
-      card.innerHTML = `
-        <div class="flex items-center justify-between gap-2">
-          <p class="font-semibold text-slate-100 text-[13px] line-clamp-1">${
-            r.title
-          }</p>
-          <span class="text-[10px] px-2 py-1 rounded-full border ${tagColor}">
-            ${tagLabel}
-          </span>
+            ${
+              isSos
+                ? `<span class="text-[11px] px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-300 border border-rose-500/40 font-bold">🚨 SOS</span>`
+                : ""
+            }
+
+            ${
+              isOffer
+                ? `<span class="text-[11px] px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-300 border border-sky-500/40">Offer help</span>`
+                : `<span class="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/40">Needs help</span>`
+            }
+
+            ${
+              isSos && IS_TRUSTED_HELPER && viewerResponded
+                ? `<span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-700 text-emerald-400 border border-slate-600 font-bold">✓ Responded</span>`
+                : ""
+            }
+          </div>
+
+          <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-400">
+            <span class="text-emerald-300">~ ${r.distance_km} km away</span>
+            ${
+              r.urgency
+                ? `<span>⏱️ Urgency: <span class="${urgencyClass}">${
+                    String(r.urgency).charAt(0).toUpperCase() + String(r.urgency).slice(1)
+                  }</span></span>`
+                : ""
+            }
+          </div>
         </div>
-        <p class="text-[11px] text-slate-400 line-clamp-2">
-          ${r.description || ""}
-        </p>
-        <p class="text-[11px] text-emerald-300 mt-1">
-          ~ ${r.distance_km} km away
-          ${r.is_offer && r.radius_pref ? ` • radius ${r.radius_pref} km` : ""}
-        </p>
-        ${
-          urgencyText
-            ? `<p class="text-[10px] ${
-                isSos ? "text-rose-300" : "text-orange-300"
-              } mt-0.5 capitalize">Urgency: ${urgencyText}</p>`
-            : ""
-        }
-        ${
-          isSos && IS_TRUSTED_HELPER && viewerResponded
-            ? `<p class="text-[10px] text-emerald-400 font-semibold mt-0.5">✓ You responded</p>`
-            : ""
-        }
+
+        <div class="ml-3 mt-0.5">
+          <span class="inline-block text-slate-500">›</span>
+        </div>
       `;
 
-      card.addEventListener("click", () => {
+      btn.addEventListener("click", () => {
         const mode = r.is_offer ? "offer" : "need";
         window.location.href = `/requests?mode=${mode}&open=${r.id}`;
       });
 
-      listEl.appendChild(card);
+      outer.appendChild(btn);
+      listEl.appendChild(outer);
     }
+
+    // Ensure newly inserted cards animate (stagger observer runs at page load only)
+    try {
+      if (typeof window.lifelineObserveStaggerItems === "function") {
+        window.lifelineObserveStaggerItems(listEl);
+      }
+    } catch (e) {}
   }
 
   function focusOnRequest(requestId) {
