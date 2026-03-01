@@ -106,6 +106,10 @@ See `.env.example` for the full list. Common ones:
   - `FIREBASE_SERVICE_ACCOUNT_JSON` or `FIREBASE_SERVICE_ACCOUNT_JSON_BASE64`
   - `FIREBASE_SERVICE_ACCOUNT_PATH` / `GOOGLE_APPLICATION_CREDENTIALS`
 
+  Notes:
+  - Google sign-in on the login page uses Firebase Auth on the client and requires **Firebase Admin** credentials on the server to verify the ID token.
+  - If Firebase Admin isn’t configured, the app will still run, but Google login is disabled (use password/OTP instead).
+
 ## Deployment (Render)
 
 This repo includes configuration for Render:

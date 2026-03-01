@@ -69,6 +69,7 @@ block content %}
     </div>
 
     {# ---------------- GOOGLE LOGIN ---------------- #}
+    {% if google_login_enabled %}
     <div class="mt-2 mb-4">
       <button
         id="google-login-btn"
@@ -83,6 +84,9 @@ block content %}
         <span>Continue with Google</span>
       </button>
     </div>
+    {% else %}
+    {# Google login disabled when Firebase Admin isn't configured server-side #}
+    {% endif %}
 
     {# SEPARATOR #}
     <div class="flex items-center my-5">
@@ -192,6 +196,7 @@ block content %}
 </section>
 
 {# ---------------- SCRIPTS: GOOGLE + OTP COOLDOWN ---------------- #}
+{% if google_login_enabled %}
 <script type="module">
   /* ----------------- Firebase Google Login ----------------- */
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
@@ -253,7 +258,10 @@ block content %}
       }
     });
   }
+</script>
+{% endif %}
 
+<script type="module">
   /* ----------------- OTP cooldown logic ----------------- */
   const otpSendBtn = document.getElementById("otp-send-btn");
   const otpCountdownSpan = document.getElementById("otp-countdown");

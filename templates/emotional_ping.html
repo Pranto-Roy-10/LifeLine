@@ -2,8 +2,15 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <script>
+      (function(){
+        var t = localStorage.getItem('lifeline-theme');
+        if (t === 'dark') document.documentElement.classList.add('dark');
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Emotional Ping • LifeLine</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}" />
 
     <style>
       :root {
@@ -24,6 +31,39 @@
         --shadow2: 0 10px 24px rgba(0, 0, 0, 0.28);
 
         --radius: 20px;
+      }
+
+      /* Light mode overrides for emotional ping */
+      html:not(.dark) :root,
+      html:not(.dark) {
+        --bg:      #f0fdf4;
+        --bg2:     #ecfdf5;
+        --card:    rgba(255,255,255,0.88);
+        --card2:   rgba(248,250,252,0.9);
+        --border:  rgba(209,250,229,0.65);
+        --ink:     #1e293b;
+        --muted:   #64748b;
+        --muted2:  #475569;
+        --shadow:  0 8px 24px rgba(0,0,0,0.06);
+        --shadow2: 0 4px 12px rgba(0,0,0,0.04);
+      }
+
+      html:not(.dark) body {
+        background: var(--bg) !important;
+        background-image: none !important;
+      }
+      html:not(.dark) .btn {
+        background: rgba(255,255,255,0.7) !important;
+        color: var(--ink) !important;
+        border-color: var(--border) !important;
+      }
+      html:not(.dark) .btn:hover {
+        background: rgba(255,255,255,0.9) !important;
+      }
+      html:not(.dark) .btn.primary {
+        background: linear-gradient(180deg, rgba(16,185,129,0.15), rgba(16,185,129,0.06)) !important;
+        border-color: rgba(16,185,129,0.35) !important;
+        color: #047857 !important;
       }
 
       * {

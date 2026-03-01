@@ -70,6 +70,21 @@
     background-color: #0f766e !important;
     color: #f1f5f9;
   }
+
+  /* Light mode overrides */
+  html:not(.dark) .form-input {
+    background: #f8fafc !important;
+    border-color: #cbd5e1 !important;
+    color: #1e293b !important;
+  }
+  html:not(.dark) .form-input:focus {
+    border-color: #10b981 !important;
+    box-shadow: 0 0 0 3px rgba(16,185,129,0.12) !important;
+  }
+  html:not(.dark) select option {
+    background-color: #ffffff !important;
+    color: #1e293b !important;
+  }
 </style>
 
 <div class="min-h-screen w-full bg-slate-950">

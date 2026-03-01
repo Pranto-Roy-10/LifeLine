@@ -874,10 +874,10 @@ block content %}
           intersect: false,
         },
         scales: {
-          x: { ticks: { color: "#94a3b8" }, grid: { color: "#1e293b" } },
+          x: { ticks: { color: document.documentElement.classList.contains('dark') ? "#94a3b8" : "#64748b" }, grid: { color: document.documentElement.classList.contains('dark') ? "#1e293b" : "#e2e8f0" } },
           y: {
-            ticks: { color: "#94a3b8" },
-            grid: { color: "#1e293b" },
+            ticks: { color: document.documentElement.classList.contains('dark') ? "#94a3b8" : "#64748b" },
+            grid: { color: document.documentElement.classList.contains('dark') ? "#1e293b" : "#e2e8f0" },
             suggestedMin,
             suggestedMax,
           },

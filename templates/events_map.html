@@ -29,11 +29,11 @@
     const map = new google.maps.Map(document.getElementById("map"), {
       zoom: 12,
       center: center,
-      styles: [
+      styles: document.documentElement.classList.contains('dark') ? [
         { elementType: "geometry", stylers: [{ color: "#0f172a" }] },
         { elementType: "labels.text.fill", stylers: [{ color: "#e5e7eb" }] },
         { elementType: "labels.text.stroke", stylers: [{ color: "#0f172a" }] },
-      ],
+      ] : [],
     });
 
     events.forEach((e) => {
