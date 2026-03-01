@@ -11,7 +11,7 @@
             Create Help Request / Offer
         </h1>
 
-        <form action="{{ url_for('create_request') }}" method="POST" class="space-y-5">
+        <form action="{{ url_for('create_request') }}" method="POST" enctype="multipart/form-data" class="space-y-5">
 
             <!-- TITLE -->
             <div>
@@ -52,6 +52,34 @@
                 ></textarea>
             </div>
 
+            <!-- PRESCRIPTION / IMAGE UPLOAD (medicine only) -->
+            <div id="rx-section" class="hidden">
+              <label class="block text-slate-300 mb-2 font-medium">
+                Attach Prescription <span class="text-emerald-400">*</span>
+              </label>
+              <p class="text-xs text-slate-500 mb-2">
+                Medicine requests require a valid prescription photo.
+              </p>
+              <div class="relative border-2 border-dashed border-emerald-500/30 rounded-xl p-4
+                          bg-slate-950/60 hover:border-emerald-400/50 transition cursor-pointer
+                          flex flex-col items-center justify-center gap-2">
+                <svg class="w-8 h-8 text-emerald-400/60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                  <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/>
+                </svg>
+                <p class="text-xs text-slate-400">Click or drag &amp; drop your prescription image</p>
+                <p class="text-[10px] text-slate-500">PNG, JPG, JPEG, GIF — max 5 MB</p>
+                <input type="file" name="prescription_image" id="rx-input"
+                       accept="image/png,image/jpeg,image/jpg,image/gif"
+                       class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+              </div>
+              <div id="rx-preview" class="hidden mt-3 relative inline-block">
+                <img id="rx-preview-img" class="max-h-40 rounded-lg border border-emerald-500/30" />
+                <button type="button" onclick="clearRx()"
+                        class="absolute -top-2 -right-2 bg-red-600 hover:bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">&times;</button>
+              </div>
+            </div>
+
             <!-- OFFER TOGGLE -->
             <div class="flex items-center gap-3">
                 <input
@@ -90,4 +118,51 @@
     </div>
 
 </div>
+
+<script>
+(function() {
+  const catSelect = document.querySelector('select[name="category"]');
+  const section = document.getElementById('rx-section');
+  const fileInput = document.getElementById('rx-input');
+  const preview = document.getElementById('rx-preview');
+  const previewImg = document.getElementById('rx-preview-img');
+
+  function toggle() {
+    const isMedicine = catSelect.value === 'medicine';
+    section.classList.toggle('hidden', !isMedicine);
+    if (isMedicine) {
+      fileInput.setAttribute('required', 'required');
+    } else {
+      fileInput.removeAttribute('required');
+      fileInput.value = '';
+      preview.classList.add('hidden');
+    }
+  }
+  catSelect.addEventListener('change', toggle);
+  toggle();
+
+  fileInput.addEventListener('change', function() {
+    if (this.files && this.files[0]) {
+      const reader = new FileReader();
+      reader.onload = e => {
+        previewImg.src = e.target.result;
+        preview.classList.remove('hidden');
+      };
+      reader.readAsDataURL(this.files[0]);
+    }
+  });
+
+  window.clearRx = function() {
+    fileInput.value = '';
+    preview.classList.add('hidden');
+  };
+
+  document.querySelector('form').addEventListener('submit', function(e) {
+    if (catSelect.value === 'medicine' && (!fileInput.files || !fileInput.files[0])) {
+      e.preventDefault();
+      alert('Please attach a prescription photo for medicine requests.');
+    }
+  });
+})();
+</script>
 {% endblock %}

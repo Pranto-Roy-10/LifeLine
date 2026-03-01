@@ -244,7 +244,8 @@ block content %}
       {% else %}
       <div class="space-y-4">
         {% for req in my_posts %}
-        <div id="review-request-{{ req.id }}" class="bg-slate-950 border border-slate-800 p-4 rounded-xl card-hover">
+        <div class="flex gap-2 items-stretch">
+        <div id="review-request-{{ req.id }}" class="flex-1 min-w-0 bg-slate-950 border border-slate-800 p-4 rounded-xl card-hover">
           <div class="flex justify-between items-start mb-2">
             <div>
               <h3 class="font-semibold text-lg text-slate-200">
@@ -482,6 +483,20 @@ block content %}
           </div>
           {% endif %}
         </div>
+        <!-- 💼 Shop Suggestions (right-side vertical bar → opens right panel) -->
+        {% if not req.is_offer %}
+        <div
+          class="shop-suggestions-box hidden flex-shrink-0"
+          data-sg-request-id="{{ req.id }}"
+          data-sg-title="{{ req.title }}"
+          data-sg-description="{{ req.description or '' }}"
+          data-sg-category="{{ req.category }}"
+          data-sg-lat="{{ req.lat }}"
+          data-sg-lng="{{ req.lng }}"
+          data-sg-area="{{ req.area or '' }}"
+        ></div>
+        {% endif %}
+        </div> <!-- /flex -->
         {% endfor %}
       </div>
       {% endif %}

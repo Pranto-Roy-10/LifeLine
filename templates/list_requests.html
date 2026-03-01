@@ -44,9 +44,18 @@ endblock %} {% block content %}
   <div class="space-y-3">
     {% for r in requests %} {% set is_sos = (r.category|lower == 'sos') %}
 
+    <div class="flex gap-2 items-stretch">
     <div
       id="request-card-{{ r.id }}"
-      class="rounded-2xl border border-slate-800 bg-slate-900/70 overflow-hidden"
+      data-request-id="{{ r.id }}"
+      data-request-title="{{ r.title }}"
+      data-request-description="{{ r.description or '' }}"
+      data-request-category="{{ r.category }}"
+      data-request-lat="{{ r.lat }}"
+      data-request-lng="{{ r.lng }}"
+      data-request-area="{{ r.area or '' }}"
+      data-request-user-id="{{ r.user_id }}"
+      class="flex-1 min-w-0 rounded-2xl border border-slate-800 bg-slate-900/70 overflow-hidden"
     >
       <button
         type="button"
@@ -488,6 +497,22 @@ endblock %} {% block content %}
         </div>
       </div>
     </div>
+
+    <!-- 💼 Shop Suggestions (right-side vertical bar → opens right panel) -->
+    {% if current_user and r.user_id == current_user.id and not r.is_offer %}
+    <div 
+      id="shop-suggestions-{{ r.id }}"
+      class="shop-suggestions-box hidden flex-shrink-0"
+      data-sg-request-id="{{ r.id }}"
+      data-sg-title="{{ r.title }}"
+      data-sg-description="{{ r.description or '' }}"
+      data-sg-category="{{ r.category }}"
+      data-sg-lat="{{ r.lat }}"
+      data-sg-lng="{{ r.lng }}"
+      data-sg-area="{{ r.area or '' }}"
+    ></div>
+    {% endif %}
+    </div> <!-- /flex -->
     {% endfor %}
   </div>
 

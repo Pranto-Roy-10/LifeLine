@@ -22,6 +22,7 @@ from reputation_service import analyze_review_quality, calculate_reputation_poin
 from smart_suggestion_service import (
     SmartSuggestionService, WeatherService, LocationMatcher, DemandAnalyzer
 )
+from shop_suggestion_service import ShopSuggestionAnalyzer
 from sqlalchemy import func
 from flask_cors import CORS
 
@@ -161,8 +162,10 @@ else:
 
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["UPLOAD_FOLDER"] = os.path.join("static", "uploads", "profile_photos")
+app.config["PRESCRIPTION_FOLDER"] = os.path.join("static", "uploads", "prescriptions")
 app.config["ALLOWED_IMAGE_EXTENSIONS"] = {"png", "jpg", "jpeg", "gif"}
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+os.makedirs(app.config["PRESCRIPTION_FOLDER"], exist_ok=True)
 
 
 def allowed_image(filename):
@@ -446,6 +449,99 @@ class UserActivity(db.Model):
         }
 
 
+# ------------------ MODEL: Shop/Service Provider ------------------
+class Shop(db.Model):
+    __tablename__ = "shops"
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(255), nullable=False)
+    shop_type = db.Column(db.String(100), nullable=False)  # tire_shop, hospital, pharmacy, grocery, stationary, etc.
+    address = db.Column(db.Text, nullable=False)
+    phone = db.Column(db.String(20), nullable=True)
+    lat = db.Column(db.Float, nullable=False)
+    lng = db.Column(db.Float, nullable=False)
+    area = db.Column(db.String(150), nullable=True)  # e.g. Mohammadpur, Badda
+    landmark = db.Column(db.String(150), nullable=True)
+    description = db.Column(db.Text, nullable=True)
+    rating = db.Column(db.Float, default=4.0)    # 1.0 to 5.0 stars
+    service_fee = db.Column(db.Float, default=100.0)  # Fee to dispatch a worker (BDT)
+    labor_cost = db.Column(db.Float, default=300.0)   # Typical labor charge (BDT)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def to_dict(self, user_lat=None, user_lng=None):
+        d = {
+            "id": self.id,
+            "name": self.name,
+            "shop_type": self.shop_type,
+            "address": self.address,
+            "phone": self.phone,
+            "lat": self.lat,
+            "lng": self.lng,
+            "area": self.area,
+            "landmark": self.landmark,
+            "description": self.description,
+            "rating": self.rating or 4.0,
+            "service_fee": self.service_fee or 100.0,
+            "labor_cost": 0.0 if self.shop_type in ("grocery", "pharmacy", "stationary", "restaurant") else (self.labor_cost or 300.0),
+        }
+        if user_lat is not None and user_lng is not None:
+            try:
+                d["distance_km"] = round(
+                    haversine_distance_km(user_lat, user_lng, self.lat, self.lng), 2
+                )
+            except Exception:
+                d["distance_km"] = None
+        return d
+
+
+# ------------------ MODEL: Shop Request (user request to shop) ------------------
+class ShopRequest(db.Model):
+    __tablename__ = "shop_requests"
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    shop_id = db.Column(db.Integer, db.ForeignKey("shops.id"), nullable=False)
+    request_id = db.Column(db.Integer, db.ForeignKey("requests.id"), nullable=True)  # Link to original help request
+    
+    title = db.Column(db.String(255), nullable=False)  # e.g. "Flat tire repair needed"
+    description = db.Column(db.Text, nullable=True)
+    status = db.Column(db.String(20), default="sent")  # sent, accepted, completed, cancelled
+    
+    user_lat = db.Column(db.Float, nullable=True)
+    user_lng = db.Column(db.Float, nullable=True)
+    user_area = db.Column(db.String(150), nullable=True)
+
+    # Fee breakdown
+    service_fee = db.Column(db.Float, default=0.0)   # Dispatch fee
+    labor_cost = db.Column(db.Float, default=0.0)    # Labor charge
+    parts_cost = db.Column(db.Float, default=0.0)    # Parts / materials cost (estimated)
+    lifeline_commission = db.Column(db.Float, default=0.0)  # LifeLine platform fee
+    total_cost = db.Column(db.Float, default=0.0)    # Grand total
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    accepted_at = db.Column(db.DateTime, nullable=True)
+    completed_at = db.Column(db.DateTime, nullable=True)
+    
+    user = db.relationship("User", backref="shop_requests")
+    shop = db.relationship("Shop", backref="shop_requests")
+    request = db.relationship("Request", backref="shop_requests")
+    
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "shop_id": self.shop_id,
+            "request_id": self.request_id,
+            "title": self.title,
+            "description": self.description,
+            "status": self.status,
+            "shop_name": self.shop.name if self.shop else None,
+            "shop_phone": self.shop.phone if self.shop else None,
+            "shop_address": self.shop.address if self.shop else None,
+            "created_at": int(self.created_at.timestamp()),
+            "accepted_at": int(self.accepted_at.timestamp()) if self.accepted_at else None,
+            "completed_at": int(self.completed_at.timestamp()) if self.completed_at else None,
+        }
 
 
 def get_trusted_helpers_for_ping(sender_id):
@@ -2786,6 +2882,23 @@ def create_request():
         flash("Title and category are required.", "error")
         return redirect(url_for("new_request"))
 
+    # Handle prescription image for medicine requests
+    image_url = None
+    if category.lower() == "medicine":
+        if "prescription_image" not in request.files or request.files["prescription_image"].filename == "":
+            flash("A prescription photo is required for medicine requests.", "error")
+            return redirect(url_for("new_request"))
+        img = request.files["prescription_image"]
+        if img and allowed_image(img.filename):
+            filename = secure_filename(img.filename)
+            filename = f"{int(time.time())}_{filename}"
+            save_path = os.path.join(app.config["PRESCRIPTION_FOLDER"], filename)
+            img.save(save_path)
+            image_url = f"/static/uploads/prescriptions/{filename}"
+        else:
+            flash("Invalid image format. Please upload PNG, JPG, JPEG, or GIF.", "error")
+            return redirect(url_for("new_request"))
+
     expires_at = datetime.utcnow() + timedelta(minutes=expiry_minutes)
 
     req = Request(
@@ -2794,6 +2907,7 @@ def create_request():
         category=category,
         description=description,
         is_offer=is_offer,
+        image_url=image_url,
         expires_at=expires_at,
     )
     db.session.add(req)
@@ -2849,6 +2963,23 @@ def need_help():
             flash("Title and category are required.", "error")
             return redirect(url_for("need_help"))
 
+        # Handle prescription image for medicine requests
+        image_url = None
+        if category.lower() == "medicine":
+            if "prescription_image" not in request.files or request.files["prescription_image"].filename == "":
+                flash("A prescription photo is required for medicine requests.", "error")
+                return redirect(url_for("need_help"))
+            img = request.files["prescription_image"]
+            if img and allowed_image(img.filename):
+                filename = secure_filename(img.filename)
+                filename = f"{int(time.time())}_{filename}"
+                save_path = os.path.join(app.config["PRESCRIPTION_FOLDER"], filename)
+                img.save(save_path)
+                image_url = f"/static/uploads/prescriptions/{filename}"
+            else:
+                flash("Invalid image format. Please upload PNG, JPG, JPEG, or GIF.", "error")
+                return redirect(url_for("need_help"))
+
         # Decide which user will own this request
         if user is None:
             user = get_emergency_user()
@@ -2867,6 +2998,7 @@ def need_help():
             time_window=time_window or None,
             contact_method=contact_method or None,
             contact_info=contact_info or None,
+            image_url=image_url,
             lat=lat,
             lng=lng,
             expires_at=expires_at,
@@ -5879,6 +6011,598 @@ def get_suggestion_insights():
 # ==================== END SMART SUGGESTION AI ROUTES ====================
 
 
+# ==================== SHOP SUGGESTION ROUTES ====================
+
+@app.route("/api/shop-suggestions", methods=["POST"])
+def get_shop_suggestions():
+    """
+    Analyze a help request and suggest nearby shops/services
+    
+    POST data:
+    {
+        "title": "Tire is flat",
+        "description": "Need tire repair urgently",
+        "category": "repair",
+        "lat": 23.8103,
+        "lng": 90.4125,
+        "max_distance_km": 10,
+        "max_results": 5
+    }
+    """
+    try:
+        data = request.get_json() or {}
+        
+        title = data.get("title", "")
+        description = data.get("description", "")
+        category = data.get("category", "")
+        user_lat = data.get("lat")
+        user_lng = data.get("lng")
+        max_distance_km = float(data.get("max_distance_km", 10.0))
+        max_results = int(data.get("max_results", 5))
+        
+        if not title or user_lat is None or user_lng is None:
+            return jsonify({
+                "success": False,
+                "error": "title, lat, and lng are required"
+            }), 400
+        
+        # Analyze request keywords
+        analysis = ShopSuggestionAnalyzer.analyze_request(title, description, category)
+        matched_types = analysis.get("matched_shop_types", [])
+        
+        if not matched_types:
+            return jsonify({
+                "success": True,
+                "suggestions": [],
+                "message": "No matching shops for this service type"
+            }), 200
+        
+        # Get all shops from database
+        all_shops = Shop.query.all()
+        
+        # Find nearby shops
+        suggestions = ShopSuggestionAnalyzer.get_nearby_shops(
+            shops=all_shops,
+            user_lat=user_lat,
+            user_lng=user_lng,
+            matched_shop_types=matched_types,
+            max_distance_km=max_distance_km,
+            max_results=max_results
+        )
+        
+        return jsonify({
+            "success": True,
+            "matched_types": matched_types,
+            "suggestions": suggestions,
+            "keywords_found": analysis.get("keywords", [])
+        }), 200
+        
+    except Exception as e:
+        print(f"[Shop Suggestions] Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@app.route("/api/shops/<int:shop_id>", methods=["GET"])
+def get_shop(shop_id):
+    """Get details of a specific shop"""
+    try:
+        shop = Shop.query.get(shop_id)
+        if not shop:
+            return jsonify({"success": False, "error": "Shop not found"}), 404
+        
+        user_lat = request.args.get("lat")
+        user_lng = request.args.get("lng")
+        
+        shop_data = shop.to_dict()
+        if user_lat and user_lng:
+            try:
+                shop_data["distance_km"] = round(
+                    haversine_distance_km(float(user_lat), float(user_lng), shop.lat, shop.lng), 2
+                )
+            except Exception:
+                pass
+        
+        return jsonify({
+            "success": True,
+            "shop": shop_data
+        }), 200
+        
+    except Exception as e:
+        print(f"[Shop] Error getting shop: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/shop-request", methods=["POST"])
+def create_shop_request():
+    """
+    User creates a request to a shop (makes contact with specific service provider)
+    
+    POST data:
+    {
+        "shop_id": 1,
+        "title": "Need tire repair",
+        "description": "My front left tire is flat and damaged",
+        "request_id": 123,  // optional - link to original help request
+        "user_lat": 23.8103,
+        "user_lng": 90.4125,
+        "user_area": "Mohammadpur"
+    }
+    """
+    try:
+        user = current_user()
+        if not user:
+            return jsonify({"success": False, "error": "Login required"}), 401
+        
+        data = request.get_json() or {}
+        
+        shop_id = data.get("shop_id")
+        title = data.get("title", "").strip()
+        description = data.get("description", "").strip()
+        request_id = data.get("request_id")
+        user_lat = data.get("user_lat")
+        user_lng = data.get("user_lng")
+        user_area = data.get("user_area", "").strip()
+        
+        if not shop_id or not title:
+            return jsonify({
+                "success": False,
+                "error": "shop_id and title are required"
+            }), 400
+        
+        # Verify shop exists
+        shop = Shop.query.get(shop_id)
+        if not shop:
+            return jsonify({"success": False, "error": "Shop not found"}), 404
+        
+        # Verify request exists if provided
+        if request_id:
+            req = Request.query.get(request_id)
+            if not req or req.user_id != user.id:
+                return jsonify({"success": False, "error": "Invalid request"}), 400
+        
+        # ----- Fee calculation (AI-generated estimates) -----
+        shop_service_fee = shop.service_fee or 100.0
+        # Delivery-type shops have no labor cost (items are picked up / delivered)
+        delivery_types = {"grocery", "pharmacy", "stationary", "restaurant"}
+        if shop.shop_type in delivery_types:
+            shop_labor_cost = 0.0
+        else:
+            shop_labor_cost = shop.labor_cost or 300.0
+        # Estimate parts/materials cost based on shop type
+        import random
+        parts_estimates = {
+            "tire_shop": random.randint(200, 800),
+            "hospital": random.randint(500, 3000),
+            "pharmacy": random.randint(100, 1500),
+            "grocery": 0,
+            "stationary": 0,
+            "restaurant": random.randint(200, 1000),
+            "salon": random.randint(100, 500),
+        }
+        parts_cost = parts_estimates.get(shop.shop_type, random.randint(100, 500))
+        
+        subtotal = shop_service_fee + shop_labor_cost + parts_cost
+        commission_rate = 0.05  # LifeLine takes 5%
+        lifeline_commission = round(subtotal * commission_rate, 2)
+        total_cost = round(subtotal + lifeline_commission, 2)
+        
+        # Create shop request
+        shop_req = ShopRequest(
+            user_id=user.id,
+            shop_id=shop_id,
+            request_id=request_id,
+            title=title,
+            description=description,
+            user_lat=user_lat,
+            user_lng=user_lng,
+            user_area=user_area or user.name,
+            status="sent",
+            service_fee=shop_service_fee,
+            labor_cost=shop_labor_cost,
+            parts_cost=parts_cost,
+            lifeline_commission=lifeline_commission,
+            total_cost=total_cost,
+        )
+        
+        db.session.add(shop_req)
+        db.session.commit()
+        
+        print(f"[Shop Request] User {user.id} requested service from shop {shop_id}: {title} | Total: ৳{total_cost}")
+        
+        return jsonify({
+            "success": True,
+            "message": f"Your request has been sent! A worker from {shop.name} will arrive soon.",
+            "shop_request_id": shop_req.id,
+            "shop_name": shop.name,
+            "shop_phone": shop.phone,
+            "estimated_wait": "15-30 minutes",
+            "receipt": {
+                "service_fee": shop_service_fee,
+                "labor_cost": shop_labor_cost,
+                "parts_cost": parts_cost,
+                "subtotal": subtotal,
+                "lifeline_commission": lifeline_commission,
+                "commission_rate": f"{int(commission_rate*100)}%",
+                "total_cost": total_cost,
+            }
+        }), 200
+        
+    except Exception as e:
+        print(f"[Shop Request] Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@app.route("/api/shop-requests", methods=["GET"])
+@login_required
+def get_user_shop_requests():
+    """Get all shop requests made by the current user"""
+    try:
+        user = current_user()
+        status = request.args.get("status")  # Filter by status: sent, accepted, completed
+        
+        query = ShopRequest.query.filter_by(user_id=user.id).order_by(ShopRequest.created_at.desc())
+        
+        if status:
+            query = query.filter_by(status=status)
+        
+        shop_requests = query.all()
+        
+        return jsonify({
+            "success": True,
+            "shop_requests": [sr.to_dict() for sr in shop_requests]
+        }), 200
+        
+    except Exception as e:
+        print(f"[Shop Requests] Error: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+# ==================== ADMIN SHOP MANAGEMENT ====================
+
+@app.route("/admin/shops", endpoint="admin_shops")
+@login_required
+def admin_shops_page():
+    """Admin page for managing shops"""
+    try:
+        user = current_user()
+        if not getattr(user, "is_admin", False):
+            flash("Admin access required", "error")
+            return redirect(url_for("home"))
+        
+        return render_template("admin_shops.html")
+    except Exception as e:
+        print(f"[Admin Shops Page] Error: {e}")
+        return redirect(url_for("home"))
+
+
+@app.route("/api/admin/shops", methods=["GET"])
+@login_required
+def admin_get_shops():
+    """Get all shops (admin only)"""
+    try:
+        user = current_user()
+        if not getattr(user, "is_admin", False):
+            return jsonify({"success": False, "error": "Admin access required"}), 403
+        
+        page = request.args.get("page", 1, type=int)
+        shop_type = request.args.get("type")
+        
+        query = Shop.query
+        if shop_type:
+            query = query.filter_by(shop_type=shop_type)
+        
+        shops = query.order_by(Shop.name).paginate(page=page, per_page=50)
+        
+        return jsonify({
+            "success": True,
+            "shops": [s.to_dict() for s in shops.items],
+            "total": shops.total,
+            "pages": shops.pages,
+            "current_page": page
+        }), 200
+        
+    except Exception as e:
+        print(f"[Admin Shops] Error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/admin/shops", methods=["POST"])
+@login_required
+def admin_add_shop():
+    """Add a new shop (admin only)"""
+    try:
+        user = current_user()
+        if not getattr(user, "is_admin", False):
+            return jsonify({"success": False, "error": "Admin access required"}), 403
+        
+        data = request.get_json() or {}
+        
+        name = data.get("name", "").strip()
+        shop_type = data.get("shop_type", "").strip()
+        address = data.get("address", "").strip()
+        phone = data.get("phone", "").strip()
+        lat = data.get("lat")
+        lng = data.get("lng")
+        area = data.get("area", "").strip()
+        landmark = data.get("landmark", "").strip()
+        description = data.get("description", "").strip()
+        
+        if not name or not shop_type or not address or lat is None or lng is None:
+            return jsonify({
+                "success": False,
+                "error": "name, shop_type, address, lat, lng are required"
+            }), 400
+        
+        shop = Shop(
+            name=name,
+            shop_type=shop_type,
+            address=address,
+            phone=phone,
+            lat=lat,
+            lng=lng,
+            area=area,
+            landmark=landmark,
+            description=description
+        )
+        
+        db.session.add(shop)
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "shop": shop.to_dict(),
+            "message": f"Shop '{name}' added successfully"
+        }), 201
+        
+    except Exception as e:
+        print(f"[Admin Add Shop] Error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/admin/shops/bulk", methods=["POST"])
+@login_required
+def admin_bulk_add_shops():
+    """Bulk add shops from JSON array (admin only)"""
+    try:
+        user = current_user()
+        if not getattr(user, "is_admin", False):
+            return jsonify({"success": False, "error": "Admin access required"}), 403
+        
+        data = request.get_json() or {}
+        shops_data = data.get("shops", [])
+        clear_existing = data.get("clear_existing", False)
+        
+        if not isinstance(shops_data, list):
+            return jsonify({"success": False, "error": "shops must be an array"}), 400
+        
+        if not shops_data:
+            return jsonify({"success": False, "error": "shops array is empty"}), 400
+        
+        # Clear existing shops if requested
+        if clear_existing:
+            Shop.query.delete()
+            db.session.commit()
+            print("[Admin] Cleared all existing shops")
+        
+        added_count = 0
+        errors = []
+        
+        for i, shop_data in enumerate(shops_data):
+            try:
+                name = shop_data.get("name", "").strip()
+                shop_type = shop_data.get("shop_type", "").strip()
+                address = shop_data.get("address", "").strip()
+                phone = shop_data.get("phone", "").strip()
+                lat = shop_data.get("lat")
+                lng = shop_data.get("lng")
+                area = shop_data.get("area", "").strip()
+                landmark = shop_data.get("landmark", "").strip()
+                description = shop_data.get("description", "").strip()
+                
+                if not name or not shop_type or not address or lat is None or lng is None:
+                    errors.append(f"Row {i+1}: Missing required fields")
+                    continue
+                
+                shop = Shop(
+                    name=name,
+                    shop_type=shop_type,
+                    address=address,
+                    phone=phone,
+                    lat=lat,
+                    lng=lng,
+                    area=area,
+                    landmark=landmark,
+                    description=description
+                )
+                db.session.add(shop)
+                added_count += 1
+            except Exception as e:
+                errors.append(f"Row {i+1}: {str(e)}")
+        
+        db.session.commit()
+        
+        result = {
+            "success": True,
+            "added": added_count,
+            "total_processed": len(shops_data)
+        }
+        
+        if errors:
+            result["errors"] = errors
+        
+        return jsonify(result), 200
+        
+    except Exception as e:
+        print(f"[Admin Bulk Add] Error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/admin/shops/<int:shop_id>", methods=["PUT"])
+@login_required
+def admin_update_shop(shop_id):
+    """Update a shop (admin only)"""
+    try:
+        user = current_user()
+        if not getattr(user, "is_admin", False):
+            return jsonify({"success": False, "error": "Admin access required"}), 403
+        
+        shop = Shop.query.get(shop_id)
+        if not shop:
+            return jsonify({"success": False, "error": "Shop not found"}), 404
+        
+        data = request.get_json() or {}
+        
+        if "name" in data:
+            shop.name = data["name"].strip()
+        if "shop_type" in data:
+            shop.shop_type = data["shop_type"].strip()
+        if "address" in data:
+            shop.address = data["address"].strip()
+        if "phone" in data:
+            shop.phone = data["phone"].strip()
+        if "lat" in data:
+            shop.lat = data["lat"]
+        if "lng" in data:
+            shop.lng = data["lng"]
+        if "area" in data:
+            shop.area = data["area"].strip()
+        if "landmark" in data:
+            shop.landmark = data["landmark"].strip()
+        if "description" in data:
+            shop.description = data["description"].strip()
+        
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "shop": shop.to_dict(),
+            "message": "Shop updated successfully"
+        }), 200
+        
+    except Exception as e:
+        print(f"[Admin Update Shop] Error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/admin/shops/<int:shop_id>", methods=["DELETE"])
+@login_required
+def admin_delete_shop(shop_id):
+    """Delete a shop (admin only)"""
+    try:
+        user = current_user()
+        if not getattr(user, "is_admin", False):
+            return jsonify({"success": False, "error": "Admin access required"}), 403
+        
+        shop = Shop.query.get(shop_id)
+        if not shop:
+            return jsonify({"success": False, "error": "Shop not found"}), 404
+        
+        shop_name = shop.name
+        db.session.delete(shop)
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "message": f"Shop '{shop_name}' deleted successfully"
+        }), 200
+        
+    except Exception as e:
+        print(f"[Admin Delete Shop] Error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/admin/shops/expand-to-cities", methods=["POST"])
+@login_required
+def admin_expand_shops():
+    """Expand shop database with shops from multiple Bangladesh cities (admin only)"""
+    try:
+        user = current_user()
+        if not getattr(user, "is_admin", False):
+            return jsonify({"success": False, "error": "Admin access required"}), 403
+        
+        # Define expanded shop data for multiple cities
+        EXPANDED_SHOPS = [
+            # Dhaka (keep existing)
+            {"name": "Tire Plus Bangladesh", "shop_type": "tire_shop", "address": "123, Mohammadpur, Dhaka", "phone": "01712345678", "lat": 23.8103, "lng": 90.4125, "area": "Mohammadpur", "landmark": "Near BRACU"},
+            {"name": "Wheel & Tire Hub", "shop_type": "tire_shop", "address": "456, Badda, Dhaka", "phone": "01898765432", "lat": 23.8213, "lng": 90.4469, "area": "Badda", "landmark": "Iqbal Road"},
+            
+            # Chittagong Tire Shops
+            {"name": "Chittagong Tire House", "shop_type": "tire_shop", "address": "Ahmed Plaza, Agrabad, Chittagong", "phone": "01812345700", "lat": 22.3475, "lng": 91.8123, "area": "Agrabad", "landmark": "GEC"},
+            {"name": "CTG Auto Repair", "shop_type": "tire_shop", "address": "Nasirabad, Chittagong", "phone": "01912345701", "lat": 22.3388, "lng": 91.8361, "area": "Nasirabad", "landmark": "Near Stadium"},
+            {"name": "Challenger Tire Center", "shop_type": "tire_shop", "address": "Halishahar, Chittagong", "phone": "01812345750", "lat": 22.3641, "lng": 91.8247, "area": "Halishahar", "landmark": "Port Area"},
+            
+            # Sylhet Tire Shops  
+            {"name": "Sylhet Tire Workshop", "shop_type": "tire_shop", "address": "Dakshin Surma, Sylhet", "phone": "01812345751", "lat": 24.8971, "lng": 91.8732, "area": "Sylhet", "landmark": "City Center"},
+            
+            # Dhaka Hospitals
+            {"name": "United Hospital Dhaka", "shop_type": "hospital", "address": "1 Gulshan Avenue, Dhaka", "phone": "01712345681", "lat": 23.8061, "lng": 90.4167, "area": "Gulshan", "landmark": "Gulshan Avenue"},
+            {"name": "Popular Diagnostic Center", "shop_type": "hospital", "address": "Dhanmondi, Dhaka", "phone": "01912345682", "lat": 23.7414, "lng": 90.3694, "area": "Dhanmondi", "landmark": "Lake Dhanmondi"},
+            
+            # Chittagong Hospitals
+            {"name": "Chittagong Medical College Hospital", "shop_type": "hospital", "address": "Agrabad, Chittagong", "phone": "01812345702", "lat": 22.3475, "lng": 91.8123, "area": "Agrabad", "landmark": "GEC"},
+            {"name": "Chattogram Shishu Hospital", "shop_type": "hospital", "address": "Kawran Bazar, Chittagong", "phone": "01912345703", "lat": 22.3418, "lng": 91.8342, "area": "Kawran Bazar", "landmark": "Karnafuli"},
+            
+            # Sylhet Hospitals
+            {"name": "Sylhet Sadar Hospital", "shop_type": "hospital", "address": "Sylhet City", "phone": "01812345704", "lat": 24.8971, "lng": 91.8732, "area": "Sylhet", "landmark": "City Center"},
+            
+            # Dhaka Pharmacies
+            {"name": "SafeWay Pharmacy", "shop_type": "pharmacy", "address": "Badda, Dhaka", "phone": "01512345685", "lat": 23.8213, "lng": 90.4469, "area": "Badda", "landmark": "Iqbal Road"},
+            {"name": "Care Pharmacy", "shop_type": "pharmacy", "address": "Banani, Dhaka", "phone": "01712345686", "lat": 23.8285, "lng": 90.4151, "area": "Banani", "landmark": "Banani Lake"},
+            
+            # Chittagong Pharmacies
+            {"name": "Chittagong Care Pharmacy", "shop_type": "pharmacy", "address": "Agrabad, Chittagong", "phone": "01812345705", "lat": 22.3475, "lng": 91.8123, "area": "Agrabad", "landmark": "GEC"},
+            {"name": "CTG Drug Store", "shop_type": "pharmacy", "address": "Halishahar, Chittagong", "phone": "01912345706", "lat": 22.3641, "lng": 91.8247, "area": "Halishahar", "landmark": "Port Area"},
+            
+            # Sylhet Pharmacies
+            {"name": "Sylhet Medicine House", "shop_type": "pharmacy", "address": "Sylhet City", "phone": "01812345707", "lat": 24.8971, "lng": 91.8732, "area": "Sylhet", "landmark": "City Center"},
+            
+            # Dhaka Groceries
+            {"name": "Fresh Bazaar", "shop_type": "grocery", "address": "Badda, Dhaka", "phone": "01512345690", "lat": 23.8213, "lng": 90.4469, "area": "Badda", "landmark": "Iqbal Road"},
+            
+            # Chittagong Groceries
+            {"name": "CTG Fresh Market", "shop_type": "grocery", "address": "Agrabad, Chittagong", "phone": "01812345708", "lat": 22.3475, "lng": 91.8123, "area": "Agrabad", "landmark": "GEC"},
+            
+            # Sylhet Groceries
+            {"name": "Sylhet Bazaar", "shop_type": "grocery", "address": "Sylhet City", "phone": "01812345710", "lat": 24.8971, "lng": 91.8732, "area": "Sylhet", "landmark": "City Center"},
+        ]
+        
+        # Clear existing and add new
+        Shop.query.delete()
+        
+        for shop_data in EXPANDED_SHOPS:
+            shop = Shop(**shop_data)
+            db.session.add(shop)
+        
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "message": f"Expanded shop database with {len(EXPANDED_SHOPS)} shops across Bangladesh",
+            "shops_added": len(EXPANDED_SHOPS)
+        }), 200
+        
+    except Exception as e:
+        print(f"[Admin Expand Shops] Error: {e}")
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+# ==================== END SHOP SUGGESTION ROUTES ====================
+
+
 
 # ------------------ REGISTER BLUEPRINTS ------------------
 # Register resource pooling blueprint (must be after all models are defined)
@@ -5982,7 +6706,97 @@ def _run_startup_migrations_and_bootstrap_admin():
     except Exception as e:
         print(f"Migration note (offers): {e}")
 
-    # 3) Bootstrap default admin
+    # 3) Seed shops/service providers (nationwide Bangladesh)
+    try:
+        from shop_data import generate_all_shops, EXPECTED_SHOP_COUNT
+        existing_shops = Shop.query.count()
+        if existing_shops < EXPECTED_SHOP_COUNT:
+            # Clear old shops if upgrading from partial seed
+            if existing_shops > 0:
+                Shop.query.delete()
+                db.session.commit()
+                print(f"  Cleared {existing_shops} old shops for nationwide re-seed")
+            # Legacy inline list (kept for reference, overridden below)
+            _LEGACY_SHOPS = [
+                # ===== TIRE SHOPS (spread across Dhaka) =====
+                {"name": "Tire Plus Bangladesh", "shop_type": "tire_shop", "address": "123, Mohammadpur, Dhaka", "phone": "01712345678", "lat": 23.7660, "lng": 90.3590, "area": "Mohammadpur", "landmark": "Mohammadpur Bus Stand", "rating": 4.2, "service_fee": 150, "labor_cost": 400},
+                {"name": "Wheel & Tire Hub", "shop_type": "tire_shop", "address": "456, Badda, Dhaka", "phone": "01898765432", "lat": 23.7800, "lng": 90.4260, "area": "Badda", "landmark": "Badda Link Road", "rating": 3.8, "service_fee": 120, "labor_cost": 350},
+                {"name": "Auto Care Center", "shop_type": "tire_shop", "address": "789, Banani, Dhaka", "phone": "01512345678", "lat": 23.7940, "lng": 90.4030, "area": "Banani", "landmark": "Banani 11", "rating": 4.5, "service_fee": 200, "labor_cost": 500},
+                {"name": "Dhaka Tire Service", "shop_type": "tire_shop", "address": "321, Dhanmondi, Dhaka", "phone": "01912345678", "lat": 23.7470, "lng": 90.3750, "area": "Dhanmondi", "landmark": "Dhanmondi 27", "rating": 4.0, "service_fee": 130, "labor_cost": 380},
+                {"name": "Quick Tire Repair", "shop_type": "tire_shop", "address": "654, Gulshan, Dhaka", "phone": "01712345679", "lat": 23.7820, "lng": 90.4150, "area": "Gulshan", "landmark": "Gulshan 1 Circle", "rating": 4.7, "service_fee": 250, "labor_cost": 600},
+                {"name": "Central Tire Works", "shop_type": "tire_shop", "address": "Mirpur Road, Dhaka", "phone": "01612345670", "lat": 23.7580, "lng": 90.3680, "area": "Mirpur Road", "landmark": "Science Lab", "rating": 3.9, "service_fee": 100, "labor_cost": 320},
+                {"name": "Iqbal Road Auto Tire", "shop_type": "tire_shop", "address": "Iqbal Road, Mohammadpur", "phone": "01612345671", "lat": 23.7620, "lng": 90.3650, "area": "Mohammadpur", "landmark": "Iqbal Road", "rating": 3.6, "service_fee": 100, "labor_cost": 300},
+                {"name": "Uttara Tire Center", "shop_type": "tire_shop", "address": "Sector 10, Uttara", "phone": "01612345672", "lat": 23.8750, "lng": 90.3950, "area": "Uttara", "landmark": "Uttara Sector 10", "rating": 4.3, "service_fee": 180, "labor_cost": 450},
+                
+                # ===== HOSPITALS =====
+                {"name": "Dhaka Medical College Hospital", "shop_type": "hospital", "address": "Secretariat, Dhaka", "phone": "01912345680", "lat": 23.7260, "lng": 90.3970, "area": "Secretariat", "landmark": "Near Government offices", "rating": 4.1, "service_fee": 500, "labor_cost": 1500},
+                {"name": "United Hospital", "shop_type": "hospital", "address": "Gulshan 2, Dhaka", "phone": "01712345681", "lat": 23.7930, "lng": 90.4150, "area": "Gulshan", "landmark": "Gulshan 2 Circle", "rating": 4.8, "service_fee": 800, "labor_cost": 3000},
+                {"name": "Popular Diagnostic Center", "shop_type": "hospital", "address": "Dhanmondi 2, Dhaka", "phone": "01912345682", "lat": 23.7390, "lng": 90.3810, "area": "Dhanmondi", "landmark": "Green Road", "rating": 4.4, "service_fee": 600, "labor_cost": 2000},
+                {"name": "Square Hospital", "shop_type": "hospital", "address": "18/F Bir Uttam Qazi Nuruzzaman Sarak, Dhaka", "phone": "01712345683", "lat": 23.7530, "lng": 90.3900, "area": "Panthapath", "landmark": "Panthapath Signal", "rating": 4.7, "service_fee": 750, "labor_cost": 2500},
+                {"name": "Bangabandhu Sheikh Mujib Medical University", "shop_type": "hospital", "address": "Shahbag, Dhaka", "phone": "01912345684", "lat": 23.7380, "lng": 90.3960, "area": "Shahbag", "landmark": "Shahbag Circle", "rating": 4.3, "service_fee": 500, "labor_cost": 2000},
+                {"name": "Ibn Sina Hospital", "shop_type": "hospital", "address": "House 48, Road 9/A, Dhanmondi", "phone": "01612345680", "lat": 23.7450, "lng": 90.3740, "area": "Dhanmondi", "landmark": "Dhanmondi 9/A", "rating": 4.5, "service_fee": 600, "labor_cost": 2200},
+                {"name": "Labaid Hospital", "shop_type": "hospital", "address": "House 6, Road 4, Dhanmondi", "phone": "01612345681", "lat": 23.7510, "lng": 90.3750, "area": "Dhanmondi", "landmark": "Dhanmondi 4", "rating": 4.6, "service_fee": 650, "labor_cost": 2400},
+                
+                # ===== PHARMACIES =====
+                {"name": "SafeWay Pharmacy", "shop_type": "pharmacy", "address": "Badda, Dhaka", "phone": "01512345685", "lat": 23.7810, "lng": 90.4260, "area": "Badda", "landmark": "Badda Link Road", "rating": 4.0, "service_fee": 50, "labor_cost": 0},
+                {"name": "Care Pharmacy", "shop_type": "pharmacy", "address": "Banani 11, Dhaka", "phone": "01712345686", "lat": 23.7935, "lng": 90.4020, "area": "Banani", "landmark": "Banani 11", "rating": 4.3, "service_fee": 80, "labor_cost": 0},
+                {"name": "MediCare Pharmacy", "shop_type": "pharmacy", "address": "Gulshan, Dhaka", "phone": "01912345687", "lat": 23.7830, "lng": 90.4160, "area": "Gulshan", "landmark": "Gulshan 1", "rating": 4.6, "service_fee": 100, "labor_cost": 0},
+                {"name": "Health Plus Pharmacy", "shop_type": "pharmacy", "address": "Dhanmondi, Dhaka", "phone": "01812345688", "lat": 23.7470, "lng": 90.3740, "area": "Dhanmondi", "landmark": "Dhanmondi 27", "rating": 4.1, "service_fee": 60, "labor_cost": 0},
+                {"name": "Online Pharmacy BD", "shop_type": "pharmacy", "address": "Motijheel, Dhaka", "phone": "01712345689", "lat": 23.7330, "lng": 90.4170, "area": "Motijheel", "landmark": "Motijheel Circle", "rating": 3.9, "service_fee": 70, "labor_cost": 0},
+                {"name": "Lazz Pharma", "shop_type": "pharmacy", "address": "Mirpur Road, Dhaka", "phone": "01612345685", "lat": 23.7590, "lng": 90.3700, "area": "Mirpur Road", "landmark": "Science Lab", "rating": 4.4, "service_fee": 80, "labor_cost": 0},
+                {"name": "Mohammadpur Pharmacy", "shop_type": "pharmacy", "address": "Mohammadpur, Dhaka", "phone": "01612345686", "lat": 23.7650, "lng": 90.3600, "area": "Mohammadpur", "landmark": "Town Hall", "rating": 3.7, "service_fee": 50, "labor_cost": 0},
+                
+                # ===== GROCERY SHOPS =====
+                {"name": "Fresh Bazaar", "shop_type": "grocery", "address": "Badda, Dhaka", "phone": "01512345690", "lat": 23.7805, "lng": 90.4250, "area": "Badda", "landmark": "Badda Link Road", "rating": 4.2, "service_fee": 60, "labor_cost": 0},
+                {"name": "Daily Needs Store", "shop_type": "grocery", "address": "Banani, Dhaka", "phone": "01712345691", "lat": 23.7950, "lng": 90.4040, "area": "Banani", "landmark": "Banani 11", "rating": 4.0, "service_fee": 80, "labor_cost": 0},
+                {"name": "Shyam Bazaar", "shop_type": "grocery", "address": "Gulshan, Dhaka", "phone": "01912345692", "lat": 23.7825, "lng": 90.4155, "area": "Gulshan", "landmark": "Gulshan 1", "rating": 3.8, "service_fee": 70, "labor_cost": 0},
+                {"name": "Dhaka Provisions", "shop_type": "grocery", "address": "Dhanmondi, Dhaka", "phone": "01812345693", "lat": 23.7465, "lng": 90.3760, "area": "Dhanmondi", "landmark": "Dhanmondi 27", "rating": 4.1, "service_fee": 50, "labor_cost": 0},
+                {"name": "Local Mart", "shop_type": "grocery", "address": "Panthapath, Dhaka", "phone": "01712345694", "lat": 23.7530, "lng": 90.3870, "area": "Panthapath", "landmark": "Panthapath Signal", "rating": 3.9, "service_fee": 60, "labor_cost": 0},
+                {"name": "Swapno Superstore", "shop_type": "grocery", "address": "Mohammadpur, Dhaka", "phone": "01612345690", "lat": 23.7640, "lng": 90.3620, "area": "Mohammadpur", "landmark": "Mohammadpur Bus Stand", "rating": 4.5, "service_fee": 100, "labor_cost": 0},
+                {"name": "Agora Supermarket", "shop_type": "grocery", "address": "Mirpur Road, Dhaka", "phone": "01612345691", "lat": 23.7575, "lng": 90.3690, "area": "Mirpur Road", "landmark": "New Market", "rating": 4.4, "service_fee": 90, "labor_cost": 0},
+                
+                # ===== STATIONARY SHOPS =====
+                {"name": "Paper Plus Stationary", "shop_type": "stationary", "address": "Badda, Dhaka", "phone": "01512345695", "lat": 23.7815, "lng": 90.4240, "area": "Badda", "landmark": "Badda Link Road", "rating": 3.9, "service_fee": 40, "labor_cost": 0},
+                {"name": "Office Supplies Hub", "shop_type": "stationary", "address": "Banani, Dhaka", "phone": "01712345696", "lat": 23.7945, "lng": 90.4035, "area": "Banani", "landmark": "Banani 11", "rating": 4.2, "service_fee": 60, "labor_cost": 0},
+                {"name": "School & Office Stationary", "shop_type": "stationary", "address": "Gulshan, Dhaka", "phone": "01912345697", "lat": 23.7835, "lng": 90.4160, "area": "Gulshan", "landmark": "Gulshan 1", "rating": 4.0, "service_fee": 50, "labor_cost": 0},
+                {"name": "Dhaka Stationery Co.", "shop_type": "stationary", "address": "Dhanmondi, Dhaka", "phone": "01812345698", "lat": 23.7455, "lng": 90.3755, "area": "Dhanmondi", "landmark": "Dhanmondi 27", "rating": 4.3, "service_fee": 50, "labor_cost": 0},
+                {"name": "Paper World", "shop_type": "stationary", "address": "Panthapath, Dhaka", "phone": "01712345699", "lat": 23.7540, "lng": 90.3880, "area": "Panthapath", "landmark": "Panthapath Signal", "rating": 3.7, "service_fee": 40, "labor_cost": 0},
+                {"name": "Nilkhet Book Market", "shop_type": "stationary", "address": "Nilkhet, Dhaka", "phone": "01612345695", "lat": 23.7370, "lng": 90.3870, "area": "Nilkhet", "landmark": "Nilkhet Gate", "rating": 4.5, "service_fee": 30, "labor_cost": 0},
+                
+                # ===== RESTAURANTS =====
+                {"name": "Spice Garden Restaurant", "shop_type": "restaurant", "address": "Badda, Dhaka", "phone": "01512345700", "lat": 23.7800, "lng": 90.4255, "area": "Badda", "landmark": "Badda Link Road", "rating": 4.1, "service_fee": 80, "labor_cost": 0},
+                {"name": "Dhaka Delight Cafe", "shop_type": "restaurant", "address": "Banani, Dhaka", "phone": "01712345701", "lat": 23.7940, "lng": 90.4045, "area": "Banani", "landmark": "Banani 11", "rating": 4.5, "service_fee": 120, "labor_cost": 0},
+                {"name": "Taste of Bangladesh", "shop_type": "restaurant", "address": "Gulshan, Dhaka", "phone": "01912345702", "lat": 23.7840, "lng": 90.4170, "area": "Gulshan", "landmark": "Gulshan 1", "rating": 4.7, "service_fee": 150, "labor_cost": 0},
+                {"name": "City Eats Diner", "shop_type": "restaurant", "address": "Dhanmondi, Dhaka", "phone": "01812345703", "lat": 23.7460, "lng": 90.3750, "area": "Dhanmondi", "landmark": "Dhanmondi 27", "rating": 3.8, "service_fee": 80, "labor_cost": 0},
+                {"name": "Star Kabab", "shop_type": "restaurant", "address": "Mohammadpur, Dhaka", "phone": "01612345700", "lat": 23.7650, "lng": 90.3610, "area": "Mohammadpur", "landmark": "Mohammadpur Bus Stand", "rating": 4.3, "service_fee": 70, "labor_cost": 0},
+                {"name": "Kacchi Bhai", "shop_type": "restaurant", "address": "Mirpur Road, Dhaka", "phone": "01612345701", "lat": 23.7585, "lng": 90.3710, "area": "Mirpur Road", "landmark": "New Market", "rating": 4.6, "service_fee": 100, "labor_cost": 0},
+                
+                # ===== SALON =====
+                {"name": "Beauty & Style Salon", "shop_type": "salon", "address": "Badda, Dhaka", "phone": "01512345704", "lat": 23.7810, "lng": 90.4250, "area": "Badda", "landmark": "Badda Link Road", "rating": 4.0, "service_fee": 100, "labor_cost": 200},
+                {"name": "Glamour Salon", "shop_type": "salon", "address": "Banani, Dhaka", "phone": "01712345705", "lat": 23.7930, "lng": 90.4030, "area": "Banani", "landmark": "Banani 11", "rating": 4.6, "service_fee": 200, "labor_cost": 500},
+                {"name": "Professional Hair Studio", "shop_type": "salon", "address": "Gulshan, Dhaka", "phone": "01912345706", "lat": 23.7825, "lng": 90.4160, "area": "Gulshan", "landmark": "Gulshan 1", "rating": 4.8, "service_fee": 250, "labor_cost": 600},
+                {"name": "Persona Salon", "shop_type": "salon", "address": "Dhanmondi, Dhaka", "phone": "01612345704", "lat": 23.7460, "lng": 90.3740, "area": "Dhanmondi", "landmark": "Dhanmondi 27", "rating": 4.2, "service_fee": 150, "labor_cost": 350},
+                {"name": "Mens Zone Salon", "shop_type": "salon", "address": "Mohammadpur, Dhaka", "phone": "01612345705", "lat": 23.7660, "lng": 90.3600, "area": "Mohammadpur", "landmark": "Town Hall", "rating": 3.9, "service_fee": 100, "labor_cost": 250},
+            ]
+
+            # Use comprehensive nationwide data (all 64 districts + Dhaka neighbourhoods)
+            SAMPLE_SHOPS = generate_all_shops()
+
+            for shop_data in SAMPLE_SHOPS:
+                db.session.add(Shop(**shop_data))
+            
+            db.session.commit()
+            print(f"✓ Seeded {len(SAMPLE_SHOPS)} shops across Bangladesh")
+        else:
+            print(f"✓ Shops already exist in database ({existing_shops} shops)")
+    except Exception as e:
+        print(f"[startup] Shop seeding error: {e}")
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+
+    # 4) Bootstrap default admin
     try:
         admin = User.query.filter_by(email="admin@lifeline.com").first()
         default_pw = os.getenv("DEFAULT_ADMIN_PASSWORD", "admin123")
