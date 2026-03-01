@@ -1,0 +1,433 @@
+{% extends "base.html" %}
+{% block title %}Admin - Manage Shops{% endblock %}
+{% block content %}
+<div class="w-full max-w-6xl mx-auto px-6 py-10 page-transition">
+  <div class="mb-8">
+    <h1 class="text-4xl font-bold bg-gradient-to-r from-blue-300 to-cyan-300 bg-clip-text text-transparent mb-2">
+      💼 Shop Management
+    </h1>
+    <p class="text-slate-400">Manage shops and service providers in the system</p>
+  </div>
+
+  <!-- Tabs -->
+  <div class="flex gap-4 mb-6 border-b border-slate-700">
+    <button
+      type="button"
+      onclick="switchTab('shops-tab')"
+      class="px-4 py-3 text-slate-300 hover:text-blue-300 border-b-2 border-transparent hover:border-blue-500 transition"
+      id="tab-shops"
+    >
+      📋 All Shops
+    </button>
+    <button
+      type="button"
+      onclick="switchTab('add-shop-tab')"
+      class="px-4 py-3 text-slate-300 hover:text-blue-300 border-b-2 border-transparent hover:border-blue-500 transition"
+      id="tab-add"
+    >
+      ➕ Add Shop
+    </button>
+    <button
+      type="button"
+      onclick="switchTab('bulk-tab')"
+      class="px-4 py-3 text-slate-300 hover:text-blue-300 border-b-2 border-transparent hover:border-blue-500 transition"
+      id="tab-bulk"
+    >
+      📦 Bulk Import
+    </button>
+    <button
+      type="button"
+      onclick="switchTab('expand-tab')"
+      class="px-4 py-3 text-slate-300 hover:text-blue-300 border-b-2 border-transparent hover:border-blue-500 transition"
+      id="tab-expand"
+    >
+      🚀 Expand Database
+    </button>
+  </div>
+
+  <!-- TAB: All Shops -->
+  <div id="shops-tab" class="tab-content">
+    <div class="bg-gradient-to-br from-slate-900/60 to-slate-950/70 backdrop-blur-md border border-blue-500/20 rounded-2xl p-6 shadow-xl">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-xl font-semibold text-blue-300">All Shops</h2>
+        <input
+          type="text"
+          id="shop-filter"
+          placeholder="Filter by shop type..."
+          class="px-3 py-2 rounded-lg bg-slate-950/80 text-white border border-blue-500/20 focus:border-blue-400/40 focus:outline-none text-sm"
+          onmouseleave="filterShops(this.value)"
+        />
+      </div>
+
+      <div id="shops-list-container" class="space-y-3">
+        <div class="text-center py-8 text-slate-400">
+          <div class="inline-flex items-center gap-2">
+            <div class="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+            <span>Loading shops...</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="shops-pagination" class="mt-6 flex justify-center gap-2"></div>
+    </div>
+  </div>
+
+  <!-- TAB: Add Single Shop -->
+  <div id="add-shop-tab" class="tab-content hidden">
+    <div class="bg-gradient-to-br from-slate-900/60 to-slate-950/70 backdrop-blur-md border border-blue-500/20 rounded-2xl p-6 shadow-xl max-w-2xl">
+      <h2 class="text-xl font-semibold text-blue-300 mb-6">Add New Shop</h2>
+
+      <form id="add-shop-form" class="space-y-4">
+        <div class="grid md:grid-cols-2 gap-4">
+          <div>
+            <label class="text-xs text-slate-300">Shop Name *</label>
+            <input
+              type="text"
+              name="name"
+              placeholder="e.g. Ahmed Tire Shop"
+              required
+              class="w-full mt-1 px-3 py-2 rounded-lg bg-slate-950/80 text-white border border-blue-500/20 focus:border-blue-400/40 focus:outline-none text-sm"
+            />
+          </div>
+
+          <div>
+            <label class="text-xs text-slate-300">Shop Type *</label>
+            <select
+              name="shop_type"
+              required
+              class="w-full mt-1 px-3 py-2 rounded-lg bg-slate-950/80 text-white border border-blue-500/20 focus:border-blue-400/40 focus:outline-none text-sm"
+            >
+              <option value="">Select type</option>
+              <option value="tire_shop">Tire Shop</option>
+              <option value="hospital">Hospital</option>
+              <option value="pharmacy">Pharmacy</option>
+              <option value="grocery">Grocery</option>
+              <option value="stationary">Stationary</option>
+              <option value="restaurant">Restaurant</option>
+              <option value="salon">Salon</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label class="text-xs text-slate-300">Address *</label>
+          <input
+            type="text"
+            name="address"
+            placeholder="Full address"
+            required
+            class="w-full mt-1 px-3 py-2 rounded-lg bg-slate-950/80 text-white border border-blue-500/20 focus:border-blue-400/40 focus:outline-none text-sm"
+          />
+        </div>
+
+        <div class="grid md:grid-cols-3 gap-4">
+          <div>
+            <label class="text-xs text-slate-300">Latitude *</label>
+            <input
+              type="number"
+              name="lat"
+              placeholder="23.8103"
+              step="0.0001"
+              required
+              class="w-full mt-1 px-3 py-2 rounded-lg bg-slate-950/80 text-white border border-blue-500/20 focus:border-blue-400/40 focus:outline-none text-sm"
+            />
+          </div>
+
+          <div>
+            <label class="text-xs text-slate-300">Longitude *</label>
+            <input
+              type="number"
+              name="lng"
+              placeholder="90.4125"
+              step="0.0001"
+              required
+              class="w-full mt-1 px-3 py-2 rounded-lg bg-slate-950/80 text-white border border-blue-500/20 focus:border-blue-400/40 focus:outline-none text-sm"
+            />
+          </div>
+
+          <div>
+            <label class="text-xs text-slate-300">Phone</label>
+            <input
+              type="tel"
+              name="phone"
+              placeholder="01XXXXXXXXX"
+              class="w-full mt-1 px-3 py-2 rounded-lg bg-slate-950/80 text-white border border-blue-500/20 focus:border-blue-400/40 focus:outline-none text-sm"
+            />
+          </div>
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-4">
+          <div>
+            <label class="text-xs text-slate-300">Area</label>
+            <input
+              type="text"
+              name="area"
+              placeholder="e.g. Mohammadpur"
+              class="w-full mt-1 px-3 py-2 rounded-lg bg-slate-950/80 text-white border border-blue-500/20 focus:border-blue-400/40 focus:outline-none text-sm"
+            />
+          </div>
+
+          <div>
+            <label class="text-xs text-slate-300">Landmark</label>
+            <input
+              type="text"
+              name="landmark"
+              placeholder="e.g. Near BRACU"
+              class="w-full mt-1 px-3 py-2 rounded-lg bg-slate-950/80 text-white border border-blue-500/20 focus:border-blue-400/40 focus:outline-none text-sm"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label class="text-xs text-slate-300">Description</label>
+          <textarea
+            name="description"
+            placeholder="Optional details about the shop"
+            rows="3"
+            class="w-full mt-1 px-3 py-2 rounded-lg bg-slate-950/80 text-white border border-blue-500/20 focus:border-blue-400/40 focus:outline-none text-sm"
+          ></textarea>
+        </div>
+
+        <button
+          type="submit"
+          class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg transition"
+        >
+          Add Shop
+        </button>
+      </form>
+
+      <div id="add-shop-message" class="mt-4 p-3 rounded-lg hidden"></div>
+    </div>
+  </div>
+
+  <!-- TAB: Bulk Import -->
+  <div id="bulk-tab" class="tab-content hidden">
+    <div class="bg-gradient-to-br from-slate-900/60 to-slate-950/70 backdrop-blur-md border border-blue-500/20 rounded-2xl p-6 shadow-xl max-w-2xl">
+      <h2 class="text-xl font-semibold text-blue-300 mb-6">Bulk Import Shops</h2>
+
+      <form id="bulk-import-form" class="space-y-4">
+        <div>
+          <label class="text-xs text-slate-300">JSON Array (Required)</label>
+          <textarea
+            name="shops_json"
+            placeholder='[{"name": "Shop Name", "shop_type": "tire_shop", "address": "Address", "phone": "01XXXXXXXXX", "lat": 23.8103, "lng": 90.4125, "area": "Area", "landmark": "Landmark"}]'
+            rows="10"
+            required
+            class="w-full mt-1 px-3 py-2 rounded-lg bg-slate-950/80 text-white border border-blue-500/20 focus:border-blue-400/40 focus:outline-none text-sm font-mono"
+          ></textarea>
+          <p class="text-xs text-slate-500 mt-2">Each shop must have: name, shop_type, address, lat, lng</p>
+        </div>
+
+        <label class="flex items-center gap-2">
+          <input type="checkbox" name="clear_existing" class="w-4 h-4" />
+          <span class="text-sm text-slate-300">Clear existing shops before import</span>
+        </label>
+
+        <button
+          type="submit"
+          class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg transition"
+        >
+          Import Shops
+        </button>
+      </form>
+
+      <div id="bulk-message" class="mt-4 p-3 rounded-lg hidden"></div>
+    </div>
+  </div>
+
+  <!-- TAB: Expand Database -->
+  <div id="expand-tab" class="tab-content hidden">
+    <div class="bg-gradient-to-br from-slate-900/60 to-slate-950/70 backdrop-blur-md border border-blue-500/20 rounded-2xl p-6 shadow-xl max-w-2xl">
+      <h2 class="text-xl font-semibold text-blue-300 mb-6">🚀 Expand Shop Database</h2>
+
+      <p class="text-slate-300 mb-6">
+        Automatically expand the shop database with pre-configured shops from multiple Bangladesh cities
+        (Dhaka, Chittagong, Sylhet, etc).
+      </p>
+
+      <div class="bg-blue-500/10 border border-blue-500/30 text-blue-300 p-4 rounded-lg mb-6">
+        <p class="text-sm">
+          <strong>What this does:</strong>
+        </p>
+        <ul class="list-disc list-inside text-sm mt-2 space-y-1">
+          <li>Clears existing shops</li>
+          <li>Adds 40+ shops across Bangladesh</li>
+          <li>Covers: Tire shops, Hospitals, Pharmacies, Groceries, Restaurants, Salons</li>
+          <li>Includes locations: Dhaka, Chittagong, Sylhet</li>
+        </ul>
+      </div>
+
+      <button
+        type="button"
+        onclick="expandShopDatabase()"
+        id="expand-btn"
+        class="w-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white font-semibold py-3 rounded-lg transition"
+      >
+        Expand Database Now
+      </button>
+
+      <div id="expand-message" class="mt-4 p-3 rounded-lg hidden"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const ADMIN_API = {
+    getShops: () => fetch("/api/admin/shops").then((r) => r.json()),
+    addShop: (data) => fetch("/api/admin/shops", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then((r) => r.json()),
+    bulkImport: (shops, clearExisting) => fetch("/api/admin/shops/bulk", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ shops, clear_existing: clearExisting }) }).then((r) => r.json()),
+    expand: () => fetch("/api/admin/shops/expand-to-cities", { method: "POST" }).then((r) => r.json()),
+    deleteShop: (id) => fetch(`/api/admin/shops/${id}`, { method: "DELETE" }).then((r) => r.json()),
+  };
+
+  function switchTab(tabName) {
+    document.querySelectorAll(".tab-content").forEach((el) => el.classList.add("hidden"));
+    document.getElementById(tabName).classList.remove("hidden");
+
+    // Update tab button styles
+    document.querySelectorAll("[id^='tab-']").forEach((btn) => btn.classList.remove("border-blue-500"));
+    document.getElementById(`tab-${tabName.split("-")[0]}`).classList.add("border-blue-500");
+
+    if (tabName === "shops-tab") {
+      loadShops();
+    }
+  }
+
+  async function loadShops() {
+    const container = document.getElementById("shops-list-container");
+    container.innerHTML = '<div class="text-center py-8 text-slate-400"><div class="inline-flex items-center gap-2"><div class="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div><span>Loading...</span></div></div>';
+
+    try {
+      const data = await ADMIN_API.getShops();
+      if (!data.success) {
+        container.innerHTML = `<div class="text-red-400 text-sm">${data.error}</div>`;
+        return;
+      }
+
+      const shops = data.shops || [];
+      if (shops.length === 0) {
+        container.innerHTML = '<div class="text-slate-400 text-center py-8">No shops found</div>';
+        return;
+      }
+
+      container.innerHTML = shops
+        .map(
+          (shop) => `
+        <div class="bg-slate-900/40 border border-slate-700 rounded-lg p-4">
+          <div class="flex justify-between items-start mb-2">
+            <div>
+              <h3 class="font-semibold text-blue-300">${shop.name}</h3>
+              <p class="text-xs text-slate-400">${shop.shop_type.replace(/_/g, " ").toUpperCase()}</p>
+            </div>
+            <button
+              type="button"
+              onclick="deleteShop(${shop.id})"
+              class="text-red-400 hover:text-red-300 text-sm"
+            >
+              🗑️ Delete
+            </button>
+          </div>
+          <p class="text-xs text-slate-400 mb-2">📍 ${shop.address}</p>
+          <p class="text-xs text-slate-500">${shop.distance_km || ""} ${shop.area || ""}</p>
+        </div>
+      `
+        )
+        .join("");
+    } catch (error) {
+      container.innerHTML = `<div class="text-red-400 text-sm">Error loading shops: ${error.message}</div>`;
+    }
+  }
+
+  document.getElementById("add-shop-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const data = Object.fromEntries(formData);
+    data.lat = parseFloat(data.lat);
+    data.lng = parseFloat(data.lng);
+
+    try {
+      const result = await ADMIN_API.addShop(data);
+      const msgEl = document.getElementById("add-shop-message");
+      if (result.success) {
+        msgEl.classList.remove("hidden", "bg-red-500/10", "text-red-300");
+        msgEl.classList.add("bg-green-500/10", "text-green-300");
+        msgEl.textContent = "✓ " + result.message;
+        e.target.reset();
+      } else {
+        msgEl.classList.remove("hidden", "bg-green-500/10", "text-green-300");
+        msgEl.classList.add("bg-red-500/10", "text-red-300");
+        msgEl.textContent = "✗ " + result.error;
+      }
+    } catch (error) {
+      console.error("Error:", error);
+    }
+  });
+
+  document.getElementById("bulk-import-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const jsonStr = new FormData(e.target).get("shops_json");
+    const clearExisting = new FormData(e.target).get("clear_existing") === "on";
+
+    try {
+      const shops = JSON.parse(jsonStr);
+      const result = await ADMIN_API.bulkImport(shops, clearExisting);
+      const msgEl = document.getElementById("bulk-message");
+      if (result.success) {
+        msgEl.classList.remove("hidden", "bg-red-500/10", "text-red-300");
+        msgEl.classList.add("bg-green-500/10", "text-green-300");
+        msgEl.innerHTML = `✓ Added ${result.added}/${result.total_processed} shops${result.errors ? `<br><small>${result.errors.join("<br>")}</small>` : ""}`;
+      } else {
+        msgEl.classList.remove("hidden", "bg-green-500/10", "text-green-300");
+        msgEl.classList.add("bg-red-500/10", "text-red-300");
+        msgEl.textContent = "✗ " + result.error;
+      }
+    } catch (error) {
+      alert("JSON Parse Error: " + error.message);
+    }
+  });
+
+  async function expandShopDatabase() {
+    if (!confirm("This will clear existing shops and add 40+ new ones. Continue?")) return;
+
+    const btn = document.getElementById("expand-btn");
+    btn.disabled = true;
+    btn.textContent = "Expanding...";
+
+    try {
+      const result = await ADMIN_API.expand();
+      const msgEl = document.getElementById("expand-message");
+      if (result.success) {
+        msgEl.classList.remove("hidden", "bg-red-500/10", "text-red-300");
+        msgEl.classList.add("bg-green-500/10", "text-green-300");
+        msgEl.textContent = "✓ " + result.message + ` (${result.shops_added} shops)`;
+      } else {
+        msgEl.classList.remove("hidden", "bg-green-500/10", "text-green-300");
+        msgEl.classList.add("bg-red-500/10", "text-red-300");
+        msgEl.textContent = "✗ " + result.error;
+      }
+    } catch (error) {
+      alert("Error: " + error.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Expand Database Now";
+    }
+  }
+
+  async function deleteShop(id) {
+    if (!confirm("Delete this shop?")) return;
+    try {
+      const result = await ADMIN_API.deleteShop(id);
+      if (result.success) {
+        loadShops();
+      } else {
+        alert("Error: " + result.error);
+      }
+    } catch (error) {
+      alert("Error: " + error.message);
+    }
+  }
+
+  // Load shops on page load
+  window.addEventListener("load", () => loadShops());
+</script>
+{% endblock %}

@@ -1004,6 +1004,481 @@
       window.LIFELINE_CURRENT_USER_ID = {{ current_user.id }};
     </script>
     <script src="{{ url_for('static', filename='js/realtime_counts.js') }}"></script>
+    
+    <!-- Right-Side Slide Panel (2 views: shop list + shop detail) -->
+    <div id="shop-slide-panel" class="fixed inset-0 z-[100] hidden">
+      <div id="shop-panel-backdrop" class="absolute inset-0 bg-black/50 backdrop-blur-sm cursor-pointer" onclick="closeShopPanel()"></div>
+      <div id="shop-panel-inner" class="absolute top-0 right-0 h-full w-[92%] max-w-[420px] bg-slate-950 shadow-2xl shadow-black/50 transform translate-x-full transition-transform duration-300 ease-out flex flex-col border-l border-slate-800">
+
+        <!-- ============ VIEW 1: SHOP LIST ============ -->
+        <div id="panel-list-view" class="flex flex-col h-full">
+          <div class="px-5 py-4 flex items-center justify-between flex-shrink-0 border-b border-slate-800 bg-slate-900/80">
+            <div class="flex items-center gap-3">
+              <div class="w-9 h-9 rounded-lg bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center">
+                <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+              </div>
+              <div>
+                <h3 class="text-base font-bold text-slate-100">Nearby Services</h3>
+                <p class="text-slate-500 text-[11px]">Based on your request</p>
+              </div>
+            </div>
+            <button onclick="closeShopPanel()" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 flex items-center justify-center text-slate-400 hover:text-slate-200 text-sm transition cursor-pointer">&times;</button>
+          </div>
+          <div id="panel-shop-list" class="flex-1 overflow-y-auto p-3 space-y-2"></div>
+        </div>
+
+        <!-- ============ VIEW 2: SHOP DETAIL ============ -->
+        <div id="panel-detail-view" class="flex flex-col h-full hidden">
+          <div class="px-5 py-4 flex items-center justify-between flex-shrink-0 border-b border-slate-800 bg-slate-900/80">
+            <div class="flex items-center gap-2.5 flex-1 min-w-0">
+              <button onclick="showShopListView()" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 flex items-center justify-center text-slate-400 hover:text-slate-200 transition cursor-pointer flex-shrink-0">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+              </button>
+              <div class="min-w-0">
+                <h3 id="panel-shop-name" class="text-base font-bold text-slate-100 truncate"></h3>
+                <p id="panel-shop-type" class="text-emerald-400 text-[11px] uppercase tracking-wider mt-0.5 font-medium"></p>
+              </div>
+            </div>
+            <button onclick="closeShopPanel()" class="ml-2 w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 flex items-center justify-center text-slate-400 hover:text-slate-200 text-sm transition cursor-pointer">&times;</button>
+          </div>
+
+          <!-- Detail Body (scrollable) -->
+          <div class="flex-1 overflow-y-auto">
+            <!-- Star Rating -->
+            <div class="px-5 py-4 border-b border-slate-800/80">
+              <div class="flex items-center gap-2">
+                <div id="panel-stars" class="flex gap-0.5"></div>
+                <span id="panel-rating-num" class="text-sm font-bold text-slate-200"></span>
+                <span class="text-xs text-slate-500">rating</span>
+              </div>
+            </div>
+
+            <!-- Contact Info -->
+            <div class="px-5 py-4 space-y-3 border-b border-slate-800/80">
+              <div class="flex items-start gap-3">
+                <div class="w-7 h-7 rounded-md bg-slate-800 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <p class="text-sm text-slate-200 font-medium" id="panel-shop-address"></p>
+                  <p class="text-xs text-slate-500 mt-0.5" id="panel-shop-landmark"></p>
+                </div>
+              </div>
+              <div class="flex items-center gap-3">
+                <div class="w-7 h-7 rounded-md bg-slate-800 flex items-center justify-center flex-shrink-0">
+                  <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
+                </div>
+                <a id="panel-shop-phone" href="#" class="text-sm text-emerald-400 font-semibold hover:text-emerald-300 hover:underline transition"></a>
+              </div>
+              <div class="flex items-center gap-3">
+                <div class="w-7 h-7 rounded-md bg-slate-800 flex items-center justify-center flex-shrink-0">
+                  <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+                </div>
+                <p class="text-sm text-slate-300"><span id="panel-shop-distance"></span> away</p>
+              </div>
+            </div>
+
+            <!-- Fee Breakdown -->
+            <div class="px-5 py-4 border-b border-slate-800/80">
+              <h4 class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3">Estimated Cost Breakdown</h4>
+              <div class="space-y-2.5">
+                <div class="flex justify-between text-sm">
+                  <span class="text-slate-400">Service Fee (dispatch)</span>
+                  <span id="panel-service-fee" class="font-semibold text-slate-200"></span>
+                </div>
+                <div id="panel-labor-row" class="flex justify-between text-sm">
+                  <span class="text-slate-400">Labor Cost</span>
+                  <span id="panel-labor-cost" class="font-semibold text-slate-200"></span>
+                </div>
+                <div class="flex justify-between text-sm">
+                  <span class="text-slate-400">Parts / Materials (est.)</span>
+                  <span class="text-slate-600 italic text-xs">calculated on request</span>
+                </div>
+                <div class="flex justify-between text-sm">
+                  <span class="text-slate-400">LifeLine Commission (5%)</span>
+                  <span class="text-slate-600 italic text-xs">calculated on request</span>
+                </div>
+                <div class="border-t border-dashed border-slate-700 pt-2.5 mt-1 flex justify-between text-sm">
+                  <span class="font-bold text-slate-200">Estimated Total</span>
+                  <span id="panel-est-total" class="font-bold text-emerald-400"></span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Receipt Area (shown after request sent) -->
+            <div id="panel-receipt" class="px-5 py-4 hidden">
+              <div class="bg-emerald-950/40 border border-emerald-500/20 rounded-xl p-4">
+                <div class="flex items-center gap-2.5 mb-3">
+                  <span class="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-white text-sm">✓</span>
+                  <div>
+                    <h4 class="text-sm font-bold text-emerald-300">Payment Receipt</h4>
+                    <p class="text-[10px] text-slate-500">LifeLine Service Request</p>
+                  </div>
+                </div>
+                <div class="space-y-1.5 text-sm">
+                  <div class="flex justify-between"><span class="text-slate-400">Service Fee</span><span id="rcpt-service" class="font-medium text-slate-200">-</span></div>
+                  <div class="flex justify-between"><span class="text-slate-400">Labor Cost</span><span id="rcpt-labor" class="font-medium text-slate-200">-</span></div>
+                  <div class="flex justify-between"><span class="text-slate-400">Parts / Materials</span><span id="rcpt-parts" class="font-medium text-slate-200">-</span></div>
+                  <hr class="border-slate-700">
+                  <div class="flex justify-between"><span class="text-slate-400">Subtotal</span><span id="rcpt-subtotal" class="font-medium text-slate-200">-</span></div>
+                  <div class="flex justify-between"><span class="text-slate-400">LifeLine Commission <span id="rcpt-rate" class="text-[10px]">(5%)</span></span><span id="rcpt-commission" class="font-medium text-slate-200">-</span></div>
+                  <hr class="border-slate-600">
+                  <div class="flex justify-between font-bold text-emerald-400 text-base"><span>Total</span><span id="rcpt-total">-</span></div>
+                </div>
+                <div class="flex justify-between text-sm mt-2 pt-2 border-t border-slate-700">
+                  <span class="text-slate-400">Payment Method</span>
+                  <span id="rcpt-pay-method" class="font-medium text-slate-200">💵 Cash</span>
+                </div>
+                <p id="rcpt-eta" class="text-xs text-slate-500 mt-3 text-center"></p>
+              </div>
+            </div>
+
+            <!-- Worker Status (shown after request sent) -->
+            <div id="panel-worker-status" class="px-5 py-3 hidden">
+              <div class="bg-amber-950/30 border border-amber-500/20 rounded-xl p-3 flex items-center gap-3">
+                <div class="w-9 h-9 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 animate-pulse">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20 10 10 0 000-20z"></path></svg>
+                </div>
+                <div>
+                  <p class="text-sm font-bold text-amber-300">Worker is on the way!</p>
+                  <p class="text-xs text-amber-500/80">Estimated arrival: 15–30 minutes</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Panel Footer: Payment Method + Send Request -->
+          <div id="panel-actions" class="px-5 py-4 border-t border-slate-800 flex-shrink-0 bg-slate-900/80">
+            <div class="mb-3">
+              <p class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Payment Method</p>
+              <div class="flex gap-2">
+                <label class="flex-1 cursor-pointer">
+                  <input type="radio" name="payment_method" value="cash" class="hidden peer" checked>
+                  <div class="peer-checked:border-emerald-500/60 peer-checked:bg-emerald-500/10 border-2 border-slate-700 rounded-xl p-2.5 text-center transition-all hover:border-slate-600">
+                    <span class="text-lg block">💵</span>
+                    <span class="text-xs font-semibold text-slate-200 block mt-0.5">Cash</span>
+                    <span class="text-[9px] text-slate-500">Hand to hand</span>
+                  </div>
+                </label>
+                <label class="flex-1 cursor-pointer">
+                  <input type="radio" name="payment_method" value="bkash" class="hidden peer">
+                  <div class="peer-checked:border-pink-500/60 peer-checked:bg-pink-500/10 border-2 border-slate-700 rounded-xl p-2.5 text-center transition-all hover:border-slate-600">
+                    <span class="text-lg block">📱</span>
+                    <span class="text-xs font-semibold text-slate-200 block mt-0.5">bKash</span>
+                    <span class="text-[9px] text-slate-500">Mobile payment</span>
+                  </div>
+                </label>
+              </div>
+            </div>
+            <button id="panel-send-btn" onclick="sendShopRequest()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl text-sm transition flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-emerald-900/30">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
+              Send Service Request
+            </button>
+            <p class="text-[10px] text-slate-600 text-center mt-2">You'll receive a payment receipt after confirmation</p>
+          </div>
+          <!-- After-sent footer -->
+          <div id="panel-actions-done" class="px-5 py-4 border-t border-slate-800 flex-shrink-0 bg-slate-900/80 hidden">
+            <button onclick="closeShopPanel()" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold py-3 rounded-xl text-sm transition cursor-pointer border border-slate-700">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Global Shop Suggestions Loader -->
+    <script>
+      let _currentShopData = null;
+      let _currentRequestId = null;
+      let _cachedShopList = []; // cached shops for current list view
+
+      function renderStarsInline(rating) {
+        const full = Math.floor(rating);
+        const half = rating - full >= 0.3;
+        let html = '';
+        for (let i = 0; i < 5; i++) {
+          if (i < full) html += '<span class="text-amber-400">★</span>';
+          else if (i === full && half) html += '<span class="text-amber-400">★</span>';
+          else html += '<span class="text-slate-600">☆</span>';
+        }
+        return html;
+      }
+
+      function renderStars(rating, containerId) {
+        const c = document.getElementById(containerId);
+        if (!c) return;
+        c.innerHTML = renderStarsInline(rating);
+      }
+
+      // ---- Open the list panel (from inline "Nearby Services" bar) ----
+      function openShopListPanel(shops, requestId) {
+        _cachedShopList = shops;
+        _currentRequestId = requestId || null;
+
+        // Show list view, hide detail view
+        document.getElementById('panel-list-view').classList.remove('hidden');
+        document.getElementById('panel-detail-view').classList.add('hidden');
+
+        // Build shop cards in the list
+        const listDiv = document.getElementById('panel-shop-list');
+        listDiv.innerHTML = shops.map((shop, idx) => {
+          const distRound = shop.distance_km != null ? Number(shop.distance_km).toFixed(1) : '?';
+          const r = shop.rating || 4.0;
+          const starsHtml = renderStarsInline(r);
+          return `
+          <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-4 hover:border-emerald-500/40 hover:bg-slate-800/80 transition-all duration-200 cursor-pointer active:scale-[0.98] group" onclick="_openDetailFromList(${idx})">
+            <div class="flex justify-between items-start mb-2">
+              <div class="flex-1 min-w-0">
+                <h5 class="font-semibold text-slate-100 text-[15px] truncate group-hover:text-emerald-300 transition-colors">${shop.name}</h5>
+                <div class="flex items-center gap-1.5 mt-1">
+                  <span class="flex gap-px text-xs">${starsHtml}</span>
+                  <span class="text-[11px] text-slate-500 font-medium">${r.toFixed(1)}</span>
+                </div>
+              </div>
+              <span class="text-[11px] bg-emerald-500/10 text-emerald-400 px-2.5 py-1 rounded-lg font-semibold whitespace-nowrap ml-2 border border-emerald-500/20">${distRound} km</span>
+            </div>
+            <div class="flex items-center gap-1.5 mb-3">
+              <svg class="w-3 h-3 text-slate-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/></svg>
+              <p class="text-xs text-slate-500 truncate">${shop.area || shop.address}</p>
+            </div>
+            <div class="flex items-center justify-between pt-2.5 border-t border-slate-800">
+              <span class="text-[10px] text-slate-600 uppercase tracking-wider font-medium">${shop.shop_type.replace(/_/g, " ")}</span>
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-semibold text-emerald-400">৳${shop.service_fee || 100}+</span>
+                <svg class="w-4 h-4 text-slate-600 group-hover:text-emerald-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+              </div>
+            </div>
+          </div>`;
+        }).join('');
+
+        // Slide panel in
+        const overlay = document.getElementById('shop-slide-panel');
+        const inner = document.getElementById('shop-panel-inner');
+        overlay.classList.remove('hidden');
+        requestAnimationFrame(() => {
+          inner.classList.remove('translate-x-full');
+          inner.classList.add('translate-x-0');
+        });
+      }
+
+      // Open detail view from list (by index)
+      function _openDetailFromList(idx) {
+        const shop = _cachedShopList[idx];
+        if (!shop) return;
+        _currentShopData = shop;
+
+        // Fill detail data
+        document.getElementById('panel-shop-name').textContent = shop.name;
+        document.getElementById('panel-shop-type').textContent = shop.shop_type.replace(/_/g, ' ');
+        document.getElementById('panel-shop-address').textContent = shop.address || shop.area;
+        document.getElementById('panel-shop-landmark').textContent = shop.landmark || '';
+        document.getElementById('panel-shop-phone').textContent = shop.phone;
+        document.getElementById('panel-shop-phone').href = 'tel:' + shop.phone;
+        const dist = shop.distance_km != null ? Number(shop.distance_km).toFixed(1) : '?';
+        document.getElementById('panel-shop-distance').textContent = dist + ' km';
+        
+        const r = shop.rating || 4.0;
+        renderStars(r, 'panel-stars');
+        document.getElementById('panel-rating-num').textContent = r.toFixed(1);
+
+        const sf = shop.service_fee || 100;
+        const deliveryTypes = ['grocery', 'pharmacy', 'stationary', 'restaurant'];
+        const isDelivery = deliveryTypes.includes(shop.shop_type);
+        const lc = isDelivery ? 0 : (shop.labor_cost || 300);
+        document.getElementById('panel-service-fee').textContent = '৳' + sf;
+        const laborRow = document.getElementById('panel-labor-row');
+        if (isDelivery) {
+          laborRow.classList.add('hidden');
+        } else {
+          laborRow.classList.remove('hidden');
+          document.getElementById('panel-labor-cost').textContent = '৳' + lc;
+        }
+        const est = Math.round((sf + lc) * 1.3);
+        document.getElementById('panel-est-total').textContent = '৳' + est + '+';
+
+        // Reset state
+        const cashRadio = document.querySelector('input[name="payment_method"][value="cash"]');
+        if (cashRadio) cashRadio.checked = true;
+        document.getElementById('panel-receipt').classList.add('hidden');
+        document.getElementById('panel-worker-status').classList.add('hidden');
+        document.getElementById('panel-actions').classList.remove('hidden');
+        document.getElementById('panel-actions-done').classList.add('hidden');
+        document.getElementById('panel-send-btn').disabled = false;
+        document.getElementById('panel-send-btn').innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg> Send Service Request';
+
+        // Switch views
+        document.getElementById('panel-list-view').classList.add('hidden');
+        document.getElementById('panel-detail-view').classList.remove('hidden');
+      }
+
+      // Back button: detail → list
+      function showShopListView() {
+        document.getElementById('panel-detail-view').classList.add('hidden');
+        document.getElementById('panel-list-view').classList.remove('hidden');
+        _currentShopData = null;
+      }
+
+      function closeShopPanel() {
+        const inner = document.getElementById('shop-panel-inner');
+        inner.classList.remove('translate-x-0');
+        inner.classList.add('translate-x-full');
+        setTimeout(() => {
+          document.getElementById('shop-slide-panel').classList.add('hidden');
+          _currentShopData = null;
+          _currentRequestId = null;
+          _cachedShopList = [];
+        }, 300);
+      }
+
+      // Close on Escape key
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          // If detail view is open, go back to list first
+          if (!document.getElementById('panel-detail-view').classList.contains('hidden')) {
+            showShopListView();
+          } else {
+            closeShopPanel();
+          }
+        }
+      });
+
+      async function sendShopRequest() {
+        if (!_currentShopData) return;
+        const btn = document.getElementById('panel-send-btn');
+        btn.disabled = true;
+        btn.innerHTML = '<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> Sending...';
+
+        try {
+          const paymentMethod = document.querySelector('input[name="payment_method"]:checked')?.value || 'cash';
+          const res = await fetch('/api/shop-request', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              shop_id: _currentShopData.id,
+              title: _currentShopData._sg_title || _currentShopData.name,
+              description: _currentShopData._sg_description || '',
+              request_id: _currentRequestId,
+              user_lat: _currentShopData._sg_lat || null,
+              user_lng: _currentShopData._sg_lng || null,
+              user_area: _currentShopData._sg_area || '',
+              payment_method: paymentMethod
+            })
+          });
+          const data = await res.json();
+
+          if (data.success) {
+            const r = data.receipt;
+            document.getElementById('rcpt-service').textContent = '৳' + r.service_fee;
+            document.getElementById('rcpt-labor').textContent = r.labor_cost > 0 ? '৳' + r.labor_cost : 'N/A';
+            document.getElementById('rcpt-parts').textContent = '৳' + r.parts_cost;
+            document.getElementById('rcpt-subtotal').textContent = '৳' + r.subtotal;
+            document.getElementById('rcpt-commission').textContent = '৳' + r.lifeline_commission;
+            document.getElementById('rcpt-rate').textContent = '(' + r.commission_rate + ')';
+            document.getElementById('rcpt-total').textContent = '৳' + r.total_cost;
+            const payMethod = document.querySelector('input[name="payment_method"]:checked')?.value || 'cash';
+            const payLabel = payMethod === 'bkash' ? '📱 bKash (Mobile Payment)' : '💵 Cash (Hand to Hand)';
+            document.getElementById('rcpt-eta').textContent = 'Estimated arrival: ' + data.estimated_wait;
+            document.getElementById('rcpt-pay-method').textContent = payLabel;
+
+            document.getElementById('panel-receipt').classList.remove('hidden');
+            document.getElementById('panel-worker-status').classList.remove('hidden');
+            document.getElementById('panel-actions').classList.add('hidden');
+            document.getElementById('panel-actions-done').classList.remove('hidden');
+
+            // Update the post card
+            if (_currentRequestId) {
+              const postCard = document.getElementById('review-request-' + _currentRequestId) 
+                            || document.querySelector('[data-sg-request-id="' + _currentRequestId + '"]')?.closest('[class*="card"], .bg-slate-950, .bg-white');
+              if (postCard) {
+                let badge = postCard.querySelector('.shop-requested-badge');
+                if (!badge) {
+                  badge = document.createElement('div');
+                  badge.className = 'shop-requested-badge mt-2 bg-emerald-50 border border-emerald-200 rounded-lg p-2.5 flex items-center gap-2';
+                  badge.innerHTML = `
+                    <span class="w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center text-white text-xs">✓</span>
+                    <div>
+                      <p class="text-xs font-bold text-emerald-800">Requested at ${data.shop_name}</p>
+                      <p class="text-[10px] text-amber-600 font-medium">🚗 Worker arriving soon (${data.estimated_wait})</p>
+                    </div>
+                  `;
+                  const sgBox = postCard.querySelector('.shop-suggestions-box');
+                  if (sgBox) sgBox.insertAdjacentElement('afterend', badge);
+                  else postCard.appendChild(badge);
+                }
+              }
+            }
+          } else {
+            btn.disabled = false;
+            btn.innerHTML = 'Send Service Request';
+            alert(data.error || 'Something went wrong.');
+          }
+        } catch (err) {
+          console.error('Shop request error:', err);
+          btn.disabled = false;
+          btn.innerHTML = 'Send Service Request';
+          alert('Network error. Please try again.');
+        }
+      }
+
+      // ---- Load suggestions into inline bars, clicking opens the panel ----
+      document.addEventListener("DOMContentLoaded", () => {
+        const boxes = document.querySelectorAll(".shop-suggestions-box");
+        if (boxes.length === 0) return;
+        
+        boxes.forEach(async (box) => {
+          const title = box.getAttribute("data-sg-title") || "";
+          const description = box.getAttribute("data-sg-description") || "";
+          const category = box.getAttribute("data-sg-category") || "";
+          const lat = parseFloat(box.getAttribute("data-sg-lat"));
+          const lng = parseFloat(box.getAttribute("data-sg-lng"));
+          const requestId = box.getAttribute("data-sg-request-id") || "";
+          const area = box.getAttribute("data-sg-area") || "";
+          
+          if (!lat || !lng || isNaN(lat) || isNaN(lng)) return;
+          
+          try {
+            const response = await fetch("/api/shop-suggestions", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ title, description, category, lat, lng, max_distance_km: 3, max_results: 5 })
+            });
+            
+            const data = await response.json();
+            
+            if (!data.success || !data.suggestions || data.suggestions.length === 0) {
+              return;
+            }
+
+            const count = data.suggestions.length;
+            // Attach context to each shop
+            data.suggestions.forEach(shop => {
+              shop._sg_title = title;
+              shop._sg_description = description;
+              shop._sg_lat = lat;
+              shop._sg_lng = lng;
+              shop._sg_area = area;
+            });
+
+            // Store suggestions on the box element
+            box._shopData = data.suggestions;
+            box._requestId = requestId;
+
+            // Show the compact clickable side indicator
+            box.classList.remove("hidden");
+            box.innerHTML = `
+              <div class="group w-12 h-full min-h-[70px] rounded-xl border border-slate-700 bg-slate-900/90 backdrop-blur flex flex-col items-center justify-center gap-2 py-3 px-1 cursor-pointer select-none hover:border-emerald-500/60 hover:bg-slate-800/90 transition-all duration-300" onclick="openShopListPanel(this.closest('.shop-suggestions-box')._shopData, this.closest('.shop-suggestions-box')._requestId)">
+                <div class="w-8 h-8 rounded-lg bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center group-hover:bg-emerald-500/25 group-hover:border-emerald-400/50 transition-all duration-300">
+                  <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+                </div>
+                <span class="text-[7px] font-semibold text-slate-400 uppercase tracking-wider leading-none group-hover:text-emerald-400 transition-colors">Services</span>
+                <span class="w-5 h-5 rounded-md bg-emerald-500 text-white text-[9px] font-bold flex items-center justify-center shadow-sm shadow-emerald-500/30">${count}</span>
+              </div>
+            `;
+            
+          } catch (error) {
+            console.error("Error loading shop suggestions:", error);
+          }
+        });
+      });
+    </script>
     {% endif %}
   </body>
 </html>

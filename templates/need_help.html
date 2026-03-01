@@ -31,7 +31,7 @@ content %}
       </div>
 
       <!-- FORM -->
-      <form id="need-help-form" method="POST" class="space-y-6">
+      <form id="need-help-form" method="POST" enctype="multipart/form-data" class="space-y-6">
         <!-- TITLE + CATEGORY -->
         <div class="grid md:grid-cols-2 gap-4">
           <div>
@@ -204,6 +204,36 @@ content %}
           ></textarea>
         </div>
 
+        <!-- PRESCRIPTION / IMAGE UPLOAD (medicine only) -->
+        <div id="prescription-section" class="hidden">
+          <label class="text-xs text-slate-300">
+            Attach Prescription <span class="text-emerald-400">*</span>
+          </label>
+          <p class="text-[10px] text-slate-500 mt-0.5 mb-1.5">
+            Medicine requests require a valid prescription photo.
+          </p>
+          <div id="prescription-drop-zone"
+               class="mt-1 relative border-2 border-dashed border-emerald-500/30 rounded-xl p-4
+                      bg-slate-950/60 hover:border-emerald-400/50 transition cursor-pointer
+                      flex flex-col items-center justify-center gap-2">
+            <svg class="w-8 h-8 text-emerald-400/60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                    d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/>
+            </svg>
+            <p class="text-xs text-slate-400">Click or drag &amp; drop your prescription image</p>
+            <p class="text-[10px] text-slate-500">PNG, JPG, JPEG, GIF — max 5 MB</p>
+            <input type="file" name="prescription_image" id="prescription-input"
+                   accept="image/png,image/jpeg,image/jpg,image/gif"
+                   class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+          </div>
+          <!-- preview -->
+          <div id="prescription-preview" class="hidden mt-3 relative inline-block">
+            <img id="prescription-preview-img" class="max-h-40 rounded-lg border border-emerald-500/30" />
+            <button type="button" onclick="clearPrescription()"
+                    class="absolute -top-2 -right-2 bg-red-600 hover:bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">&times;</button>
+          </div>
+        </div>
+
         <!-- EXPIRY -->
         <div class="flex flex-wrap items-center gap-3">
           <div>
@@ -225,6 +255,7 @@ content %}
         <!-- SUBMIT -->
         <div class="pt-2">
           <button
+            type="submit"
             class="bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-slate-950 font-semibold px-6 py-3 rounded-xl text-sm transition hover:scale-105 w-full"
           >
             Post Need
@@ -233,9 +264,60 @@ content %}
       </form>
     </div>
 
-    <!-- 🟦 SIDEBAR (unchanged) -->
+    <script>
+    (function() {
+      const catSelect = document.querySelector('select[name="category"]');
+      const section = document.getElementById('prescription-section');
+      const fileInput = document.getElementById('prescription-input');
+      const preview = document.getElementById('prescription-preview');
+      const previewImg = document.getElementById('prescription-preview-img');
+
+      function toggle() {
+        const isMedicine = catSelect.value === 'medicine';
+        section.classList.toggle('hidden', !isMedicine);
+        if (isMedicine) {
+          fileInput.setAttribute('required', 'required');
+        } else {
+          fileInput.removeAttribute('required');
+          fileInput.value = '';
+          preview.classList.add('hidden');
+        }
+      }
+      catSelect.addEventListener('change', toggle);
+      toggle(); // run on load
+
+      // Preview selected image
+      fileInput.addEventListener('change', function() {
+        if (this.files && this.files[0]) {
+          const reader = new FileReader();
+          reader.onload = e => {
+            previewImg.src = e.target.result;
+            preview.classList.remove('hidden');
+          };
+          reader.readAsDataURL(this.files[0]);
+        }
+      });
+
+      // Clear prescription
+      window.clearPrescription = function() {
+        fileInput.value = '';
+        preview.classList.add('hidden');
+      };
+
+      // Form validation
+      document.getElementById('need-help-form').addEventListener('submit', function(e) {
+        if (catSelect.value === 'medicine' && (!fileInput.files || !fileInput.files[0])) {
+          e.preventDefault();
+          alert('Please attach a prescription photo for medicine requests.');
+        }
+      });
+    })();
+    </script>
+
+    <!-- 🟦 SIDEBAR -->
     <div class="space-y-8 lg:sticky lg:top-24 self-start">
       {{ super() }}
+    </div>
 
       <!-- Recent Need Help posts -->
       <div
@@ -568,7 +650,9 @@ content %}
           if (!lat || !lng) {
             e.preventDefault();
             alert("Please pin your location on the map before posting.");
+            return;
           }
+          // Allow normal form submission - suggestions will show on /requests and /dashboard
         });
       });
     </script>

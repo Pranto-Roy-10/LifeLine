@@ -1,0 +1,288 @@
+<!-- Shop Suggestions Widget -->
+<div id="shop-suggestions-container" class="mt-8">
+  <div class="bg-gradient-to-br from-slate-900/60 to-slate-950/70 backdrop-blur-md border border-blue-500/20 rounded-2xl p-6 shadow-xl">
+    <div class="flex items-center justify-between mb-4">
+      <div class="flex items-center gap-2">
+        <h3 class="text-xl font-bold text-blue-300">💼 Nearby Services</h3>
+        <span class="text-xs text-slate-400">(Based on your request)</span>
+      </div>
+      <button
+        type="button"
+        onclick="refreshShopSuggestions()"
+        class="text-xs px-3 py-1 rounded-full border border-blue-400/60 text-blue-300 hover:bg-blue-500/10 transition"
+        id="refresh-shops-btn"
+      >
+        🔄 Refresh
+      </button>
+    </div>
+
+    <div id="shop-suggestions-loading" class="text-center py-8">
+      <div class="inline-flex items-center gap-2 text-slate-400">
+        <div class="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+        <span>Finding nearby shops...</span>
+      </div>
+    </div>
+
+    <div id="shop-suggestions-list" class="space-y-3 hidden">
+      <!-- Populated dynamically by JavaScript -->
+    </div>
+
+    <div id="shop-suggestions-empty" class="text-center py-8 text-slate-400 hidden">
+      <p class="text-sm">No matching services found nearby.</p>
+      <p class="text-xs text-slate-500 mt-2">Try being more specific in your request title.</p>
+    </div>
+
+    <div id="shop-suggestions-error" class="bg-red-500/10 border border-red-500/30 text-red-300 text-sm p-4 rounded-lg hidden">
+      <!-- Error message -->
+    </div>
+  </div>
+</div>
+
+<!-- Shop Modal -->
+<div id="shop-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
+  <div class="bg-slate-900 border border-blue-500/30 rounded-2xl max-w-md w-full p-6 shadow-2xl">
+    <div class="flex items-start justify-between mb-4">
+      <div>
+        <h2 id="modal-shop-name" class="text-xl font-bold text-blue-300"></h2>
+        <p id="modal-shop-type" class="text-xs text-slate-400 mt-1"></p>
+      </div>
+      <button
+        type="button"
+        onclick="closeShopModal()"
+        class="text-slate-400 hover:text-white"
+      >
+        ✕
+      </button>
+    </div>
+
+    <div id="modal-shop-details" class="space-y-3 mb-6">
+      <!-- Populated dynamically -->
+    </div>
+
+    <form id="shop-request-form" class="space-y-4">
+      <div>
+        <label class="text-xs text-slate-300">Additional details (optional)</label>
+        <textarea
+          id="shop-request-description"
+          placeholder="e.g., Front left tire is punctured, need urgent repair"
+          class="w-full mt-1 px-3 py-2 rounded-lg bg-slate-950/80 text-white border border-blue-500/20 focus:border-blue-400/40 focus:outline-none text-sm resize-none"
+          rows="3"
+        ></textarea>
+      </div>
+
+      <div class="flex gap-3">
+        <button
+          type="button"
+          onclick="closeShopModal()"
+          class="flex-1 px-4 py-2 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 transition text-sm"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          id="submit-shop-request-btn"
+          class="flex-1 px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition text-sm font-semibold"
+        >
+          📞 Request Service
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<style>
+  .shop-card {
+    transition: all 0.3s ease;
+  }
+
+  .shop-card:hover {
+    transform: translateY(-2px);
+    border-color: rgb(96, 165, 250);
+  }
+</style>
+
+<script>
+  let currentShop = null;
+  let helpRequestData = null;
+
+  function setHelpRequestData(title, description, category, lat, lng, area) {
+    helpRequestData = { title, description, category, lat, lng, area };
+  }
+
+  async function refreshShopSuggestions() {
+    if (!helpRequestData || !helpRequestData.lat || !helpRequestData.lng) {
+      showShopError("Please pin your location on the map first");
+      return;
+    }
+
+    const loadingEl = document.getElementById("shop-suggestions-loading");
+    const listEl = document.getElementById("shop-suggestions-list");
+    const emptyEl = document.getElementById("shop-suggestions-empty");
+    const errorEl = document.getElementById("shop-suggestions-error");
+
+    loadingEl.classList.remove("hidden");
+    listEl.classList.add("hidden");
+    emptyEl.classList.add("hidden");
+    errorEl.classList.add("hidden");
+
+    try {
+      const response = await fetch("/api/shop-suggestions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: helpRequestData.title,
+          description: helpRequestData.description,
+          category: helpRequestData.category,
+          lat: helpRequestData.lat,
+          lng: helpRequestData.lng,
+          max_distance_km: 10,
+          max_results: 5,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!data.success) {
+        showShopError(data.error || "Failed to get suggestions");
+        return;
+      }
+
+      const suggestions = data.suggestions || [];
+
+      if (suggestions.length === 0) {
+        loadingEl.classList.add("hidden");
+        emptyEl.classList.remove("hidden");
+        return;
+      }
+
+      // Render suggestions
+      listEl.innerHTML = suggestions
+        .map(
+          (shop) => `
+        <div class="shop-card bg-slate-900/60 border border-blue-500/20 rounded-xl p-4 cursor-pointer hover:border-blue-400/40 transition" onclick="openShopModal(${JSON.stringify(shop).replace(/"/g, '&quot;')})">
+          <div class="flex justify-between items-start mb-2">
+            <div>
+              <h4 class="font-semibold text-blue-300">${shop.name}</h4>
+              <p class="text-xs text-slate-400 mt-1">${shop.shop_type.replace(/_/g, " ").toUpperCase()}</p>
+            </div>
+            ${
+              shop.distance_km
+                ? `<span class="text-xs bg-blue-500/20 text-blue-300 px-2 py-1 rounded-full">${shop.distance_km} km</span>`
+                : ""
+            }
+          </div>
+          <p class="text-xs text-slate-400 mb-2">📍 ${shop.area || shop.address}</p>
+          <div class="flex items-center justify-between">
+            <div class="text-xs text-slate-500">${shop.landmark || ""}</div>
+            <button type="button" class="text-blue-300 hover:text-blue-200 text-xs font-semibold">Contact →</button>
+          </div>
+        </div>
+      `
+        )
+        .join("");
+
+      loadingEl.classList.add("hidden");
+      listEl.classList.remove("hidden");
+    } catch (error) {
+      console.error("Error fetching shop suggestions:", error);
+      showShopError("Network error. Please try again.");
+    }
+  }
+
+  function openShopModal(shop) {
+    currentShop = shop;
+    document.getElementById("modal-shop-name").textContent = shop.name;
+    document.getElementById("modal-shop-type").textContent = shop.shop_type
+      .replace(/_/g, " ")
+      .toUpperCase();
+
+    const detailsEl = document.getElementById("modal-shop-details");
+    detailsEl.innerHTML = `
+      <div class="flex items-center gap-2 text-sm text-slate-300">
+        <span class="text-lg">📞</span>
+        <a href="tel:${shop.phone}" class="text-blue-300 hover:underline">${shop.phone}</a>
+      </div>
+      <div class="flex items-start gap-2 text-sm text-slate-300">
+        <span class="text-lg">📍</span>
+        <div>
+          <p>${shop.address}</p>
+          <p class="text-xs text-slate-400 mt-1">${shop.landmark || shop.area}</p>
+          ${
+            shop.distance_km
+              ? `<p class="text-xs text-blue-300 mt-1">~${shop.distance_km} km away</p>`
+              : ""
+          }
+        </div>
+      </div>
+      ${shop.description ? `<p class="text-sm text-slate-400 border-t border-slate-700/50 pt-3">${shop.description}</p>` : ""}
+    `;
+
+    // Set form data
+    document.getElementById("shop-request-description").value = "";
+
+    document.getElementById("shop-modal").classList.remove("hidden");
+  }
+
+  function closeShopModal() {
+    document.getElementById("shop-modal").classList.add("hidden");
+    currentShop = null;
+  }
+
+  document.getElementById("shop-request-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    if (!currentShop || !helpRequestData) return;
+
+    const description = document.getElementById("shop-request-description").value.trim();
+
+    try {
+      const response = await fetch("/api/shop-request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          shop_id: currentShop.id,
+          title: helpRequestData.title,
+          description: description || helpRequestData.description,
+          user_lat: helpRequestData.lat,
+          user_lng: helpRequestData.lng,
+          user_area: helpRequestData.area,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!data.success) {
+        alert("Error: " + (data.error || "Failed to send request"));
+        return;
+      }
+
+      // Show success message
+      closeShopModal();
+      alert(
+        `✓ ${data.message}\n\nShop: ${data.shop_name}\nPhone: ${data.shop_phone}\nEstimated arrival: ${data.estimated_wait}`
+      );
+
+      // Refresh suggestions
+      setTimeout(() => refreshShopSuggestions(), 500);
+    } catch (error) {
+      console.error("Error sending shop request:", error);
+      alert("Network error. Please try again.");
+    }
+  });
+
+  function showShopError(message) {
+    const errorEl = document.getElementById("shop-suggestions-error");
+    errorEl.textContent = message;
+    document.getElementById("shop-suggestions-loading").classList.add("hidden");
+    document.getElementById("shop-suggestions-list").classList.add("hidden");
+    document.getElementById("shop-suggestions-empty").classList.add("hidden");
+    errorEl.classList.remove("hidden");
+  }
+
+  // Auto-update suggestions when map location changes
+  function updateShopSuggestionsDisplay() {
+    if (helpRequestData?.title && helpRequestData?.lat && helpRequestData?.lng) {
+      refreshShopSuggestions();
+    }
+  }
+</script>
