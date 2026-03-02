@@ -1,0 +1,265 @@
+{% extends 'base.html' %}
+{% block title %}My Orders & Receipts{% endblock %}
+
+{% block content %}
+<div class="w-full min-h-screen home-hero text-slate-100 px-6 md:px-12 py-10 space-y-8 page-transition">
+  <div class="w-full max-w-5xl mx-auto">
+
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8 stagger-item">
+      <div>
+        <h1 class="text-3xl font-bold text-white">My Orders &amp; Receipts</h1>
+        <p class="text-sm text-slate-400 mt-1">All your payments, bookings and service requests in one place.</p>
+      </div>
+      <a href="{{ url_for('dashboard') }}"
+         class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm text-slate-300 transition">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+        Dashboard
+      </a>
+    </div>
+
+    <!-- Summary -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+      <div class="rounded-2xl glass-card-enhanced p-5 card-hover stagger-item">
+        <p class="text-xs text-slate-400 font-bold uppercase tracking-wider">Total Orders</p>
+        <p class="text-3xl font-extrabold text-white mt-2">{{ totals.count }}</p>
+      </div>
+      <div class="rounded-2xl glass-card-enhanced p-5 card-hover stagger-item border-l-4 border-emerald-500">
+        <p class="text-xs text-emerald-400 font-bold uppercase tracking-wider">Total Spent</p>
+        <p class="text-3xl font-extrabold text-emerald-300 mt-2">৳{{ '%.2f'|format(totals.total_spent) }}</p>
+      </div>
+    </div>
+
+    <!-- Orders List -->
+    {% if orders|length == 0 %}
+    <div class="rounded-2xl glass-card-enhanced p-12 text-center stagger-item">
+      <div class="text-5xl mb-4">📭</div>
+      <p class="text-slate-400 text-lg">You haven't made any orders yet.</p>
+      <p class="text-slate-500 text-sm mt-2">Your subscriptions, service requests and psychiatry appointments will appear here.</p>
+    </div>
+    {% else %}
+
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden stagger-item">
+      <div class="px-6 py-4 border-b border-slate-800 bg-slate-800/50">
+        <h2 class="text-lg font-bold text-white">Order History</h2>
+      </div>
+      <div class="divide-y divide-slate-800/60">
+        {% for o in orders %}
+        <div class="px-6 py-4 flex items-center justify-between gap-4 hover:bg-slate-800/40 transition cursor-pointer receipt-trigger"
+             data-idx="{{ loop.index0 }}">
+          <div class="flex items-center gap-4 min-w-0">
+            <!-- Icon -->
+            <div class="w-10 h-10 rounded-xl flex-shrink-0 flex items-center justify-center text-lg
+              {% if o.type == 'Subscription' %}bg-amber-500/20 text-amber-300
+              {% elif o.type == 'Service' %}bg-sky-500/20 text-sky-300
+              {% else %}bg-emerald-500/20 text-emerald-300{% endif %}">
+              {% if o.type == 'Subscription' %}👑{% elif o.type == 'Service' %}🔧{% else %}🧠{% endif %}
+            </div>
+            <div class="min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="font-semibold text-white text-sm">{{ o.type }}</span>
+                <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase
+                  {% if o.status in ['approved','paid','completed'] %}bg-emerald-500/15 text-emerald-300
+                  {% elif o.status in ['pending','submitted','sent','pending_payment'] %}bg-amber-500/15 text-amber-300
+                  {% elif o.status in ['rejected','cancelled'] %}bg-rose-500/15 text-rose-300
+                  {% else %}bg-slate-700 text-slate-300{% endif %}">{{ o.status }}</span>
+              </div>
+              <p class="text-xs text-slate-500 mt-0.5 truncate">{{ o.details }}</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-3 flex-shrink-0">
+            <div class="text-right">
+              <p class="text-base font-bold text-white">৳{{ '%.2f'|format(o.total) }}</p>
+              <p class="text-[10px] text-slate-500">{{ o.date_human }}</p>
+            </div>
+            <svg class="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+
+<!-- ════════ Receipt Modal ════════ -->
+<div id="receiptModal" class="fixed inset-0 z-[9999] hidden">
+  <!-- Backdrop + container (click anywhere outside card to close) -->
+  <div id="receiptBackdrop" class="absolute inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+    <div id="receiptCard" class="relative w-full max-w-md rounded-2xl shadow-2xl transform transition-all duration-300 scale-95 opacity-0"
+         style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);">
+
+      <!-- Close btn -->
+      <button id="receiptClose" class="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-white transition z-10">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+
+      <!-- Receipt content -->
+      <div class="px-8 pt-8 pb-6">
+        <!-- Logo / Brand -->
+        <div class="text-center mb-6">
+          <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-sky-500 mb-3">
+            <span class="text-2xl">🏥</span>
+          </div>
+          <h2 class="text-xl font-bold text-white">LifeLine</h2>
+          <p class="text-xs text-slate-500">Payment Receipt</p>
+        </div>
+
+        <!-- Dashed separator -->
+        <div class="border-t-2 border-dashed border-slate-700 my-4"></div>
+
+        <!-- Receipt number & date -->
+        <div class="flex justify-between items-start mb-4">
+          <div>
+            <p class="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Receipt No.</p>
+            <p id="rInvoice" class="text-sm font-mono text-white mt-0.5"></p>
+          </div>
+          <div class="text-right">
+            <p class="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Date</p>
+            <p id="rDate" class="text-sm text-slate-300 mt-0.5"></p>
+          </div>
+        </div>
+
+        <!-- Order type & status -->
+        <div class="flex justify-between items-center mb-4">
+          <div>
+            <p class="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Order Type</p>
+            <div class="flex items-center gap-2 mt-0.5">
+              <span id="rTypeIcon" class="text-lg"></span>
+              <span id="rType" class="text-sm font-semibold text-white"></span>
+            </div>
+          </div>
+          <div>
+            <span id="rStatus" class="text-[10px] px-3 py-1 rounded-full font-bold uppercase"></span>
+          </div>
+        </div>
+
+        <!-- Description -->
+        <div class="bg-slate-800/50 rounded-xl px-4 py-3 mb-5">
+          <p class="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">Description</p>
+          <p id="rDetails" class="text-sm text-slate-300 leading-relaxed"></p>
+        </div>
+
+        <!-- Dashed separator -->
+        <div class="border-t-2 border-dashed border-slate-700 my-4"></div>
+
+        <!-- Itemized breakdown -->
+        <div class="mb-1">
+          <p class="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-3">Breakdown</p>
+          <div id="rBreakdown" class="space-y-2"></div>
+        </div>
+
+        <!-- Dashed separator -->
+        <div class="border-t-2 border-dashed border-slate-700 my-4"></div>
+
+        <!-- Total -->
+        <div class="flex justify-between items-center py-2">
+          <span class="text-base font-bold text-white tracking-wide">TOTAL</span>
+          <span id="rTotal" class="text-2xl font-extrabold text-emerald-400"></span>
+        </div>
+
+        <!-- Dashed separator -->
+        <div class="border-t-2 border-dashed border-slate-700 my-4"></div>
+
+        <!-- Payment info -->
+        <div class="grid grid-cols-2 gap-4 mb-5">
+          <div>
+            <p class="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Payment Method</p>
+            <p id="rMethod" class="text-sm text-slate-300 mt-0.5"></p>
+          </div>
+          <div>
+            <p class="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Transaction ID</p>
+            <p id="rTrxId" class="text-sm text-slate-300 font-mono mt-0.5"></p>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="text-center pt-2 pb-1">
+          <p class="text-[10px] text-slate-600">Thank you for using LifeLine</p>
+          <p class="text-[10px] text-slate-700 mt-0.5">lifeline.app · support@lifeline.com</p>
+        </div>
+      </div>
+
+      <!-- Bottom accent strip -->
+      <div class="h-1.5 rounded-b-2xl bg-gradient-to-r from-emerald-500 via-sky-500 to-violet-500"></div>
+    </div>
+  </div>
+</div>
+
+<script id="orders-data" type="application/json">{{ orders|tojson }}</script>
+<script>
+(() => {
+  /* ---- order data injected from JSON block ---- */
+  const ORDERS = JSON.parse(document.getElementById('orders-data').textContent);
+
+  const modal     = document.getElementById('receiptModal');
+  const card      = document.getElementById('receiptCard');
+  const backdrop  = document.getElementById('receiptBackdrop');
+  const closeBtn  = document.getElementById('receiptClose');
+
+  function openReceipt(idx) {
+    const o = ORDERS[idx];
+    if (!o) return;
+
+    /* populate */
+    document.getElementById('rInvoice').textContent = '#' + o.type.slice(0,3).toUpperCase() + '-' + String(o.id).padStart(4,'0');
+    document.getElementById('rDate').textContent = o.date_human;
+
+    const icons = { Subscription: '👑', Service: '🔧', Psychiatry: '🧠' };
+    document.getElementById('rTypeIcon').textContent = icons[o.type] || '📦';
+    document.getElementById('rType').textContent = o.type;
+
+    const statusEl = document.getElementById('rStatus');
+    statusEl.textContent = o.status;
+    statusEl.className = 'text-[10px] px-3 py-1 rounded-full font-bold uppercase ';
+    if (['approved','paid','completed'].includes(o.status))          statusEl.className += 'bg-emerald-500/15 text-emerald-300';
+    else if (['pending','submitted','sent','pending_payment'].includes(o.status)) statusEl.className += 'bg-amber-500/15 text-amber-300';
+    else if (['rejected','cancelled'].includes(o.status))            statusEl.className += 'bg-rose-500/15 text-rose-300';
+    else                                                              statusEl.className += 'bg-slate-700 text-slate-300';
+
+    document.getElementById('rDetails').textContent = o.details;
+    document.getElementById('rMethod').textContent  = o.method;
+    document.getElementById('rTrxId').textContent   = o.trx_id;
+    document.getElementById('rTotal').textContent    = '৳' + o.total.toFixed(2);
+
+    /* breakdown rows */
+    const bd = document.getElementById('rBreakdown');
+    bd.innerHTML = '';
+    o.breakdown.forEach(item => {
+      if (item.amount <= 0) return;
+      const row = document.createElement('div');
+      row.className = 'flex justify-between text-sm';
+      row.innerHTML = `<span class="text-slate-400">${item.label}</span><span class="text-slate-200">৳${item.amount.toFixed(2)}</span>`;
+      bd.appendChild(row);
+    });
+
+    /* show */
+    modal.classList.remove('hidden');
+    requestAnimationFrame(() => {
+      card.classList.remove('scale-95','opacity-0');
+      card.classList.add('scale-100','opacity-100');
+    });
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeReceipt() {
+    card.classList.remove('scale-100','opacity-100');
+    card.classList.add('scale-95','opacity-0');
+    setTimeout(() => {
+      modal.classList.add('hidden');
+      document.body.style.overflow = '';
+    }, 200);
+  }
+
+  /* listeners */
+  document.querySelectorAll('.receipt-trigger').forEach(el => {
+    el.addEventListener('click', () => openReceipt(parseInt(el.dataset.idx, 10)));
+  });
+  closeBtn.addEventListener('click', closeReceipt);
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) closeReceipt(); });
+  card.addEventListener('click', (e) => e.stopPropagation());
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeReceipt(); });
+})();
+</script>
+{% endblock %}

@@ -11,6 +11,21 @@ block content %}
       </div>
     </div>
 
+    <div class="mb-6 stagger-item flex gap-3 flex-wrap">
+      <a
+        href="{{ url_for('admin_revenue') }}"
+        class="inline-flex items-center justify-center px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold"
+      >
+        Revenue &amp; Payments
+      </a>
+      <a
+        href="{{ url_for('admin_donations') }}"
+        class="inline-flex items-center justify-center px-4 py-2 rounded-xl bg-pink-600 hover:bg-pink-700 text-white text-sm font-semibold"
+      >
+        💖 Donations &amp; Fundraising
+      </a>
+    </div>
+
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
       <div class="rounded-2xl glass-card-enhanced p-5 card-hover stagger-item">
         <p class="text-xs text-slate-400 font-bold uppercase">Users</p>

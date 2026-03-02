@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="w-full px-6 md:px-12 py-10">
+  <div class="max-w-4xl mx-auto">
+    <div class="flex items-start justify-between gap-4 flex-wrap">
+      <div>
+        <p class="text-xs font-bold text-emerald-400 uppercase tracking-wider">Payment</p>
+        <h1 class="text-2xl md:text-3xl font-extrabold text-slate-100 mt-2">Confirm your appointment</h1>
+        <p class="text-sm text-slate-400 mt-2">{{ appointment.psychiatrist_name }} • {{ appointment.hospital_name }} • {{ appointment.appointment_date }} {{ appointment.appointment_time }}</p>
+      </div>
+      <a href="{{ url_for('psychiatrists_list') }}" class="nav-btn nav-btn--ghost">Browse doctors</a>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-5 gap-4 mt-8">
+      <div class="lg:col-span-3 glass-card p-6 rounded-2xl border border-slate-800 bg-slate-900/50">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <h2 class="text-base font-bold text-slate-100">Amount due</h2>
+            <p class="text-xs text-slate-500 mt-1">Pay first to lock the slot.</p>
+          </div>
+
+          <div class="text-right">
+            <div class="relative inline-flex items-center gap-2 group">
+              <p class="text-2xl font-extrabold text-emerald-400 tabular-nums">৳{{ appointment.total_bdt }}</p>
+              <span class="w-5 h-5 rounded-full border border-slate-700 bg-slate-900 text-slate-300 text-[11px] flex items-center justify-center cursor-default">i</span>
+
+              <!-- Hover money summary -->
+              <div class="pointer-events-none opacity-0 group-hover:opacity-100 transition absolute right-0 top-8 w-72 rounded-2xl border border-slate-700 bg-slate-950/95 shadow-xl p-4">
+                <p class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Money summary</p>
+                <div class="mt-3 space-y-2 text-sm">
+                  <div class="flex justify-between"><span class="text-slate-400">Consultation fee</span><span class="text-slate-200 font-semibold">৳{{ appointment.fee_bdt }}</span></div>
+                  <div class="flex justify-between"><span class="text-slate-400">Platform fee</span><span class="text-slate-200 font-semibold">৳{{ appointment.platform_fee_bdt }}</span></div>
+                  <div class="border-t border-dashed border-slate-700 pt-2 flex justify-between"><span class="text-slate-200 font-bold">Total</span><span class="text-emerald-400 font-extrabold">৳{{ appointment.total_bdt }}</span></div>
+                </div>
+              </div>
+            </div>
+
+            <p class="text-[11px] mt-1 {% if appointment.payment_status == 'paid' %}text-emerald-300{% elif appointment.payment_status == 'submitted' %}text-amber-300{% else %}text-slate-500{% endif %}">
+              Status: {{ appointment.payment_status.replace('_',' ') }}
+            </p>
+          </div>
+        </div>
+
+        <form method="POST" class="mt-6 space-y-4">
+          <div>
+            <p class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Payment method</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <label class="cursor-pointer">
+                <input type="radio" name="payment_method" value="stripe" class="hidden peer" {% if not stripe_ready %}disabled{% endif %}>
+                <div class="rounded-2xl border border-slate-800 bg-slate-950/30 p-4 peer-checked:border-emerald-500/60 peer-checked:bg-emerald-500/10 transition">
+                  <div class="flex items-center justify-between">
+                    <p class="text-sm font-bold text-slate-100">Card (Stripe)</p>
+                    {% if stripe_ready %}
+                      <span class="text-[10px] px-2 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 font-bold">Available</span>
+                    {% else %}
+                      <span class="text-[10px] px-2 py-1 rounded-lg bg-slate-800 border border-slate-700 text-slate-400 font-bold">Not configured</span>
+                    {% endif %}
+                  </div>
+                  <p class="text-xs text-slate-500 mt-1">Instant confirmation when paid.</p>
+                </div>
+              </label>
+
+              <label class="cursor-pointer">
+                <input type="radio" name="payment_method" value="bkash" class="hidden peer">
+                <div class="rounded-2xl border border-slate-800 bg-slate-950/30 p-4 peer-checked:border-pink-500/60 peer-checked:bg-pink-500/10 transition">
+                  <div class="flex items-center justify-between">
+                    <p class="text-sm font-bold text-slate-100">bKash (manual)</p>
+                    <span class="text-[10px] px-2 py-1 rounded-lg bg-pink-500/10 border border-pink-500/20 text-pink-200 font-bold">Submit TrxID</span>
+                  </div>
+                  <p class="text-xs text-slate-500 mt-1">We confirm your TrxID then lock the slot.</p>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <div class="rounded-2xl border border-slate-800 bg-slate-950/30 p-4">
+            <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">bKash details (required if chosen)</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+              <div>
+                <label class="block text-[11px] font-bold text-slate-500 mb-1">Your bKash number</label>
+                <input type="text" name="bkash_number" placeholder="01XXXXXXXXX" class="w-full bg-slate-900/70 border border-slate-800 rounded-xl px-4 py-3 text-slate-100 focus:outline-none focus:border-pink-500/60">
+              </div>
+              <div>
+                <label class="block text-[11px] font-bold text-slate-500 mb-1">Transaction ID (TrxID)</label>
+                <input type="text" name="trx_id" placeholder="e.g. 8J7S9K2L" class="w-full bg-slate-900/70 border border-slate-800 rounded-xl px-4 py-3 text-slate-100 font-mono tracking-wide focus:outline-none focus:border-pink-500/60">
+              </div>
+            </div>
+            <p class="text-[11px] text-slate-500 mt-3">Send money to the LifeLine demo number and paste the TrxID here (admin verification).</p>
+          </div>
+
+          {% if appointment.payment_status != 'paid' %}
+          <button type="submit" class="btn-primary w-full text-sm py-3 rounded-xl">Pay & confirm</button>
+          {% else %}
+          <div class="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-emerald-200 text-sm font-semibold">Payment received. Your appointment is confirmed.</div>
+          {% endif %}
+        </form>
+      </div>
+
+      <div class="lg:col-span-2 glass-card p-6 rounded-2xl border border-slate-800 bg-slate-900/50">
+        <h2 class="text-base font-bold text-slate-100">Appointment details</h2>
+        <div class="mt-4 space-y-2 text-sm">
+          <div class="flex justify-between"><span class="text-slate-400">Doctor</span><span class="text-slate-200 font-semibold text-right">{{ appointment.psychiatrist_name }}</span></div>
+          <div class="flex justify-between"><span class="text-slate-400">Hospital</span><span class="text-slate-200 font-semibold text-right">{{ appointment.hospital_name }}</span></div>
+          <div class="flex justify-between"><span class="text-slate-400">Slot</span><span class="text-slate-200 font-semibold text-right">{{ appointment.appointment_date }} {{ appointment.appointment_time }}</span></div>
+          <div class="flex justify-between"><span class="text-slate-400">Rating</span><span class="text-slate-200 font-semibold text-right">{{ "%.1f"|format(appointment.rating or 0) }}/5</span></div>
+        </div>
+
+        {% if appointment.notes %}
+        <div class="mt-5 pt-5 border-t border-slate-800">
+          <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Notes</p>
+          <p class="text-sm text-slate-300 mt-2 whitespace-pre-wrap">{{ appointment.notes }}</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
