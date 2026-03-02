@@ -9,6 +9,13 @@ try:
 except Exception:
     pass
 
-from app import app as _app
+from app import app as _app, db, _run_startup_migrations_and_bootstrap_admin
 
 app = _app
+
+# When running under gunicorn, __name__ != "__main__" in app.py,
+# so db.create_all() and startup migrations never execute.
+# Run them here so that new tables (shops, shop_requests, etc.) are created on Render.
+with app.app_context():
+    db.create_all()
+    _run_startup_migrations_and_bootstrap_admin()
