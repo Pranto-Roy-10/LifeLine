@@ -1,5 +1,15 @@
 @import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap");
 
+/* Override Tailwind preflight cursor:auto so text doesn't show I-beam */
+html, body {
+  cursor: default !important;
+}
+h1, h2, h3, h4, h5, h6,
+p, span, div, li, td, th,
+label, legend, figcaption, small, strong, em, b, i, mark, sub, sup {
+  cursor: default;
+}
+
 body {
   margin: 0;
   -webkit-font-smoothing: antialiased;
@@ -67,6 +77,33 @@ input,
 select,
 textarea {
   max-width: 100%;
+}
+
+/* Restore proper cursors after global cursor:default on body */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="search"],
+input[type="url"],
+input[type="tel"],
+input[type="number"],
+input:not([type]),
+textarea,
+[contenteditable="true"] {
+  cursor: text;
+}
+select {
+  cursor: pointer;
+}
+a, button, [role="button"],
+input[type="submit"],
+input[type="button"],
+input[type="checkbox"],
+input[type="radio"],
+input[type="file"],
+label[for],
+summary {
+  cursor: pointer;
 }
 
 pre {
