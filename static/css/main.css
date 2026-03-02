@@ -1,8 +1,12 @@
 @import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap");
 
-/* Override Tailwind preflight cursor:auto so text doesn't show I-beam */
+/* Override Tailwind preflight cursor:auto so text doesn't show I-beam / blinking caret */
 html, body {
   cursor: default !important;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
 }
 h1, h2, h3, h4, h5, h6,
 p, span, div, li, td, th,
@@ -91,6 +95,10 @@ input:not([type]),
 textarea,
 [contenteditable="true"] {
   cursor: text;
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
 }
 select {
   cursor: pointer;
