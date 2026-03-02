@@ -1,0 +1,405 @@
+{% extends "base.html" %}
+{% block title %}{{ event.title }} – Fundraising{% endblock %}
+{% block content %}
+
+<section class="home-hero relative overflow-hidden">
+  <div class="hero-backdrop float-slow"></div>
+  <div class="w-full px-6 md:px-12 py-10 md:py-14 relative z-10">
+
+    <!-- Back link -->
+    <a href="{{ url_for('list_events') }}" class="inline-flex items-center gap-1 text-sm text-slate-400 hover:text-emerald-300 transition mb-6">
+      ← Back to Events
+    </a>
+
+    <!-- Event Header -->
+    <div class="flex flex-col md:flex-row gap-6 mb-8 animate-fadeIn">
+      <div class="flex-1">
+        <p class="text-[11px] font-semibold tracking-[0.3em] text-emerald-300 uppercase mb-1">{{ event.event_type|upper if event.event_type else 'EVENT' }}</p>
+        <h1 class="text-2xl md:text-3xl font-bold text-white mb-2">{{ event.title }}</h1>
+        <p class="text-sm text-slate-400 mb-3">{{ event.description }}</p>
+        <div class="flex flex-wrap gap-4 text-xs text-slate-500">
+          <span>📍 {{ event.area or 'Dhaka' }}</span>
+          <span>📅 {{ event.date.strftime('%B %d, %Y') if event.date else '' }}</span>
+          <span>👤 Created by {{ creator.name if creator else 'Unknown' }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Fund Progress -->
+    <div class="glass-card-enhanced p-6 mb-8 animate-fadeInUp">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-lg font-semibold text-white">Fundraising Progress</h2>
+        {% if fund.fund_goal > 0 %}
+        <span class="text-sm text-emerald-300 font-bold">{{ ((fund.fund_raised / fund.fund_goal) * 100)|round(0)|int }}%</span>
+        {% endif %}
+      </div>
+      <!-- Progress Bar -->
+      {% set pct = ((fund.fund_raised / fund.fund_goal) * 100) if fund.fund_goal > 0 else 0 %}
+      {% set pct_clamped = pct if pct <= 100 else 100 %}
+      <div class="w-full bg-slate-700 rounded-full h-4 mb-4 overflow-hidden">
+        <div class="h-4 rounded-full bg-gradient-to-r from-emerald-400 to-cyan-400 transition-all duration-700 ef-progress-bar"
+             data-width="{{ pct_clamped }}"></div>
+      </div>
+      <div class="grid sm:grid-cols-3 gap-4 text-center">
+        <div>
+          <p class="text-2xl font-bold text-emerald-300">৳{{ "{:,.0f}".format(fund.fund_raised) }}</p>
+          <p class="text-xs text-slate-400">Raised</p>
+        </div>
+        <div>
+          <p class="text-2xl font-bold text-sky-300">৳{{ "{:,.0f}".format(fund.fund_goal) }}</p>
+          <p class="text-xs text-slate-400">Goal</p>
+        </div>
+        <div>
+          <p class="text-2xl font-bold text-amber-300">৳{{ "{:,.0f}".format(total_sponsor) }}</p>
+          <p class="text-xs text-slate-400">From Sponsors</p>
+        </div>
+      </div>
+      <p class="text-sm text-slate-400 mt-3">{{ fund.description }}</p>
+
+      <!-- Creator: Update goal -->
+      {% if current_user and current_user.id == event.creator_id %}
+      <div class="mt-4 pt-4 border-t border-slate-700/50">
+        <form method="POST" action="{{ url_for('event_fund_setup', event_id=event.id) }}" class="flex gap-3 items-end flex-wrap">
+          <div class="flex-1 min-w-[120px]">
+            <label class="block text-xs text-slate-500 mb-1">Fund Goal (৳)</label>
+            <input name="fund_goal" type="number" min="1000" step="500" value="{{ fund.fund_goal|int }}"
+              class="w-full px-3 py-2 rounded-lg bg-[#111827] text-white border border-gray-700 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+          </div>
+          <div class="flex-1 min-w-[130px]">
+            <label class="block text-xs text-slate-500 mb-1">bKash/Nagad Number</label>
+            <input name="bkash_number" type="text" value="{{ fund.bkash_number or '' }}" placeholder="01XXXXXXXXX" maxlength="11"
+              class="w-full px-3 py-2 rounded-lg bg-[#111827] text-white border border-gray-700 text-sm focus:ring-2 focus:ring-pink-500 focus:outline-none font-mono">
+          </div>
+          <div class="flex-1 min-w-[180px]">
+            <label class="block text-xs text-slate-500 mb-1">Description</label>
+            <input name="fund_description" type="text" value="{{ fund.description }}" placeholder="What will the funds be used for?"
+              class="w-full px-3 py-2 rounded-lg bg-[#111827] text-white border border-gray-700 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+          </div>
+          <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium transition">Update Goal</button>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="grid lg:grid-cols-3 gap-6">
+
+      <!-- LEFT: Donate to this event -->
+      <div class="lg:col-span-1 animate-fadeInUp">
+        <div class="glass-card-enhanced p-6">
+          <h3 class="text-lg font-semibold text-white mb-4">💖 Donate to This Event</h3>
+          <form method="POST" class="space-y-4">
+            <div>
+              <label class="block text-xs text-slate-400 mb-1">Amount (BDT)</label>
+              <div class="grid grid-cols-3 gap-2 mb-2">
+                <button type="button" onclick="setEFAmount(200)" class="ef-amt px-2 py-1.5 rounded-lg border border-slate-600 text-slate-300 text-xs hover:border-emerald-400 transition">৳200</button>
+                <button type="button" onclick="setEFAmount(500)" class="ef-amt px-2 py-1.5 rounded-lg border border-slate-600 text-slate-300 text-xs hover:border-emerald-400 transition">৳500</button>
+                <button type="button" onclick="setEFAmount(1000)" class="ef-amt px-2 py-1.5 rounded-lg border border-slate-600 text-slate-300 text-xs hover:border-emerald-400 transition">৳1,000</button>
+              </div>
+              <input id="efAmountInput" name="amount" type="number" min="10" step="1" required placeholder="Custom amount"
+                class="w-full px-3 py-2 rounded-lg bg-[#111827] text-white border border-gray-700 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+            </div>
+            <!-- Payment Method -->
+            <div>
+              <label class="block text-xs text-slate-400 mb-2">Payment Method</label>
+              <div class="flex gap-2">
+                <label class="flex-1 cursor-pointer">
+                  <input type="radio" name="payment_method" value="bkash" checked class="hidden peer" onchange="toggleEFPayment()">
+                  <div class="px-2 py-2 rounded-lg border border-slate-600 text-center text-xs text-slate-300 peer-checked:border-pink-400 peer-checked:text-pink-300 peer-checked:bg-pink-500/10 transition-all">
+                    📱 bKash
+                  </div>
+                </label>
+                <label class="flex-1 cursor-pointer">
+                  <input type="radio" name="payment_method" value="nagad" class="hidden peer" onchange="toggleEFPayment()">
+                  <div class="px-2 py-2 rounded-lg border border-slate-600 text-center text-xs text-slate-300 peer-checked:border-orange-400 peer-checked:text-orange-300 peer-checked:bg-orange-500/10 transition-all">
+                    📱 Nagad
+                  </div>
+                </label>
+                <label class="flex-1 cursor-pointer">
+                  <input type="radio" name="payment_method" value="card" class="hidden peer" onchange="toggleEFPayment()">
+                  <div class="px-2 py-2 rounded-lg border border-slate-600 text-center text-xs text-slate-300 peer-checked:border-sky-400 peer-checked:text-sky-300 peer-checked:bg-sky-500/10 transition-all">
+                    💳 Card
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <!-- bKash / Nagad Section -->
+            <div id="efMobilePay" class="rounded-lg border border-pink-500/30 bg-pink-500/5 p-3">
+              <div class="flex items-center gap-2 mb-2">
+                <div class="w-8 h-8 rounded-lg bg-pink-500/20 flex items-center justify-center text-pink-300 text-sm">📱</div>
+                <div>
+                  <p class="text-xs font-bold text-pink-200">Send money to event creator</p>
+                  <p class="text-[10px] text-slate-400">Send the exact amount, then paste TrxID</p>
+                </div>
+              </div>
+              <div class="rounded-lg bg-slate-900/60 border border-slate-700 p-2.5 mb-2">
+                <p class="text-[10px] text-slate-500 uppercase tracking-wider mb-0.5" id="efMobileLabel">Creator's bKash Number</p>
+                <p class="text-lg font-bold text-pink-300 font-mono tracking-wider">{{ fund.bkash_number if fund.bkash_number else '—' }}</p>
+                <p class="text-[10px] text-slate-500 mt-0.5">Creator: <span class="text-slate-300">{{ creator.name if creator else 'Unknown' }}</span></p>
+              </div>
+              <div class="space-y-2">
+                <div>
+                  <label class="block text-[10px] text-slate-400 mb-0.5">Your bKash/Nagad Number</label>
+                  <input name="sender_number" type="text" placeholder="01XXXXXXXXX" maxlength="11"
+                    class="w-full px-3 py-2 rounded-lg bg-[#111827] text-white border border-gray-700 placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-pink-500 font-mono">
+                </div>
+                <div>
+                  <label class="block text-[10px] text-slate-400 mb-0.5">Transaction ID (TrxID)</label>
+                  <input name="trx_id" type="text" placeholder="e.g. TRX8J7S9K2L"
+                    class="w-full px-3 py-2 rounded-lg bg-[#111827] text-white border border-gray-700 placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-pink-500 font-mono uppercase">
+                </div>
+              </div>
+              <p class="text-[10px] text-slate-500 mt-1.5">💡 Send money first, then paste the TrxID here.</p>
+            </div>
+
+            <!-- Card Section -->
+            <div id="efCardPay" class="rounded-lg border border-sky-500/30 bg-sky-500/5 p-3 hidden">
+              <div class="flex items-center gap-2 mb-2">
+                <div class="w-8 h-8 rounded-lg bg-sky-500/20 flex items-center justify-center text-sky-300 text-sm">💳</div>
+                <div>
+                  <p class="text-xs font-bold text-sky-200">Pay with Card</p>
+                  <p class="text-[10px] text-slate-400">Visa, Mastercard, AMEX</p>
+                </div>
+              </div>
+              <div class="space-y-2">
+                <div>
+                  <label class="block text-[10px] text-slate-400 mb-0.5">Cardholder Name</label>
+                  <input name="card_name" type="text" placeholder="Name on card"
+                    class="w-full px-3 py-2 rounded-lg bg-[#111827] text-white border border-gray-700 placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500">
+                </div>
+                <div>
+                  <label class="block text-[10px] text-slate-400 mb-0.5">Card Number</label>
+                  <input name="card_number" type="text" placeholder="1234 5678 9012 3456" maxlength="19"
+                    oninput="efFormatCard(this)"
+                    class="w-full px-3 py-2 rounded-lg bg-[#111827] text-white border border-gray-700 placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 font-mono tracking-wider">
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                  <div>
+                    <label class="block text-[10px] text-slate-400 mb-0.5">Expiry</label>
+                    <input name="card_expiry" type="text" placeholder="MM/YY" maxlength="5"
+                      oninput="efFormatExpiry(this)"
+                      class="w-full px-3 py-2 rounded-lg bg-[#111827] text-white border border-gray-700 placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 font-mono">
+                  </div>
+                  <div>
+                    <label class="block text-[10px] text-slate-400 mb-0.5">CVV</label>
+                    <input name="card_cvv" type="password" placeholder="•••" maxlength="4"
+                      class="w-full px-3 py-2 rounded-lg bg-[#111827] text-white border border-gray-700 placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 font-mono">
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <textarea name="message" rows="2" placeholder="Leave a message (optional)"
+              class="w-full px-3 py-2 rounded-lg bg-[#111827] text-white border border-gray-700 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"></textarea>
+            <button type="submit"
+              class="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-white text-sm font-semibold transition-all hover:scale-[1.02]">
+              💖 Donate
+            </button>
+          </form>
+        </div>
+
+        <!-- Donate to LifeLine -->
+        <div class="glass-card-enhanced p-6 mt-6">
+          <h3 class="text-base font-semibold text-white mb-2">🤝 Donate to LifeLine</h3>
+          <p class="text-xs text-slate-400 mb-3">Support LifeLine directly — funds help bring sponsors, promote events, and maintain the platform.</p>
+          <a href="{{ url_for('donate_page') }}"
+            class="block text-center py-2 rounded-lg border border-pink-500/50 text-pink-300 text-sm font-medium hover:bg-pink-500/10 transition-all">
+            Donate to LifeLine →
+          </a>
+        </div>
+      </div>
+
+      <!-- CENTER: Donors + Sponsors -->
+      <div class="lg:col-span-1 space-y-6 animate-fadeInUp" style="animation-delay:0.1s">
+        <!-- Event Donors -->
+        <div class="glass-card-enhanced p-6">
+          <h3 class="text-lg font-semibold text-white mb-4">Donors ({{ event_donations|length }})</h3>
+          <div class="space-y-2 max-h-72 overflow-y-auto pr-1">
+            {% if event_donations %}
+              {% for d in event_donations %}
+              <div class="flex items-center gap-3 rounded-lg bg-slate-800/40 px-3 py-2 hover:bg-slate-800/60 transition">
+                <div class="w-7 h-7 rounded-full bg-gradient-to-br from-emerald-500/30 to-cyan-500/30 flex items-center justify-center text-emerald-300 font-bold text-xs shrink-0">
+                  {{ d.donor_name[0]|upper if d.donor_name else 'A' }}
+                </div>
+                <div class="flex-1 min-w-0">
+                  <p class="text-sm text-slate-200 truncate">{{ d.donor_name }}</p>
+                  {% if d.message %}<p class="text-[10px] text-slate-500 truncate">{{ d.message }}</p>{% endif %}
+                </div>
+                <p class="text-sm font-bold text-emerald-300 shrink-0">৳{{ "{:,.0f}".format(d.amount) }}</p>
+              </div>
+              {% endfor %}
+            {% else %}
+              <p class="text-center text-slate-500 py-6 text-sm">No donations yet. Be the first! 🌱</p>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Sponsors -->
+        <div class="glass-card-enhanced p-6">
+          <h3 class="text-lg font-semibold text-white mb-4">🏆 Sponsors</h3>
+          {% if sponsors %}
+            <div class="space-y-3">
+              {% for s in sponsors %}
+              <div class="flex items-center gap-3 rounded-lg bg-slate-800/40 px-3 py-2.5">
+                <div class="w-9 h-9 rounded-lg flex items-center justify-center text-lg shrink-0
+                  {% if s.sponsor_type == 'platinum' %}bg-gradient-to-br from-slate-300/20 to-slate-400/20 text-slate-200
+                  {% elif s.sponsor_type == 'gold' %}bg-gradient-to-br from-amber-500/20 to-yellow-500/20 text-amber-300
+                  {% elif s.sponsor_type == 'silver' %}bg-gradient-to-br from-slate-400/20 to-slate-500/20 text-slate-300
+                  {% else %}bg-gradient-to-br from-orange-700/20 to-orange-800/20 text-orange-400{% endif %}">
+                  {% if s.sponsor_type == 'platinum' %}💎{% elif s.sponsor_type == 'gold' %}🥇{% elif s.sponsor_type == 'silver' %}🥈{% else %}🥉{% endif %}
+                </div>
+                <div class="flex-1">
+                  <p class="text-sm text-slate-200 font-medium">{{ s.sponsor_name }}</p>
+                  <p class="text-[10px] text-slate-500 uppercase">{{ s.sponsor_type }} Sponsor</p>
+                </div>
+                <p class="text-sm font-bold text-amber-300 shrink-0">৳{{ "{:,.0f}".format(s.contribution_bdt) }}</p>
+              </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            <p class="text-sm text-slate-500 text-center py-4">
+              LifeLine is working to bring sponsors for this event! 🎯
+            </p>
+          {% endif %}
+
+          <!-- Admin: Add Sponsor -->
+          {% if current_user and current_user.is_admin %}
+          <div class="mt-4 pt-4 border-t border-slate-700/50">
+            <p class="text-xs text-slate-400 mb-2 font-semibold">Admin: Add Sponsor</p>
+            <form method="POST" action="{{ url_for('admin_add_sponsor', event_id=event.id) }}" class="space-y-2">
+              <input name="sponsor_name" required placeholder="Sponsor name"
+                class="w-full px-3 py-2 rounded-lg bg-[#111827] text-white border border-gray-700 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none">
+              <div class="flex gap-2">
+                <select name="sponsor_type" class="flex-1 px-3 py-2 rounded-lg bg-[#111827] text-white border border-gray-700 text-xs">
+                  <option value="platinum">💎 Platinum</option>
+                  <option value="gold" selected>🥇 Gold</option>
+                  <option value="silver">🥈 Silver</option>
+                  <option value="bronze">🥉 Bronze</option>
+                </select>
+                <input name="contribution_bdt" type="number" min="0" step="500" placeholder="৳ Amount"
+                  class="flex-1 px-3 py-2 rounded-lg bg-[#111827] text-white border border-gray-700 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none">
+              </div>
+              <input name="logo_url" placeholder="Logo URL (optional)"
+                class="w-full px-3 py-2 rounded-lg bg-[#111827] text-white border border-gray-700 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none">
+              <button type="submit" class="w-full py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium transition">Add Sponsor</button>
+            </form>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- RIGHT: Catering Services -->
+      <div class="lg:col-span-1 animate-fadeInUp" style="animation-delay:0.2s">
+        <div class="glass-card-enhanced p-6">
+          <h3 class="text-lg font-semibold text-white mb-4">🍽️ Catering Services</h3>
+
+          <!-- Selected caterers -->
+          {% if catering_selections %}
+          <div class="mb-4">
+            <p class="text-xs text-emerald-300 font-semibold mb-2">Selected for this event:</p>
+            {% for sel in catering_selections %}
+            <div class="flex items-center gap-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 px-3 py-2.5 mb-2">
+              <div class="flex-1 min-w-0">
+                <p class="text-sm text-emerald-200 font-medium">{{ sel.catering.name }}</p>
+                <p class="text-[10px] text-slate-400">{{ sel.catering.cuisine_type }} · ৳{{ sel.catering.price_per_head|int }}/head · {{ sel.guests_count }} guests</p>
+              </div>
+              <p class="text-xs font-bold text-emerald-300 shrink-0">৳{{ "{:,.0f}".format(sel.catering.price_per_head * sel.guests_count) }}</p>
+            </div>
+            {% endfor %}
+          </div>
+          {% endif %}
+
+          <!-- Add more caterers (creator only) -->
+          {% if current_user and current_user.id == event.creator_id %}
+          <div id="cateringBrowser" class="border-t border-slate-700/50 pt-4">
+            <p class="text-xs text-slate-400 font-semibold mb-3">Browse & Add Caterers</p>
+            <div id="cateringList" class="space-y-2 max-h-64 overflow-y-auto pr-1">
+              <p class="text-xs text-slate-500 text-center py-2">Loading...</p>
+            </div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+function setEFAmount(val) {
+  document.getElementById('efAmountInput').value = val;
+  document.querySelectorAll('.ef-amt').forEach(b => b.classList.remove('border-emerald-400','text-emerald-300'));
+  event.target.classList.add('border-emerald-400','text-emerald-300');
+}
+
+function toggleEFPayment() {
+  const method = document.querySelector('input[name="payment_method"]:checked').value;
+  const mobile = document.getElementById('efMobilePay');
+  const card = document.getElementById('efCardPay');
+  const label = document.getElementById('efMobileLabel');
+  if (method === 'card') {
+    mobile.classList.add('hidden');
+    card.classList.remove('hidden');
+  } else {
+    mobile.classList.remove('hidden');
+    card.classList.add('hidden');
+    label.textContent = method === 'nagad' ? "Creator's Nagad Number" : "Creator's bKash Number";
+  }
+}
+
+function efFormatCard(el) {
+  let v = el.value.replace(/\D/g, '').substring(0, 16);
+  el.value = v.replace(/(.{4})/g, '$1 ').trim();
+}
+function efFormatExpiry(el) {
+  let v = el.value.replace(/\D/g, '').substring(0, 4);
+  if (v.length >= 3) v = v.substring(0,2) + '/' + v.substring(2);
+  el.value = v;
+}
+
+</script>
+{% if current_user and current_user.id == event.creator_id %}
+<div id="cateringConfig" data-event-id="{{ event.id }}" data-lat="{{ event.lat|default(0) }}" data-lng="{{ event.lng|default(0) }}" hidden></div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var cfg = document.getElementById('cateringConfig').dataset;
+  var eventId = cfg.eventId;
+  var lat = cfg.lat;
+  var lng = cfg.lng;
+  fetch('/api/catering/nearby?lat=' + lat + '&lng=' + lng)
+    .then(function(r) { return r.json(); })
+    .then(function(caterers) {
+      var container = document.getElementById('cateringList');
+      if (!caterers.length) {
+        container.innerHTML = '<p class="text-xs text-slate-500 text-center py-2">No caterers found nearby.</p>';
+        return;
+      }
+      container.innerHTML = caterers.map(function(c) {
+        return '<form method="POST" action="/events/' + eventId + '/catering" class="rounded-lg bg-slate-800/40 px-3 py-2.5 hover:bg-slate-800/60 transition">' +
+          '<input type="hidden" name="catering_id" value="' + c.id + '">' +
+          '<div class="flex items-center gap-2 mb-1.5">' +
+          '<div class="flex-1">' +
+          '<p class="text-sm text-slate-200 font-medium">' + c.name + '</p>' +
+          '<p class="text-[10px] text-slate-400">' + c.cuisine_type + ' \u00b7 \u09f3' + c.price_per_head + '/head \u00b7 Min ' + c.min_order + '</p>' +
+          '</div>' +
+          '<div class="flex items-center gap-1 text-amber-300 text-xs shrink-0">\u2b50 ' + c.rating + ' <span class="text-slate-500">(' + c.total_reviews + ')</span></div>' +
+          '</div>' +
+          (c.distance_km !== null ? '<p class="text-[10px] text-slate-500 mb-1.5">' + c.distance_km + ' km away \u00b7 ' + c.area + '</p>' : '') +
+          '<div class="flex gap-2">' +
+          '<input name="guests_count" type="number" min="' + c.min_order + '" value="50" placeholder="Guests" class="flex-1 px-2 py-1 rounded bg-[#111827] text-white border border-gray-700 text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none">' +
+          '<button type="submit" class="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium transition">+ Add</button>' +
+          '</div></form>';
+      }).join('');
+    })
+    .catch(function() {
+      document.getElementById('cateringList').innerHTML = '<p class="text-xs text-slate-500">Could not load caterers.</p>';
+    });
+});
+</script>
+{% endif %}
+
+<script>
+document.querySelectorAll('.ef-progress-bar').forEach(function(el) { el.style.width = el.dataset.width + '%'; });
+</script>
+
+<link rel="stylesheet" href="{{ url_for('static', filename='css/home-hero.css') }}">
+{% endblock %}

@@ -167,10 +167,10 @@
       }
 
       .shell {
-        width: min(1060px, 100%);
+        width: min(1240px, 100%);
         margin: 0 auto;
         display: grid;
-        grid-template-columns: 1fr 1.25fr;
+        grid-template-columns: 1fr 1.25fr 1fr;
         gap: 16px;
         align-items: start;
       }
@@ -340,6 +340,67 @@
         flex-wrap: wrap;
       }
 
+      .psy-list {
+        margin-top: 12px;
+        display: grid;
+        gap: 10px;
+      }
+
+      .psy-item {
+        border-radius: 18px;
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        background: rgba(2, 6, 23, 0.3);
+        padding: 12px;
+      }
+
+      .psy-top {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .psy-name {
+        font-weight: 850;
+        line-height: 1.2;
+      }
+
+      .psy-hospital {
+        margin-top: 4px;
+        font-size: 12px;
+        color: var(--muted2);
+      }
+
+      .psy-meta {
+        margin-top: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .stars {
+        display: inline-flex;
+        gap: 2px;
+        align-items: center;
+        font-size: 12px;
+        color: rgba(34, 197, 94, 0.95);
+      }
+
+      .rating-num {
+        margin-left: 6px;
+        font-size: 12px;
+        color: var(--muted);
+        font-weight: 700;
+      }
+
+      .fee {
+        font-size: 12px;
+        font-weight: 850;
+        color: rgba(34, 197, 94, 0.95);
+      }
+
       @media (max-width: 980px) {
         .shell {
           grid-template-columns: 1fr;
@@ -420,6 +481,45 @@
           </div>
 
           <div id="feed"></div>
+        </div>
+
+        <div class="card">
+          <h2>Renowned Psychiatrists</h2>
+          <div class="sub">
+            Book an appointment with verified specialists. Pay first to confirm
+            your slot.
+          </div>
+
+          <div class="psy-list">
+            {% if psychiatrists and psychiatrists|length > 0 %} {% for p in psychiatrists %}
+            <div class="psy-item">
+              <div class="psy-top">
+                <div style="min-width:0">
+                  <div class="psy-name">{{ p.name }}</div>
+                  <div class="psy-hospital">{{ p.hospital }}</div>
+                  <div class="psy-hospital" style="color:#6ee7b7;font-size:10px;margin-top:2px">{{ p.title }}</div>
+                </div>
+                <a class="btn small primary" href="{{ url_for('book_psychiatrist', psychiatrist_id=p.id) }}">Book</a>
+              </div>
+
+              <div class="psy-meta">
+                <div>
+                  <span class="stars" aria-label="Rating">
+                    ★★★★★
+                    <span class="rating-num">{{ "%.1f"|format(p.rating) }}</span>
+                  </span>
+                </div>
+                <div class="fee">৳{{ p.fee_bdt }}+</div>
+              </div>
+            </div>
+            {% endfor %} {% else %}
+            <div class="empty">No psychiatrists configured yet.</div>
+            {% endif %}
+          </div>
+
+          <div style="margin-top: 12px">
+            <a class="btn" href="{{ url_for('psychiatrists_list') }}">View all</a>
+          </div>
         </div>
       </div>
     </div>

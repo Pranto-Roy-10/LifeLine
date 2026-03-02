@@ -544,6 +544,37 @@ class ShopRequest(db.Model):
         }
 
 
+# ------------------ MODEL: Psychiatry Appointment ------------------
+class PsychiatryAppointment(db.Model):
+    __tablename__ = "psychiatry_appointments"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+    psychiatrist_id = db.Column(db.String(50), nullable=False, index=True)
+    psychiatrist_name = db.Column(db.String(255), nullable=False)
+    hospital_name = db.Column(db.String(255), nullable=False)
+    rating = db.Column(db.Float, default=0.0)
+
+    appointment_date = db.Column(db.String(10), nullable=False)  # YYYY-MM-DD
+    appointment_time = db.Column(db.String(5), nullable=False)   # HH:MM
+
+    notes = db.Column(db.Text, nullable=True)
+
+    fee_bdt = db.Column(db.Integer, default=0)
+    platform_fee_bdt = db.Column(db.Integer, default=0)
+    total_bdt = db.Column(db.Integer, default=0)
+
+    payment_method = db.Column(db.String(20), nullable=True)  # stripe, bkash
+    payment_status = db.Column(db.String(30), default="pending_payment", index=True)
+    stripe_session_id = db.Column(db.String(255), nullable=True)
+    paid_at = db.Column(db.DateTime, nullable=True)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    user = db.relationship("User", backref="psychiatry_appointments")
+
+
 def get_trusted_helpers_for_ping(sender_id):
     return User.query.filter(
         User.is_trusted_helper == True,
@@ -1110,6 +1141,88 @@ class EventInterest(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
+# ------------------ DONATION MODEL ------------------
+class Donation(db.Model):
+    __tablename__ = "donations"
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)  # null = anonymous
+    amount = db.Column(db.Float, nullable=False)
+    donor_name = db.Column(db.String(150), default="Anonymous")
+    message = db.Column(db.Text, default="")
+    payment_method = db.Column(db.String(50), default="bkash")  # bkash, card
+    trx_id = db.Column(db.String(100), default="")
+    donation_type = db.Column(db.String(50), default="general")  # general, event
+    event_id = db.Column(db.Integer, db.ForeignKey("event.id"), nullable=True)
+    status = db.Column(db.String(20), default="completed")  # completed, pending
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship("User", backref="donations")
+    event = db.relationship("Event", backref="donations")
+
+
+# ------------------ CATERING SERVICE MODEL ------------------
+class CateringService(db.Model):
+    __tablename__ = "catering_services"
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, default="")
+    cuisine_type = db.Column(db.String(100), default="Mixed")
+    price_per_head = db.Column(db.Float, default=0)
+    min_order = db.Column(db.Integer, default=20)
+    phone = db.Column(db.String(50), default="")
+    rating = db.Column(db.Float, default=4.0)
+    total_reviews = db.Column(db.Integer, default=0)
+    lat = db.Column(db.Float, nullable=True)
+    lng = db.Column(db.Float, nullable=True)
+    area = db.Column(db.String(150), default="")
+    image_url = db.Column(db.String(500), default="")
+    is_active = db.Column(db.Boolean, default=True)
+
+
+# ------------------ EVENT FUND MODEL ------------------
+class EventFund(db.Model):
+    __tablename__ = "event_funds"
+    id = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(db.Integer, db.ForeignKey("event.id"), nullable=False)
+    fund_goal = db.Column(db.Float, default=0)  # target amount in BDT
+    fund_raised = db.Column(db.Float, default=0)  # current amount raised
+    description = db.Column(db.Text, default="")
+    bkash_number = db.Column(db.String(20), default="")  # creator's bKash/Nagad number for receiving funds
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    event = db.relationship("Event", backref=db.backref("fund", uselist=False))
+
+
+# ------------------ EVENT SPONSOR MODEL ------------------
+class EventSponsor(db.Model):
+    __tablename__ = "event_sponsors"
+    id = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(db.Integer, db.ForeignKey("event.id"), nullable=False)
+    sponsor_name = db.Column(db.String(200), nullable=False)
+    sponsor_type = db.Column(db.String(50), default="gold")  # platinum, gold, silver, bronze
+    contribution_bdt = db.Column(db.Float, default=0)
+    logo_url = db.Column(db.String(500), default="")
+    added_by_admin = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    event = db.relationship("Event", backref="sponsors")
+
+
+# ------------------ EVENT CATERING SELECTION ------------------
+class EventCatering(db.Model):
+    __tablename__ = "event_caterings"
+    id = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(db.Integer, db.ForeignKey("event.id"), nullable=False)
+    catering_id = db.Column(db.Integer, db.ForeignKey("catering_services.id"), nullable=False)
+    guests_count = db.Column(db.Integer, default=50)
+    special_requests = db.Column(db.Text, default="")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    event = db.relationship("Event", backref="catering_selections")
+    catering = db.relationship("CateringService")
+
+
 # ------------------ IMPACT MODEL ------------------
 class ImpactLog(db.Model):
     __tablename__ = "impact_log"
@@ -1274,6 +1387,29 @@ def login_required(view_func):
         if current_user() is None:
             next_url = request.path
             return redirect(url_for("login", next=next_url))
+        return view_func(*args, **kwargs)
+
+    return wrapper
+
+
+def _is_admin_user(user) -> bool:
+    try:
+        if not user:
+            return False
+        return bool(getattr(user, "is_admin", False)) or getattr(user, "email", "") == "admin@lifeline.com"
+    except Exception:
+        return False
+
+
+def admin_required(view_func):
+    from functools import wraps
+
+    @wraps(view_func)
+    def wrapper(*args, **kwargs):
+        user = current_user()
+        if not _is_admin_user(user):
+            flash("Access Denied: Admins Only.", "error")
+            return redirect(url_for("home"))
         return view_func(*args, **kwargs)
 
     return wrapper
@@ -1577,7 +1713,16 @@ def home():
         )
     except Exception:
         items = []
-    return render_template("home.html", items=items)
+    # Total donations collected (general only, excludes event fund contributions)
+    try:
+        total_donations = db.session.query(func.coalesce(func.sum(Donation.amount), 0)).filter(Donation.status == "completed", Donation.donation_type != "event").scalar() or 0
+        donation_count = Donation.query.filter(Donation.status == "completed", Donation.donation_type != "event").count()
+        recent_donations = Donation.query.filter(Donation.status == "completed", Donation.donation_type != "event").order_by(Donation.created_at.desc()).limit(5).all()
+    except Exception:
+        total_donations = 0
+        donation_count = 0
+        recent_donations = []
+    return render_template("home.html", items=items, total_donations=total_donations, donation_count=donation_count, recent_donations=recent_donations)
 
 
 @app.route("/debug/session")
@@ -1813,7 +1958,14 @@ def build_otp_email_html(user, code):
 @app.route("/emotional_ping")
 @login_required
 def emotional_ping_placeholder():
-    return render_template("emotional_ping.html")
+    try:
+        from psychiatry_data import list_featured_psychiatrists
+
+        psychiatrists = list_featured_psychiatrists()
+    except Exception:
+        psychiatrists = []
+
+    return render_template("emotional_ping.html", psychiatrists=psychiatrists)
 
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime
@@ -1884,6 +2036,263 @@ def api_emotional_ping():
             db.session.rollback()
         print("EMOTIONAL_PING POST ERROR:", e)
         return jsonify({"error": "Failed to send ping"}), 500
+
+
+@app.route("/psychiatrists")
+@login_required
+def psychiatrists_list():
+    from psychiatry_data import list_featured_psychiatrists
+
+    psychiatrists = list_featured_psychiatrists()
+    return render_template("psychiatrists.html", psychiatrists=psychiatrists)
+
+
+@app.route("/psychiatrists/<string:psychiatrist_id>/book", methods=["GET", "POST"])
+@login_required
+def book_psychiatrist(psychiatrist_id):
+    from psychiatry_data import get_psychiatrist_by_id
+
+    # Slot rules: user must select from predefined dates/times.
+    # Dates are NOT all available; they come from the psychiatrist's schedule,
+    # but are always limited to future-only within the next 14 days.
+    today = datetime.utcnow().date()
+
+    p = get_psychiatrist_by_id(psychiatrist_id)
+    if not p:
+        flash("Psychiatrist not found.", "error")
+        return redirect(url_for("psychiatrists_list"))
+
+    available_weekdays = tuple(getattr(p, "available_weekdays", ()) or ())
+    allowed_dates = []
+    for i in range(1, 15):
+        d = today + timedelta(days=i)
+        if available_weekdays and d.weekday() not in available_weekdays:
+            continue
+        allowed_dates.append(d.isoformat())
+
+    allowed_date_options = []
+    for iso in allowed_dates:
+        try:
+            day_name = datetime.strptime(iso, "%Y-%m-%d").strftime("%a")
+        except Exception:
+            day_name = ""
+        label = f"{day_name} • {iso}" if day_name else iso
+        allowed_date_options.append({"value": iso, "day": day_name, "label": label})
+
+    allowed_times = list(getattr(p, "available_times", None) or [])
+    # Fallback in case availability wasn't configured
+    if not allowed_times:
+        allowed_times = ["10:00", "12:00", "15:00", "17:00"]
+
+    if request.method == "POST":
+        appt_date = (request.form.get("appointment_date") or "").strip()
+        appt_time = (request.form.get("appointment_time") or "").strip()
+        notes = (request.form.get("notes") or "").strip() or None
+
+        if not appt_date or not appt_time:
+            flash("Please choose a date and time.", "error")
+            return render_template(
+                "book_psychiatrist.html",
+                psychiatrist=p,
+                allowed_dates=allowed_dates,
+                allowed_date_options=allowed_date_options,
+                allowed_times=allowed_times,
+            )
+
+        if appt_date not in allowed_dates or appt_time not in allowed_times:
+            flash("Please select a valid slot within the next 2 weeks.", "error")
+            return render_template(
+                "book_psychiatrist.html",
+                psychiatrist=p,
+                allowed_dates=allowed_dates,
+                allowed_date_options=allowed_date_options,
+                allowed_times=allowed_times,
+            )
+
+        # Simple fee model (BDT): doctor fee + small platform fee
+        platform_fee = max(50, int(round(p.fee_bdt * 0.05)))
+        total = int(p.fee_bdt) + int(platform_fee)
+
+        u = current_user()
+        appt = PsychiatryAppointment(
+            user_id=u.id,
+            psychiatrist_id=p.id,
+            psychiatrist_name=p.name,
+            hospital_name=p.hospital,
+            rating=float(p.rating or 0.0),
+            appointment_date=appt_date,
+            appointment_time=appt_time,
+            notes=notes,
+            fee_bdt=int(p.fee_bdt),
+            platform_fee_bdt=int(platform_fee),
+            total_bdt=int(total),
+            payment_status="pending_payment",
+        )
+        db.session.add(appt)
+        db.session.commit()
+
+        return redirect(url_for("pay_psychiatry_appointment", appointment_id=appt.id))
+
+    return render_template(
+        "book_psychiatrist.html",
+        psychiatrist=p,
+        allowed_dates=allowed_dates,
+        allowed_date_options=allowed_date_options,
+        allowed_times=allowed_times,
+    )
+
+
+def _stripe_is_configured() -> bool:
+    return bool(os.getenv("STRIPE_SECRET_KEY"))
+
+
+@app.route("/appointments/<int:appointment_id>/pay", methods=["GET", "POST"])
+@login_required
+def pay_psychiatry_appointment(appointment_id):
+    u = current_user()
+    appt = PsychiatryAppointment.query.get_or_404(appointment_id)
+    if appt.user_id != u.id:
+        flash("Not authorized.", "error")
+        return redirect(url_for("home"))
+
+    stripe_ready = _stripe_is_configured()
+
+    if request.method == "POST":
+        method = (request.form.get("payment_method") or "").strip().lower()
+        if method not in ("stripe", "bkash"):
+            flash("Choose a payment method.", "error")
+            return render_template(
+                "appointment_pay.html", appointment=appt, stripe_ready=stripe_ready
+            )
+
+        if method == "stripe":
+            if not stripe_ready:
+                flash("Stripe payment is not configured on this server.", "error")
+                return render_template(
+                    "appointment_pay.html", appointment=appt, stripe_ready=stripe_ready
+                )
+            return redirect(url_for("pay_psychiatry_appointment_stripe", appointment_id=appt.id))
+
+        # bKash manual payment submit
+        bkash_number = (request.form.get("bkash_number") or "").strip()
+        trx_id = (request.form.get("trx_id") or "").strip().upper()
+        if not bkash_number or not trx_id:
+            flash("Please provide your bKash number and TrxID.", "error")
+            return render_template(
+                "appointment_pay.html", appointment=appt, stripe_ready=stripe_ready
+            )
+
+        appt.payment_method = "bkash"
+        appt.payment_status = "submitted"
+        appt.notes = (appt.notes or "") + f"\n\n[bKash] Number: {bkash_number} | TrxID: {trx_id}"
+        db.session.commit()
+        flash("Payment submitted. We’ll confirm and lock the appointment.", "success")
+        return redirect(url_for("pay_psychiatry_appointment", appointment_id=appt.id))
+
+    return render_template(
+        "appointment_pay.html", appointment=appt, stripe_ready=stripe_ready
+    )
+
+
+@app.route("/appointments/<int:appointment_id>/pay/stripe")
+@login_required
+def pay_psychiatry_appointment_stripe(appointment_id):
+    u = current_user()
+    appt = PsychiatryAppointment.query.get_or_404(appointment_id)
+    if appt.user_id != u.id:
+        flash("Not authorized.", "error")
+        return redirect(url_for("home"))
+
+    if not _stripe_is_configured():
+        flash("Stripe payment is not configured on this server.", "error")
+        return redirect(url_for("pay_psychiatry_appointment", appointment_id=appt.id))
+
+    try:
+        import stripe
+
+        stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
+
+        base_url = request.url_root.rstrip("/")
+        success_url = (
+            base_url
+            + url_for("pay_psychiatry_appointment_stripe_success", appointment_id=appt.id)
+            + "?session_id={CHECKOUT_SESSION_ID}"
+        )
+        cancel_url = base_url + url_for("pay_psychiatry_appointment", appointment_id=appt.id)
+
+        session_obj = stripe.checkout.Session.create(
+            mode="payment",
+            payment_method_types=["card"],
+            line_items=[
+                {
+                    "price_data": {
+                        "currency": os.getenv("STRIPE_CURRENCY", "bdt"),
+                        "product_data": {
+                            "name": f"Psychiatry Appointment — {appt.psychiatrist_name}",
+                            "description": f"{appt.hospital_name} • {appt.appointment_date} {appt.appointment_time}",
+                        },
+                        "unit_amount": int(appt.total_bdt) * 100,
+                    },
+                    "quantity": 1,
+                }
+            ],
+            customer_email=(u.email if getattr(u, "email", None) else None),
+            success_url=success_url,
+            cancel_url=cancel_url,
+            metadata={"appointment_id": str(appt.id)},
+        )
+
+        appt.payment_method = "stripe"
+        appt.stripe_session_id = session_obj.id
+        db.session.commit()
+
+        return redirect(session_obj.url)
+    except Exception as e:
+        flash(f"Stripe error: {e}", "error")
+        return redirect(url_for("pay_psychiatry_appointment", appointment_id=appt.id))
+
+
+@app.route("/appointments/<int:appointment_id>/pay/stripe/success")
+@login_required
+def pay_psychiatry_appointment_stripe_success(appointment_id):
+    u = current_user()
+    appt = PsychiatryAppointment.query.get_or_404(appointment_id)
+    if appt.user_id != u.id:
+        flash("Not authorized.", "error")
+        return redirect(url_for("home"))
+
+    session_id = (request.args.get("session_id") or "").strip()
+    if not session_id:
+        flash("Missing Stripe session.", "error")
+        return redirect(url_for("pay_psychiatry_appointment", appointment_id=appt.id))
+
+    if not _stripe_is_configured():
+        flash("Stripe payment is not configured on this server.", "error")
+        return redirect(url_for("pay_psychiatry_appointment", appointment_id=appt.id))
+
+    try:
+        import stripe
+
+        stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
+        sess = stripe.checkout.Session.retrieve(session_id)
+
+        paid_ok = (
+            getattr(sess, "payment_status", "") == "paid"
+            or getattr(sess, "status", "") == "complete"
+        )
+
+        if paid_ok:
+            appt.payment_status = "paid"
+            appt.paid_at = datetime.utcnow()
+            appt.stripe_session_id = session_id
+            db.session.commit()
+            flash("Payment received. Appointment booked.", "success")
+        else:
+            flash("Payment not completed yet.", "error")
+    except Exception as e:
+        flash(f"Stripe verification error: {e}", "error")
+
+    return redirect(url_for("pay_psychiatry_appointment", appointment_id=appt.id))
     
 @app.route("/api/emotional_ping/<int:ping_id>/listen", methods=["POST"])
 @login_required
@@ -3666,12 +4075,44 @@ def create_event():
         db.session.add(event)
         db.session.commit()
 
+        # Auto-create fundraising goal if provided
+        fund_goal = request.form.get("fund_goal", "0")
+        fund_desc = request.form.get("fund_description", "").strip()
+        try:
+            fund_goal_val = float(fund_goal)
+        except (ValueError, TypeError):
+            fund_goal_val = 0
+        if fund_goal_val > 0:
+            bkash_num = request.form.get("bkash_number", "").strip()
+            fund = EventFund(event_id=event.id, fund_goal=fund_goal_val,
+                             description=fund_desc or f"Help fund '{event.title}'!",
+                             bkash_number=bkash_num)
+            db.session.add(fund)
+
+        # Attach selected catering services
+        catering_ids = request.form.getlist("catering_ids")
+        guests_count = request.form.get("guests_count", "50")
+        try:
+            guests_count_val = int(guests_count)
+        except (ValueError, TypeError):
+            guests_count_val = 50
+        for cid in catering_ids:
+            try:
+                cid_int = int(cid)
+                if CateringService.query.get(cid_int):
+                    ec = EventCatering(event_id=event.id, catering_id=cid_int, guests_count=guests_count_val)
+                    db.session.add(ec)
+            except (ValueError, TypeError):
+                pass
+
+        db.session.commit()
         notify_nearby_users(event)
 
         flash("Event created & nearby users notified!", "success")
-        return redirect(url_for("dashboard"))
+        return redirect(url_for("event_fund_page", event_id=event.id))
 
-    return render_template("create_event.html", google_maps_key=GOOGLE_MAPS_API_KEY)
+    caterers = CateringService.query.filter_by(is_active=True).order_by(CateringService.rating.desc()).all()
+    return render_template("create_event.html", google_maps_key=GOOGLE_MAPS_API_KEY, caterers=caterers)
 
 
 @app.route("/events/<int:event_id>/interest", methods=["POST"])
@@ -3794,6 +4235,316 @@ def update_impact_from_event(event, user):
 
     db.session.add(impact)
     db.session.commit()
+
+
+# ==================== DONATION SYSTEM ====================
+
+@app.route("/donate", methods=["GET", "POST"])
+def donate_page():
+    """General donation page — users can donate to LifeLine for community wellbeing."""
+    user = current_user()
+    if request.method == "POST":
+        amount = float(request.form.get("amount", 0))
+        if amount <= 0:
+            flash("Please enter a valid donation amount.", "danger")
+            return redirect(url_for("donate_page"))
+        donor_name = request.form.get("donor_name", "Anonymous").strip() or "Anonymous"
+        message = request.form.get("message", "").strip()
+        payment_method = request.form.get("payment_method", "bkash")
+        trx_id = request.form.get("trx_id", "").strip()
+
+        donation = Donation(
+            user_id=user.id if user else None,
+            amount=amount,
+            donor_name=donor_name if donor_name != "Anonymous" else (user.name if user else "Anonymous"),
+            message=message,
+            payment_method=payment_method,
+            trx_id=trx_id,
+            donation_type="general",
+        )
+        db.session.add(donation)
+        db.session.commit()
+
+        # Award points for donating — 1 kindness point per ৳100, min 1
+        if user:
+            bonus = max(1, int(amount // 100))
+            user.kindness_score = (user.kindness_score or 0) + bonus
+            user.trust_score = min(100, (user.trust_score or 0) + 1)
+            db.session.commit()
+
+        flash(f"Thank you for your generous donation of ৳{amount:,.0f}!", "success")
+        return redirect(url_for("donate_page"))
+
+    total_donations = db.session.query(func.coalesce(func.sum(Donation.amount), 0)).filter(Donation.status == "completed", Donation.donation_type != "event").scalar() or 0
+    donation_count = Donation.query.filter(Donation.status == "completed", Donation.donation_type != "event").count()
+    recent_donations = Donation.query.filter(Donation.status == "completed", Donation.donation_type != "event").order_by(Donation.created_at.desc()).limit(10).all()
+    return render_template("donate.html", total_donations=total_donations, donation_count=donation_count, recent_donations=recent_donations)
+
+
+@app.route("/events/<int:event_id>/fund", methods=["GET", "POST"])
+@login_required
+def event_fund_page(event_id):
+    """Event fundraising page — users can donate to a specific event."""
+    event = Event.query.get_or_404(event_id)
+    user = current_user()
+
+    # Ensure fund record exists
+    fund = EventFund.query.filter_by(event_id=event_id).first()
+    if not fund:
+        fund = EventFund(event_id=event_id, fund_goal=10000, description="Help fund this community event!")
+        db.session.add(fund)
+        db.session.commit()
+
+    if request.method == "POST":
+        amount = float(request.form.get("amount", 0))
+        if amount <= 0:
+            flash("Please enter a valid amount.", "danger")
+            return redirect(url_for("event_fund_page", event_id=event_id))
+
+        payment_method = request.form.get("payment_method", "bkash")
+        trx_id = request.form.get("trx_id", "").strip()
+        message = request.form.get("message", "").strip()
+
+        donation = Donation(
+            user_id=user.id,
+            amount=amount,
+            donor_name=user.name,
+            message=message,
+            payment_method=payment_method,
+            trx_id=trx_id,
+            donation_type="event",
+            event_id=event_id,
+        )
+        db.session.add(donation)
+
+        fund.fund_raised = (fund.fund_raised or 0) + amount
+        db.session.commit()
+
+        # Award points for event fund contribution — 1 kindness point per ৳100, min 1
+        bonus = max(1, int(amount // 100))
+        user.kindness_score = (user.kindness_score or 0) + bonus
+        user.trust_score = min(100, (user.trust_score or 0) + 1)
+        db.session.commit()
+
+        flash(f"৳{amount:,.0f} donated to '{event.title}'!", "success")
+        return redirect(url_for("event_fund_page", event_id=event_id))
+
+    event_donations = Donation.query.filter_by(event_id=event_id, status="completed").order_by(Donation.created_at.desc()).all()
+    sponsors = EventSponsor.query.filter_by(event_id=event_id).order_by(EventSponsor.contribution_bdt.desc()).all()
+    total_sponsor = sum(s.contribution_bdt for s in sponsors)
+    creator = User.query.get(event.creator_id)
+    catering_sel = EventCatering.query.filter_by(event_id=event_id).all()
+
+    return render_template("event_fund.html", event=event, fund=fund,
+                           event_donations=event_donations, sponsors=sponsors,
+                           total_sponsor=total_sponsor, creator=creator,
+                           catering_selections=catering_sel)
+
+
+@app.route("/events/<int:event_id>/fund/setup", methods=["POST"])
+@login_required
+def event_fund_setup(event_id):
+    """Creator sets the fundraising goal."""
+    event = Event.query.get_or_404(event_id)
+    user = current_user()
+    if event.creator_id != user.id:
+        flash("Only the event creator can set the fund goal.", "danger")
+        return redirect(url_for("event_fund_page", event_id=event_id))
+
+    goal = float(request.form.get("fund_goal", 10000))
+    desc = request.form.get("fund_description", "").strip()
+
+    fund = EventFund.query.filter_by(event_id=event_id).first()
+    if not fund:
+        fund = EventFund(event_id=event_id)
+        db.session.add(fund)
+    fund.fund_goal = goal
+    fund.description = desc or "Help fund this community event!"
+    bkash_num = request.form.get("bkash_number", "").strip()
+    if bkash_num:
+        fund.bkash_number = bkash_num
+    db.session.commit()
+    flash("Fundraising goal updated!", "success")
+    return redirect(url_for("event_fund_page", event_id=event_id))
+
+
+# ==================== CATERING SERVICES ====================
+
+@app.route("/api/catering/nearby")
+@login_required
+def api_nearby_catering():
+    """Return catering services, optionally filtered by proximity."""
+    lat = request.args.get("lat", type=float)
+    lng = request.args.get("lng", type=float)
+    caterers = CateringService.query.filter_by(is_active=True).all()
+    results = []
+    for c in caterers:
+        dist = None
+        if lat and lng and c.lat and c.lng:
+            from math import radians, cos, sin, asin, sqrt
+            dlat = radians(c.lat - lat)
+            dlng = radians(c.lng - lng)
+            a = sin(dlat/2)**2 + cos(radians(lat)) * cos(radians(c.lat)) * sin(dlng/2)**2
+            dist = 6371 * 2 * asin(sqrt(a))
+        results.append({
+            "id": c.id, "name": c.name, "description": c.description,
+            "cuisine_type": c.cuisine_type, "price_per_head": c.price_per_head,
+            "min_order": c.min_order, "phone": c.phone, "rating": c.rating,
+            "total_reviews": c.total_reviews, "area": c.area,
+            "distance_km": round(dist, 1) if dist else None,
+        })
+    results.sort(key=lambda x: x.get("distance_km") or 999)
+    return jsonify(results)
+
+
+@app.route("/events/<int:event_id>/catering", methods=["POST"])
+@login_required
+def add_event_catering(event_id):
+    """Attach a catering service to an event."""
+    event = Event.query.get_or_404(event_id)
+    user = current_user()
+    if event.creator_id != user.id:
+        flash("Only the creator can select catering.", "danger")
+        return redirect(url_for("event_fund_page", event_id=event_id))
+
+    catering_id = int(request.form.get("catering_id", 0))
+    guests_count = int(request.form.get("guests_count", 50))
+    special_requests = request.form.get("special_requests", "").strip()
+
+    if not CateringService.query.get(catering_id):
+        flash("Invalid catering service.", "danger")
+        return redirect(url_for("event_fund_page", event_id=event_id))
+
+    existing = EventCatering.query.filter_by(event_id=event_id, catering_id=catering_id).first()
+    if existing:
+        flash("This caterer is already selected.", "info")
+        return redirect(url_for("event_fund_page", event_id=event_id))
+
+    ec = EventCatering(event_id=event_id, catering_id=catering_id,
+                       guests_count=guests_count, special_requests=special_requests)
+    db.session.add(ec)
+    db.session.commit()
+    flash("Catering service added to event!", "success")
+    return redirect(url_for("event_fund_page", event_id=event_id))
+
+
+# ==================== ADMIN SPONSOR MANAGEMENT ====================
+
+@app.route("/admin/events/<int:event_id>/sponsor", methods=["POST"])
+@login_required
+def admin_add_sponsor(event_id):
+    """Admin adds a sponsor to an event."""
+    user = current_user()
+    if not _is_admin_user(user):
+        flash("Admin access required.", "danger")
+        return redirect(url_for("home"))
+    event = Event.query.get_or_404(event_id)
+
+    sponsor = EventSponsor(
+        event_id=event_id,
+        sponsor_name=request.form.get("sponsor_name", "").strip(),
+        sponsor_type=request.form.get("sponsor_type", "gold"),
+        contribution_bdt=float(request.form.get("contribution_bdt", 0)),
+        logo_url=request.form.get("logo_url", "").strip(),
+    )
+    db.session.add(sponsor)
+    db.session.commit()
+    flash(f"Sponsor '{sponsor.sponsor_name}' added to '{event.title}'!", "success")
+    return redirect(url_for("event_fund_page", event_id=event_id))
+
+
+# ==================== ADMIN DONATIONS & FUNDRAISING ====================
+@app.route("/admin/donations")
+@login_required
+def admin_donations():
+    """Admin page to view/manage all donations, event funds, and sponsors."""
+    user = current_user()
+    if not _is_admin_user(user):
+        flash("Admin access required.", "danger")
+        return redirect(url_for("home"))
+
+    donations = Donation.query.order_by(Donation.created_at.desc()).all()
+    event_funds = EventFund.query.order_by(EventFund.created_at.desc()).all()
+    sponsors = EventSponsor.query.order_by(EventSponsor.created_at.desc()).all()
+
+    # Summary stats
+    total = sum(d.amount for d in donations if d.status == "completed")
+    general_donations = [d for d in donations if d.donation_type != "event"]
+    event_donations = [d for d in donations if d.donation_type == "event"]
+    summary = {
+        "total": total,
+        "count": len(donations),
+        "general_total": sum(d.amount for d in general_donations if d.status == "completed"),
+        "general_count": len(general_donations),
+        "event_total": sum(d.amount for d in event_donations if d.status == "completed"),
+        "event_count": len(event_donations),
+        "sponsor_total": sum(s.contribution_bdt for s in sponsors),
+        "sponsor_count": len(sponsors),
+        "pending_count": len([d for d in donations if d.status == "pending"]),
+    }
+
+    return render_template("admin_donations.html",
+                           donations=donations, event_funds=event_funds,
+                           sponsors=sponsors, summary=summary)
+
+
+@app.route("/admin/donation/<int:donation_id>/<action>", methods=["POST"])
+@login_required
+def admin_donation_action(donation_id, action):
+    """Admin approves, rejects, resets, or deletes a donation."""
+    user = current_user()
+    if not _is_admin_user(user):
+        flash("Admin access required.", "danger")
+        return redirect(url_for("home"))
+
+    donation = Donation.query.get_or_404(donation_id)
+
+    if action == "approve":
+        donation.status = "completed"
+        db.session.commit()
+        flash(f"Donation #{donation_id} approved.", "success")
+    elif action == "reject":
+        donation.status = "rejected"
+        db.session.commit()
+        flash(f"Donation #{donation_id} rejected.", "warning")
+    elif action == "pending":
+        donation.status = "pending"
+        db.session.commit()
+        flash(f"Donation #{donation_id} set back to pending.", "info")
+    elif action == "delete":
+        # If it was an event fund, subtract from fund_raised
+        if donation.donation_type == "event" and donation.event_id and donation.status == "completed":
+            fund = EventFund.query.filter_by(event_id=donation.event_id).first()
+            if fund:
+                fund.fund_raised = max(0, (fund.fund_raised or 0) - donation.amount)
+        db.session.delete(donation)
+        db.session.commit()
+        flash(f"Donation #{donation_id} deleted.", "warning")
+    else:
+        flash("Unknown action.", "danger")
+
+    return redirect(url_for("admin_donations"))
+
+
+@app.route("/admin/sponsor/<int:sponsor_id>/<action>", methods=["POST"])
+@login_required
+def admin_sponsor_action(sponsor_id, action):
+    """Admin deletes a sponsor."""
+    user = current_user()
+    if not _is_admin_user(user):
+        flash("Admin access required.", "danger")
+        return redirect(url_for("home"))
+
+    sponsor = EventSponsor.query.get_or_404(sponsor_id)
+
+    if action == "delete":
+        db.session.delete(sponsor)
+        db.session.commit()
+        flash(f"Sponsor '{sponsor.sponsor_name}' deleted.", "warning")
+    else:
+        flash("Unknown action.", "danger")
+
+    return redirect(url_for("admin_donations"))
 
 
 # ------------------ CHAT PAGES & API ------------------
@@ -4417,7 +5168,7 @@ def submit_manual_payment():
 def admin_dashboard():
     user = current_user()
     # Simple security: Check is_admin flag OR hardcoded email
-    if not user.is_admin and user.email != "admin@lifeline.com":
+    if not _is_admin_user(user):
         flash("Access Denied: Admins Only.", "error")
         return redirect(url_for('home'))
 
@@ -4521,7 +5272,7 @@ def admin_dashboard():
 @login_required
 def admin_payment_action(payment_id, action):
     user = current_user()
-    if not user.is_admin and user.email != "admin@lifeline.com":
+    if not _is_admin_user(user):
         return jsonify({"error": "Unauthorized"}), 403
         
     payment = Payment.query.get_or_404(payment_id)
@@ -4543,6 +5294,238 @@ def admin_payment_action(payment_id, action):
         
     db.session.commit()
     return redirect(url_for('admin_dashboard'))
+
+
+@app.route("/admin/revenue")
+@login_required
+@admin_required
+def admin_revenue():
+    # --- Subscriptions (bKash manual) ---
+    sub_rows = Payment.query.order_by(Payment.created_at.desc()).all()
+
+    # --- Shop/Service requests ---
+    shop_rows = ShopRequest.query.order_by(ShopRequest.created_at.desc()).all()
+
+    # --- Psychiatry appointments ---
+    appt_rows = PsychiatryAppointment.query.order_by(PsychiatryAppointment.created_at.desc()).all()
+
+    transactions = []
+
+    def _fmt_dt(dt):
+        try:
+            return dt.strftime("%Y-%m-%d %H:%M")
+        except Exception:
+            return ""
+
+    # Subscription payments
+    for p in sub_rows:
+        gross = float(p.amount or 0.0)
+        realized = (p.status == "approved")
+        revenue = gross if realized else 0.0
+        profit = revenue
+        transactions.append(
+            {
+                "source": "Subscription",
+                "source_id": p.id,
+                "user_name": p.user.name if p.user else "Unknown",
+                "user_email": p.user.email if p.user else "",
+                "status": p.status,
+                "gross": gross,
+                "revenue": revenue,
+                "profit": profit,
+                "created_at": p.created_at,
+                "created_at_human": _fmt_dt(p.created_at),
+                "details": f"bKash {p.bkash_number} · TrxID {p.trx_id}",
+            }
+        )
+
+    # Shop/service requests (gross is total_cost; revenue/profit is commission)
+    for sr in shop_rows:
+        gross = float(sr.total_cost or 0.0)
+        revenue = float(sr.lifeline_commission or 0.0)
+        profit = revenue
+        transactions.append(
+            {
+                "source": "Service",
+                "source_id": sr.id,
+                "user_name": sr.user.name if sr.user else "Unknown",
+                "user_email": sr.user.email if sr.user else "",
+                "status": sr.status,
+                "gross": gross,
+                "revenue": revenue,
+                "profit": profit,
+                "created_at": sr.created_at,
+                "created_at_human": _fmt_dt(sr.created_at),
+                "details": f"{sr.title} · Shop: {(sr.shop.name if sr.shop else 'Unknown')} · Fee: ৳{int(sr.service_fee or 0)}",
+            }
+        )
+
+    # Psychiatry appointments (gross is total; revenue/profit is platform fee only when paid)
+    for appt in appt_rows:
+        gross = float(appt.total_bdt or 0)
+        realized = (appt.payment_status == "paid")
+        revenue = float(appt.platform_fee_bdt or 0) if realized else 0.0
+        profit = revenue
+        transactions.append(
+            {
+                "source": "Psychiatry",
+                "source_id": appt.id,
+                "user_name": appt.user.name if appt.user else "Unknown",
+                "user_email": appt.user.email if appt.user else "",
+                "status": appt.payment_status,
+                "gross": gross,
+                "revenue": revenue,
+                "profit": profit,
+                "created_at": appt.created_at,
+                "created_at_human": _fmt_dt(appt.created_at),
+                "details": f"{appt.psychiatrist_name} · {appt.hospital_name} · {appt.appointment_date} {appt.appointment_time} · {appt.payment_method or 'n/a'}",
+                "psy_actionable": bool((appt.payment_method == "bkash") and (appt.payment_status == "submitted")),
+            }
+        )
+
+    # Sort: newest first
+    transactions.sort(key=lambda x: x.get("created_at") or datetime.min, reverse=True)
+
+    total_gross = round(sum(t["gross"] for t in transactions), 2)
+    total_revenue = round(sum(t["revenue"] for t in transactions), 2)
+    total_profit = round(sum(t["profit"] for t in transactions), 2)
+
+    by_source = {
+        "Subscription": {"count": 0, "gross": 0.0, "revenue": 0.0, "profit": 0.0},
+        "Service": {"count": 0, "gross": 0.0, "revenue": 0.0, "profit": 0.0},
+        "Psychiatry": {"count": 0, "gross": 0.0, "revenue": 0.0, "profit": 0.0},
+    }
+    for t in transactions:
+        s = t.get("source")
+        if s not in by_source:
+            by_source[s] = {"count": 0, "gross": 0.0, "revenue": 0.0, "profit": 0.0}
+        by_source[s]["count"] += 1
+        by_source[s]["gross"] += float(t["gross"])
+        by_source[s]["revenue"] += float(t["revenue"])
+        by_source[s]["profit"] += float(t["profit"])
+
+    for s in by_source:
+        by_source[s]["gross"] = round(by_source[s]["gross"], 2)
+        by_source[s]["revenue"] = round(by_source[s]["revenue"], 2)
+        by_source[s]["profit"] = round(by_source[s]["profit"], 2)
+
+    summary = {
+        "total_gross": total_gross,
+        "total_revenue": total_revenue,
+        "total_profit": total_profit,
+        "count": len(transactions),
+    }
+
+    return render_template(
+        "admin_revenue.html",
+        summary=summary,
+        by_source=by_source,
+        transactions=transactions[:300],
+    )
+
+
+@app.route("/admin/psychiatry-appointment/<int:appointment_id>/<action>", methods=["POST"])
+@login_required
+@admin_required
+def admin_psychiatry_payment_action(appointment_id, action):
+    appt = PsychiatryAppointment.query.get_or_404(appointment_id)
+    if action == "approve":
+        appt.payment_status = "paid"
+        if not appt.paid_at:
+            appt.paid_at = datetime.utcnow()
+        flash("Appointment payment marked as PAID.", "success")
+    elif action == "reject":
+        appt.payment_status = "rejected"
+        flash("Appointment payment rejected.", "error")
+    else:
+        flash("Invalid action.", "error")
+        return redirect(url_for("admin_revenue"))
+
+    db.session.commit()
+    return redirect(url_for("admin_revenue"))
+
+
+# ───────────── User Orders & Payment Receipts ─────────────
+@app.route("/my/orders")
+@login_required
+def my_orders():
+    user = current_user()
+
+    orders = []
+
+    def _fmt(dt):
+        try:
+            return dt.strftime("%d %b %Y, %I:%M %p")
+        except Exception:
+            return ""
+
+    # Subscription payments
+    for p in Payment.query.filter_by(user_id=user.id).order_by(Payment.created_at.desc()).all():
+        orders.append({
+            "type": "Subscription",
+            "id": p.id,
+            "date": p.created_at,
+            "date_human": _fmt(p.created_at),
+            "status": p.status,
+            "total": float(p.amount or 0),
+            "breakdown": [
+                {"label": "Subscription Fee", "amount": float(p.amount or 0)},
+            ],
+            "method": f"bKash ({p.bkash_number})",
+            "trx_id": p.trx_id or "—",
+            "details": "LifeLine Premium Subscription",
+        })
+
+    # Service / shop requests
+    for sr in ShopRequest.query.filter_by(user_id=user.id).order_by(ShopRequest.created_at.desc()).all():
+        shop_name = sr.shop.name if sr.shop else "Unknown Shop"
+        orders.append({
+            "type": "Service",
+            "id": sr.id,
+            "date": sr.created_at,
+            "date_human": _fmt(sr.created_at),
+            "status": sr.status,
+            "total": float(sr.total_cost or 0),
+            "breakdown": [
+                {"label": "Service Fee", "amount": float(sr.service_fee or 0)},
+                {"label": "Labor Cost", "amount": float(sr.labor_cost or 0)},
+                {"label": "Parts Cost", "amount": float(sr.parts_cost or 0)},
+                {"label": "LifeLine Commission", "amount": float(sr.lifeline_commission or 0)},
+            ],
+            "method": "—",
+            "trx_id": "—",
+            "details": f"{sr.title} · {shop_name}",
+        })
+
+    # Psychiatry appointments
+    for appt in PsychiatryAppointment.query.filter_by(user_id=user.id).order_by(PsychiatryAppointment.created_at.desc()).all():
+        method_label = (appt.payment_method or "—").capitalize()
+        orders.append({
+            "type": "Psychiatry",
+            "id": appt.id,
+            "date": appt.created_at,
+            "date_human": _fmt(appt.created_at),
+            "status": appt.payment_status,
+            "total": float(appt.total_bdt or 0),
+            "breakdown": [
+                {"label": "Consultation Fee", "amount": float(appt.fee_bdt or 0)},
+                {"label": "Platform Fee", "amount": float(appt.platform_fee_bdt or 0)},
+            ],
+            "method": method_label,
+            "trx_id": "—",
+            "details": f"{appt.psychiatrist_name} · {appt.hospital_name} · {appt.appointment_date} {appt.appointment_time}",
+        })
+
+    # Sort newest first
+    orders.sort(key=lambda x: x.get("date") or datetime.min, reverse=True)
+
+    totals = {
+        "count": len(orders),
+        "total_spent": round(sum(o["total"] for o in orders), 2),
+    }
+
+    return render_template("my_orders.html", orders=orders, totals=totals)
+
 
 # ------------------ Impact APIs ------------------
 
@@ -6830,11 +7813,54 @@ def _run_startup_migrations_and_bootstrap_admin():
         print(f"[startup] Admin bootstrap error: {e}")
 
 
+def _seed_catering_services():
+    """Seed sample catering services if none exist."""
+    try:
+        if CateringService.query.count() > 0:
+            return
+        caterers = [
+            CateringService(name="Dhaka Catering House", description="Traditional Bangladeshi feast catering with authentic flavors. Specializing in biryani, kacchi, and polao for large events.",
+                            cuisine_type="Bangladeshi", price_per_head=350, min_order=30, phone="+880-1711-222333",
+                            rating=4.7, total_reviews=128, lat=23.8103, lng=90.4125, area="Panthapath, Dhaka"),
+            CateringService(name="Royal Feast Catering", description="Premium event catering for weddings, corporate events, and community gatherings. Multi-cuisine menu available.",
+                            cuisine_type="Multi-cuisine", price_per_head=500, min_order=50, phone="+880-1812-334455",
+                            rating=4.8, total_reviews=95, lat=23.7946, lng=90.4043, area="Dhanmondi, Dhaka"),
+            CateringService(name="Green Kitchen Catering", description="Healthy and organic catering services. Vegan & vegetarian options available for conscious events.",
+                            cuisine_type="Organic/Vegan", price_per_head=400, min_order=20, phone="+880-1912-445566",
+                            rating=4.5, total_reviews=67, lat=23.7808, lng=90.4126, area="Banani, Dhaka"),
+            CateringService(name="Spice Garden Events", description="South Asian fusion catering. Indian, Thai, and Bangladeshi dishes prepared by experienced chefs.",
+                            cuisine_type="Asian Fusion", price_per_head=450, min_order=25, phone="+880-1611-556677",
+                            rating=4.6, total_reviews=84, lat=23.8726, lng=90.3989, area="Uttara, Dhaka"),
+            CateringService(name="Mom's Kitchen Catering", description="Home-style Bangladeshi cooking at scale. Perfect for community events and charity programs.",
+                            cuisine_type="Home-style", price_per_head=250, min_order=20, phone="+880-1511-667788",
+                            rating=4.9, total_reviews=156, lat=23.7465, lng=90.3763, area="Mirpur, Dhaka"),
+            CateringService(name="Elite Event Catering", description="Luxury catering with live cooking stations, dessert bars, and premium presentation for upscale events.",
+                            cuisine_type="Premium", price_per_head=800, min_order=40, phone="+880-1711-778899",
+                            rating=4.4, total_reviews=52, lat=23.7937, lng=90.4066, area="Gulshan, Dhaka"),
+            CateringService(name="Street Treats Catering", description="Popular street food catering — fuchka, chotpoti, jhalmuri, and more. Great for casual community events.",
+                            cuisine_type="Street Food", price_per_head=150, min_order=30, phone="+880-1811-889900",
+                            rating=4.6, total_reviews=112, lat=23.7329, lng=90.3926, area="Old Dhaka"),
+            CateringService(name="Bhojon Express", description="Fast and affordable bulk catering for charity events, cleanups, and donation drives. Quick setup guaranteed.",
+                            cuisine_type="Budget-friendly", price_per_head=200, min_order=50, phone="+880-1911-990011",
+                            rating=4.3, total_reviews=89, lat=23.8223, lng=90.4198, area="Badda, Dhaka"),
+        ]
+        db.session.add_all(caterers)
+        db.session.commit()
+        print(f"✓ Seeded {len(caterers)} catering services")
+    except Exception as e:
+        print(f"[startup] Catering seed error: {e}")
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+
+
 if __name__ == "__main__":
     debug_mode = os.getenv("FLASK_DEBUG", "0") == "1"
     with app.app_context():
         db.create_all()  # create tables if not exist
         _run_startup_migrations_and_bootstrap_admin()
+        _seed_catering_services()
 
     # Use reloader=False with Socket.IO to avoid double-start issues.
     port = int(os.getenv("PORT", "5000"))

@@ -1,0 +1,304 @@
+{% extends 'base.html' %}
+{% block title %}Admin – Donations & Fundraising{% endblock %}
+
+{% block content %}
+<style>
+  /* Override home-hero fixed height and overlay for admin pages */
+  .admin-page.home-hero { height: auto; min-height: 100vh; align-items: flex-start; }
+  .admin-page.home-hero::before { display: none; }
+</style>
+<div class="w-full min-h-screen home-hero admin-page text-slate-100 px-6 md:px-12 py-10 space-y-8 page-transition">
+  <div class="w-full max-w-7xl mx-auto">
+
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8 stagger-item">
+      <div>
+        <h1 class="text-3xl font-bold text-white">Donations &amp; Fundraising</h1>
+        <p class="text-sm text-slate-400 mt-1">Manage all donations, event funds, and sponsorships.</p>
+      </div>
+      <a href="{{ url_for('admin_dashboard') }}"
+         class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm text-slate-300 transition">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+        Back to Admin
+      </a>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+      <div class="rounded-2xl p-5 card-hover stagger-item border border-emerald-500/40 bg-emerald-950/50">
+        <p class="text-xs text-emerald-400 font-bold uppercase tracking-wider">Total Collected</p>
+        <p class="text-2xl font-extrabold text-emerald-300 mt-2">৳{{ "{:,.0f}".format(summary.total) }}</p>
+        <p class="text-xs text-slate-400 mt-1">{{ summary.count }} donations</p>
+      </div>
+      <div class="rounded-2xl p-5 card-hover stagger-item border border-pink-500/40 bg-pink-950/50">
+        <p class="text-xs text-pink-400 font-bold uppercase tracking-wider">General Donations</p>
+        <p class="text-2xl font-extrabold text-pink-300 mt-2">৳{{ "{:,.0f}".format(summary.general_total) }}</p>
+        <p class="text-xs text-slate-400 mt-1">{{ summary.general_count }} donations</p>
+      </div>
+      <div class="rounded-2xl p-5 card-hover stagger-item border border-cyan-500/40 bg-cyan-950/50">
+        <p class="text-xs text-cyan-400 font-bold uppercase tracking-wider">Event Funds</p>
+        <p class="text-2xl font-extrabold text-cyan-300 mt-2">৳{{ "{:,.0f}".format(summary.event_total) }}</p>
+        <p class="text-xs text-slate-400 mt-1">{{ summary.event_count }} contributions</p>
+      </div>
+      <div class="rounded-2xl p-5 card-hover stagger-item border border-amber-500/40 bg-amber-950/50">
+        <p class="text-xs text-amber-400 font-bold uppercase tracking-wider">Sponsors</p>
+        <p class="text-2xl font-extrabold text-amber-300 mt-2">৳{{ "{:,.0f}".format(summary.sponsor_total) }}</p>
+        <p class="text-xs text-slate-400 mt-1">{{ summary.sponsor_count }} sponsors</p>
+      </div>
+      <div class="rounded-2xl p-5 card-hover stagger-item border border-orange-500/40 bg-orange-950/50">
+        <p class="text-xs text-orange-400 font-bold uppercase tracking-wider">Pending</p>
+        <p class="text-2xl font-extrabold text-orange-300 mt-2">{{ summary.pending_count }}</p>
+        <p class="text-xs text-slate-400 mt-1">awaiting verification</p>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="flex gap-2 mb-6 stagger-item flex-wrap">
+      <button onclick="showTab('all')" id="tab-all" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition bg-emerald-600 text-white">All Donations</button>
+      <button onclick="showTab('general')" id="tab-general" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition bg-slate-800 text-slate-300 hover:bg-slate-700">General</button>
+      <button onclick="showTab('event')" id="tab-event" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition bg-slate-800 text-slate-300 hover:bg-slate-700">Event Funds</button>
+      <button onclick="showTab('pending')" id="tab-pending" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition bg-slate-800 text-slate-300 hover:bg-slate-700">Pending</button>
+      <button onclick="showTab('funds')" id="tab-funds" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition bg-slate-800 text-slate-300 hover:bg-slate-700">Event Fundraisers</button>
+      <button onclick="showTab('sponsors')" id="tab-sponsors" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition bg-slate-800 text-slate-300 hover:bg-slate-700">Sponsors</button>
+    </div>
+
+    <!-- ALL / GENERAL / EVENT / PENDING DONATIONS TABLE -->
+    <div id="panel-all" class="tab-panel">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden stagger-item">
+        <div class="px-6 py-4 border-b border-slate-800 bg-slate-800/50">
+          <h2 class="text-lg font-bold text-white">All Donation Records</h2>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm text-left">
+            <thead class="text-xs text-slate-400 uppercase bg-slate-800/30">
+              <tr>
+                <th class="px-4 py-3">ID</th>
+                <th class="px-4 py-3">Donor</th>
+                <th class="px-4 py-3">Amount</th>
+                <th class="px-4 py-3">Type</th>
+                <th class="px-4 py-3">Event</th>
+                <th class="px-4 py-3">Payment</th>
+                <th class="px-4 py-3">TrxID</th>
+                <th class="px-4 py-3">Status</th>
+                <th class="px-4 py-3">Date</th>
+                <th class="px-4 py-3">Actions</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800">
+              {% for d in donations %}
+              <tr class="donation-row hover:bg-slate-800/40 transition
+                {% if d.donation_type == 'general' %}dtype-general{% else %}dtype-event{% endif %}
+                {% if d.status == 'pending' %}dstatus-pending{% endif %}"
+                data-type="{{ d.donation_type }}" data-status="{{ d.status }}">
+                <td class="px-4 py-3 text-slate-500 font-mono text-xs">#{{ d.id }}</td>
+                <td class="px-4 py-3">
+                  <div>
+                    <p class="text-slate-200 font-medium">{{ d.donor_name }}</p>
+                    {% if d.user %}<p class="text-[10px] text-slate-500">{{ d.user.email }}</p>{% endif %}
+                  </div>
+                </td>
+                <td class="px-4 py-3 font-bold text-emerald-300">৳{{ "{:,.0f}".format(d.amount) }}</td>
+                <td class="px-4 py-3">
+                  {% if d.donation_type == 'general' %}
+                  <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-pink-500/20 text-pink-300 uppercase">General</span>
+                  {% else %}
+                  <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-500/20 text-cyan-300 uppercase">Event</span>
+                  {% endif %}
+                </td>
+                <td class="px-4 py-3 text-xs text-slate-400">
+                  {% if d.event %}{{ d.event.title }}{% else %}—{% endif %}
+                </td>
+                <td class="px-4 py-3">
+                  <span class="text-xs {% if d.payment_method == 'bkash' %}text-pink-300{% elif d.payment_method == 'nagad' %}text-orange-300{% else %}text-sky-300{% endif %}">
+                    {% if d.payment_method == 'bkash' %}📱 bKash{% elif d.payment_method == 'nagad' %}📱 Nagad{% else %}💳 Card{% endif %}
+                  </span>
+                </td>
+                <td class="px-4 py-3 text-xs text-slate-400 font-mono">{{ d.trx_id or '—' }}</td>
+                <td class="px-4 py-3">
+                  {% if d.status == 'completed' %}
+                  <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300">✓ Completed</span>
+                  {% elif d.status == 'pending' %}
+                  <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-500/20 text-orange-300 animate-pulse">⏳ Pending</span>
+                  {% else %}
+                  <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500/20 text-red-300">✗ Rejected</span>
+                  {% endif %}
+                </td>
+                <td class="px-4 py-3 text-xs text-slate-500">{{ d.created_at.strftime('%b %d, %Y %H:%M') if d.created_at else '—' }}</td>
+                <td class="px-4 py-3">
+                  <div class="flex gap-1">
+                    {% if d.status == 'pending' %}
+                    <form method="POST" action="{{ url_for('admin_donation_action', donation_id=d.id, action='approve') }}" class="inline">
+                      <button class="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold transition">✓ Approve</button>
+                    </form>
+                    <form method="POST" action="{{ url_for('admin_donation_action', donation_id=d.id, action='reject') }}" class="inline">
+                      <button class="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold transition">✗ Reject</button>
+                    </form>
+                    {% elif d.status == 'completed' %}
+                    <form method="POST" action="{{ url_for('admin_donation_action', donation_id=d.id, action='pending') }}" class="inline">
+                      <button class="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-slate-300 text-[10px] font-bold transition">↩ Undo</button>
+                    </form>
+                    {% else %}
+                    <form method="POST" action="{{ url_for('admin_donation_action', donation_id=d.id, action='approve') }}" class="inline">
+                      <button class="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold transition">✓ Re-approve</button>
+                    </form>
+                    {% endif %}
+                    <form method="POST" action="{{ url_for('admin_donation_action', donation_id=d.id, action='delete') }}" class="inline"
+                      onsubmit="return confirm('Delete donation #{{ d.id }}?')">
+                      <button class="px-2 py-1 rounded bg-red-900 hover:bg-red-800 text-red-300 text-[10px] font-bold transition">🗑</button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+              {% endfor %}
+              {% if not donations %}
+              <tr><td colspan="10" class="px-6 py-8 text-center text-slate-500">No donations yet.</td></tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- EVENT FUNDRAISERS PANEL -->
+    <div id="panel-funds" class="tab-panel hidden">
+      <div class="space-y-4">
+        {% for f in event_funds %}
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 stagger-item">
+          <div class="flex flex-col md:flex-row justify-between gap-4 mb-4">
+            <div>
+              <h3 class="text-lg font-bold text-white">{{ f.event.title if f.event else 'Unknown Event' }}</h3>
+              <p class="text-xs text-slate-500">Event #{{ f.event_id }} · Created {{ f.created_at.strftime('%b %d, %Y') if f.created_at else '' }}</p>
+            </div>
+            <div class="text-right">
+              <p class="text-xs text-slate-500">bKash Number</p>
+              <p class="text-sm font-bold text-pink-300 font-mono">{{ f.bkash_number or 'Not set' }}</p>
+            </div>
+          </div>
+          <!-- Progress bar -->
+          {% set pct = ((f.fund_raised / f.fund_goal) * 100) if f.fund_goal > 0 else 0 %}
+          {% set pct_clamped = pct if pct <= 100 else 100 %}
+          <div class="w-full bg-slate-700 rounded-full h-3 mb-3 overflow-hidden">
+            <div class="h-3 rounded-full bg-gradient-to-r from-emerald-400 to-cyan-400 ef-progress-bar" data-width="{{ pct_clamped }}"></div>
+          </div>
+          <div class="grid grid-cols-3 gap-4 text-center text-sm">
+            <div>
+              <p class="font-bold text-emerald-300">৳{{ "{:,.0f}".format(f.fund_raised) }}</p>
+              <p class="text-[10px] text-slate-500">Raised</p>
+            </div>
+            <div>
+              <p class="font-bold text-sky-300">৳{{ "{:,.0f}".format(f.fund_goal) }}</p>
+              <p class="text-[10px] text-slate-500">Goal</p>
+            </div>
+            <div>
+              <p class="font-bold {% if pct >= 100 %}text-emerald-300{% elif pct >= 50 %}text-amber-300{% else %}text-orange-300{% endif %}">{{ pct|round(1) }}%</p>
+              <p class="text-[10px] text-slate-500">Progress</p>
+            </div>
+          </div>
+          <p class="text-xs text-slate-400 mt-2">{{ f.description }}</p>
+        </div>
+        {% endfor %}
+        {% if not event_funds %}
+        <div class="text-center py-10 text-slate-500">No event fundraisers created yet.</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- SPONSORS PANEL -->
+    <div id="panel-sponsors" class="tab-panel hidden">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden stagger-item">
+        <div class="px-6 py-4 border-b border-slate-800 bg-slate-800/50">
+          <h2 class="text-lg font-bold text-white">All Event Sponsors</h2>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm text-left">
+            <thead class="text-xs text-slate-400 uppercase bg-slate-800/30">
+              <tr>
+                <th class="px-4 py-3">ID</th>
+                <th class="px-4 py-3">Sponsor</th>
+                <th class="px-4 py-3">Tier</th>
+                <th class="px-4 py-3">Contribution</th>
+                <th class="px-4 py-3">Event</th>
+                <th class="px-4 py-3">Added</th>
+                <th class="px-4 py-3">Actions</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800">
+              {% for s in sponsors %}
+              <tr class="hover:bg-slate-800/40 transition">
+                <td class="px-4 py-3 text-slate-500 font-mono text-xs">#{{ s.id }}</td>
+                <td class="px-4 py-3">
+                  <p class="text-slate-200 font-medium">{{ s.sponsor_name }}</p>
+                  {% if s.logo_url %}<p class="text-[10px] text-slate-500 truncate max-w-[200px]">{{ s.logo_url }}</p>{% endif %}
+                </td>
+                <td class="px-4 py-3">
+                  <span class="px-2 py-0.5 rounded-full text-[10px] font-bold
+                    {% if s.sponsor_type == 'platinum' %}bg-slate-300/20 text-slate-200
+                    {% elif s.sponsor_type == 'gold' %}bg-amber-500/20 text-amber-300
+                    {% elif s.sponsor_type == 'silver' %}bg-slate-400/20 text-slate-300
+                    {% else %}bg-orange-700/20 text-orange-400{% endif %} uppercase">
+                    {% if s.sponsor_type == 'platinum' %}💎{% elif s.sponsor_type == 'gold' %}🥇{% elif s.sponsor_type == 'silver' %}🥈{% else %}🥉{% endif %}
+                    {{ s.sponsor_type }}
+                  </span>
+                </td>
+                <td class="px-4 py-3 font-bold text-amber-300">৳{{ "{:,.0f}".format(s.contribution_bdt) }}</td>
+                <td class="px-4 py-3 text-xs text-slate-400">{{ s.event.title if s.event else '—' }}</td>
+                <td class="px-4 py-3 text-xs text-slate-500">{{ s.created_at.strftime('%b %d, %Y') if s.created_at else '—' }}</td>
+                <td class="px-4 py-3">
+                  <form method="POST" action="{{ url_for('admin_sponsor_action', sponsor_id=s.id, action='delete') }}"
+                    onsubmit="return confirm('Delete sponsor {{ s.sponsor_name }}?')">
+                    <button class="px-2 py-1 rounded bg-red-900 hover:bg-red-800 text-red-300 text-[10px] font-bold transition">🗑 Delete</button>
+                  </form>
+                </td>
+              </tr>
+              {% endfor %}
+              {% if not sponsors %}
+              <tr><td colspan="7" class="px-6 py-8 text-center text-slate-500">No sponsors added yet.</td></tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+function showTab(tab) {
+  // Hide all panels
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+  // Reset all tab buttons
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    b.classList.remove('bg-emerald-600', 'text-white');
+    b.classList.add('bg-slate-800', 'text-slate-300');
+  });
+
+  // Activate selected tab
+  const btn = document.getElementById('tab-' + tab);
+  btn.classList.remove('bg-slate-800', 'text-slate-300');
+  btn.classList.add('bg-emerald-600', 'text-white');
+
+  if (tab === 'funds' || tab === 'sponsors') {
+    document.getElementById('panel-' + tab).classList.remove('hidden');
+  } else {
+    // Show the donations table, but filter rows
+    document.getElementById('panel-all').classList.remove('hidden');
+    document.querySelectorAll('.donation-row').forEach(row => {
+      const type = row.dataset.type;
+      const status = row.dataset.status;
+      let show = true;
+      if (tab === 'general') show = (type === 'general');
+      else if (tab === 'event') show = (type === 'event');
+      else if (tab === 'pending') show = (status === 'pending');
+      row.style.display = show ? '' : 'none';
+    });
+  }
+}
+</script>
+
+<script>
+document.querySelectorAll('.ef-progress-bar').forEach(function(el) { el.style.width = el.dataset.width + '%'; });
+</script>
+
+<link rel="stylesheet" href="{{ url_for('static', filename='css/home-hero.css') }}">
+{% endblock %}

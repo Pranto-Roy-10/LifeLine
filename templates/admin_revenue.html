@@ -1,0 +1,288 @@
+{% extends 'base.html' %}
+{% block title %}Revenue & Payments{% endblock %}
+
+{% block content %}
+<div class="w-full min-h-screen home-hero text-slate-100 px-6 md:px-12 py-10 space-y-8 page-transition">
+  <div class="w-full max-w-7xl mx-auto">
+
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8 stagger-item">
+      <div>
+        <h1 class="text-3xl font-bold text-white">Revenue &amp; Payments</h1>
+        <p class="text-sm text-slate-400 mt-1">All buying activity across subscriptions, services &amp; psychiatry.</p>
+      </div>
+      <a href="{{ url_for('admin_dashboard') }}"
+         class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm text-slate-300 transition">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+        Back to Admin
+      </a>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div class="rounded-2xl glass-card-enhanced p-5 card-hover stagger-item">
+        <p class="text-xs text-slate-400 font-bold uppercase tracking-wider">Total Transactions</p>
+        <p class="text-3xl font-extrabold text-white mt-2">{{ summary.count }}</p>
+      </div>
+      <div class="rounded-2xl glass-card-enhanced p-5 card-hover stagger-item">
+        <p class="text-xs text-slate-400 font-bold uppercase tracking-wider">Gross Value</p>
+        <p class="text-3xl font-extrabold text-white mt-2">৳{{ '%.2f'|format(summary.total_gross) }}</p>
+        <p class="text-xs text-slate-500 mt-1">Total money moved</p>
+      </div>
+      <div class="rounded-2xl glass-card-enhanced p-5 card-hover stagger-item border-l-4 border-emerald-500">
+        <p class="text-xs text-emerald-400 font-bold uppercase tracking-wider">Revenue</p>
+        <p class="text-3xl font-extrabold text-emerald-300 mt-2">৳{{ '%.2f'|format(summary.total_revenue) }}</p>
+        <p class="text-xs text-slate-500 mt-1">LifeLine earned</p>
+      </div>
+      <div class="rounded-2xl glass-card-enhanced p-5 card-hover stagger-item border-l-4 border-sky-500">
+        <p class="text-xs text-sky-400 font-bold uppercase tracking-wider">Profit</p>
+        <p class="text-3xl font-extrabold text-sky-300 mt-2">৳{{ '%.2f'|format(summary.total_profit) }}</p>
+        <p class="text-xs text-slate-500 mt-1">Net earnings</p>
+      </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+      <!-- Revenue by Source (Doughnut) -->
+      <div class="rounded-2xl glass-card-enhanced p-6 card-hover stagger-item">
+        <h2 class="text-sm font-bold text-slate-300 uppercase tracking-wider mb-4">Revenue by Source</h2>
+        <div class="h-56 flex items-center justify-center">
+          <canvas id="revenueBySourceChart"></canvas>
+        </div>
+      </div>
+      <!-- Gross by Source (Doughnut) -->
+      <div class="rounded-2xl glass-card-enhanced p-6 card-hover stagger-item">
+        <h2 class="text-sm font-bold text-slate-300 uppercase tracking-wider mb-4">Gross by Source</h2>
+        <div class="h-56 flex items-center justify-center">
+          <canvas id="grossBySourceChart"></canvas>
+        </div>
+      </div>
+      <!-- Transactions by Source (Pie) -->
+      <div class="rounded-2xl glass-card-enhanced p-6 card-hover stagger-item">
+        <h2 class="text-sm font-bold text-slate-300 uppercase tracking-wider mb-4">Transactions by Source</h2>
+        <div class="h-56 flex items-center justify-center">
+          <canvas id="countBySourceChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- By-Source Table -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden mb-8 card-hover stagger-item">
+      <div class="px-6 py-4 border-b border-slate-800 bg-slate-800/50 flex flex-wrap justify-between items-center gap-2">
+        <h2 class="text-lg font-bold text-white">Breakdown by Source</h2>
+        <span class="text-xs text-slate-500">Subscriptions: approved only · Psychiatry: paid only · Services: commission</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm text-slate-400">
+          <thead class="bg-slate-950 text-slate-500 uppercase text-xs">
+            <tr>
+              <th class="px-6 py-3">Source</th>
+              <th class="px-6 py-3 text-right">Count</th>
+              <th class="px-6 py-3 text-right">Gross</th>
+              <th class="px-6 py-3 text-right">Revenue</th>
+              <th class="px-6 py-3 text-right">Profit</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-800">
+            {% for source_name, row in by_source.items() %}
+            <tr class="hover:bg-slate-800/50 transition">
+              <td class="px-6 py-4 font-medium text-white">
+                <span class="inline-block w-3 h-3 rounded-full mr-2
+                  {% if source_name == 'Subscription' %}bg-amber-400{% elif source_name == 'Service' %}bg-sky-400{% else %}bg-emerald-400{% endif %}"></span>
+                {{ source_name }}
+              </td>
+              <td class="px-6 py-4 text-right text-white font-semibold">{{ row.count }}</td>
+              <td class="px-6 py-4 text-right">৳{{ '%.2f'|format(row.gross) }}</td>
+              <td class="px-6 py-4 text-right text-emerald-400 font-semibold">৳{{ '%.2f'|format(row.revenue) }}</td>
+              <td class="px-6 py-4 text-right text-sky-400 font-semibold">৳{{ '%.2f'|format(row.profit) }}</td>
+            </tr>
+            {% endfor %}
+            <tr class="bg-slate-950/60">
+              <td class="px-6 py-4 font-bold text-white uppercase text-xs">Total</td>
+              <td class="px-6 py-4 text-right text-white font-bold">{{ summary.count }}</td>
+              <td class="px-6 py-4 text-right text-white font-bold">৳{{ '%.2f'|format(summary.total_gross) }}</td>
+              <td class="px-6 py-4 text-right text-emerald-300 font-bold">৳{{ '%.2f'|format(summary.total_revenue) }}</td>
+              <td class="px-6 py-4 text-right text-sky-300 font-bold">৳{{ '%.2f'|format(summary.total_profit) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- All Transactions Table -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden card-hover stagger-item">
+      <div class="px-6 py-4 border-b border-slate-800 bg-slate-800/50 flex justify-between items-center">
+        <h2 class="text-lg font-bold text-white">All Transactions</h2>
+        <span class="bg-slate-700 text-slate-300 text-xs px-2 py-1 rounded-full font-bold">{{ transactions|length }} shown</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm text-slate-400">
+          <thead class="bg-slate-950 text-slate-500 uppercase text-xs">
+            <tr>
+              <th class="px-6 py-3">Time</th>
+              <th class="px-6 py-3">Source</th>
+              <th class="px-6 py-3">User</th>
+              <th class="px-6 py-3">Status</th>
+              <th class="px-6 py-3 text-right">Gross</th>
+              <th class="px-6 py-3 text-right">Revenue</th>
+              <th class="px-6 py-3 text-right">Profit</th>
+              <th class="px-6 py-3">Details</th>
+              <th class="px-6 py-3 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-800">
+            {% for t in transactions %}
+            <tr class="hover:bg-slate-800/50 transition align-top">
+              <td class="px-6 py-4 whitespace-nowrap text-slate-300 text-xs">{{ t.created_at_human }}</td>
+              <td class="px-6 py-4">
+                <span class="inline-flex items-center gap-1.5">
+                  <span class="w-2 h-2 rounded-full
+                    {% if t.source == 'Subscription' %}bg-amber-400{% elif t.source == 'Service' %}bg-sky-400{% else %}bg-emerald-400{% endif %}"></span>
+                  <span class="font-medium text-white">{{ t.source }}</span>
+                </span>
+              </td>
+              <td class="px-6 py-4">
+                <div class="font-medium text-white">{{ t.user_name }}</div>
+                <div class="text-xs text-slate-500">{{ t.user_email }}</div>
+              </td>
+              <td class="px-6 py-4">
+                <span class="px-2 py-1 rounded text-xs font-bold uppercase
+                  {% if t.status in ['approved','paid'] %}bg-emerald-500/10 text-emerald-300
+                  {% elif t.status in ['pending','submitted'] %}bg-amber-500/10 text-amber-300
+                  {% elif t.status in ['rejected','cancelled'] %}bg-rose-500/10 text-rose-300
+                  {% else %}bg-slate-700 text-slate-300{% endif %}">{{ t.status }}</span>
+              </td>
+              <td class="px-6 py-4 text-right whitespace-nowrap text-slate-300">৳{{ '%.2f'|format(t.gross) }}</td>
+              <td class="px-6 py-4 text-right whitespace-nowrap text-emerald-400 font-medium">৳{{ '%.2f'|format(t.revenue) }}</td>
+              <td class="px-6 py-4 text-right whitespace-nowrap text-sky-400 font-medium">৳{{ '%.2f'|format(t.profit) }}</td>
+              <td class="px-6 py-4 max-w-xs">
+                <div class="text-slate-300 font-mono text-xs">#{{ t.source_id }}</div>
+                <div class="text-xs text-slate-500 break-words mt-0.5">{{ t.details }}</div>
+              </td>
+              <td class="px-6 py-4 text-right whitespace-nowrap">
+                {% if t.source == 'Psychiatry' and t.psy_actionable %}
+                  <div class="flex gap-2 justify-end">
+                    <form method="post" action="{{ url_for('admin_psychiatry_payment_action', appointment_id=t.source_id, action='approve') }}">
+                      <button class="btn-sheen bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-lg shadow-emerald-900/20">Approve</button>
+                    </form>
+                    <form method="post" action="{{ url_for('admin_psychiatry_payment_action', appointment_id=t.source_id, action='reject') }}">
+                      <button onclick="return confirm('Reject this payment?')" class="text-rose-400 hover:text-rose-300 hover:underline text-xs font-bold">Reject</button>
+                    </form>
+                  </div>
+                {% else %}
+                  <span class="text-slate-600">—</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+            {% if transactions|length == 0 %}
+            <tr>
+              <td colspan="9" class="px-6 py-12 text-center text-slate-500 italic">No transactions yet.</td>
+            </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Chart data injected from Flask -->
+<script type="application/json" id="revenue-chart-data">
+{
+  "labels": {{ by_source.keys()|list|tojson }},
+  "revenue": {{ by_source.values()|map(attribute='revenue')|list|tojson }},
+  "gross":   {{ by_source.values()|map(attribute='gross')|list|tojson }},
+  "count":   {{ by_source.values()|map(attribute='count')|list|tojson }}
+}
+</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+(() => {
+  const raw = (() => {
+    try { return JSON.parse(document.getElementById('revenue-chart-data').textContent); }
+    catch(e) { return { labels: [], revenue: [], gross: [], count: [] }; }
+  })();
+
+  const COLORS     = ['rgba(251,191,36,0.85)', 'rgba(56,189,248,0.85)', 'rgba(52,211,153,0.85)'];
+  const COLORS_BG  = ['rgba(251,191,36,0.25)', 'rgba(56,189,248,0.25)', 'rgba(52,211,153,0.25)'];
+  const BORDER     = ['rgba(251,191,36,1)',     'rgba(56,189,248,1)',     'rgba(52,211,153,1)'];
+
+  const pieOpts = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { position: 'bottom', labels: { color: '#cbd5e1', padding: 14, usePointStyle: true, pointStyle: 'circle', font: { size: 11 } } },
+      tooltip: {
+        callbacks: {
+          label: ctx => {
+            const val = ctx.parsed;
+            const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+            const pct = total ? ((val / total) * 100).toFixed(1) : 0;
+            return ` ${ctx.label}: ৳${val.toLocaleString()} (${pct}%)`;
+          }
+        }
+      }
+    }
+  };
+
+  const countOpts = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { position: 'bottom', labels: { color: '#cbd5e1', padding: 14, usePointStyle: true, pointStyle: 'circle', font: { size: 11 } } },
+      tooltip: {
+        callbacks: {
+          label: ctx => {
+            const val = ctx.parsed;
+            const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+            const pct = total ? ((val / total) * 100).toFixed(1) : 0;
+            return ` ${ctx.label}: ${val} (${pct}%)`;
+          }
+        }
+      }
+    }
+  };
+
+  // Revenue by Source
+  const revEl = document.getElementById('revenueBySourceChart');
+  if (revEl) {
+    new Chart(revEl, {
+      type: 'doughnut',
+      data: {
+        labels: raw.labels,
+        datasets: [{ data: raw.revenue, backgroundColor: COLORS, borderColor: BORDER, borderWidth: 2, hoverOffset: 8 }]
+      },
+      options: pieOpts
+    });
+  }
+
+  // Gross by Source
+  const grossEl = document.getElementById('grossBySourceChart');
+  if (grossEl) {
+    new Chart(grossEl, {
+      type: 'doughnut',
+      data: {
+        labels: raw.labels,
+        datasets: [{ data: raw.gross, backgroundColor: COLORS, borderColor: BORDER, borderWidth: 2, hoverOffset: 8 }]
+      },
+      options: pieOpts
+    });
+  }
+
+  // Count by Source
+  const cntEl = document.getElementById('countBySourceChart');
+  if (cntEl) {
+    new Chart(cntEl, {
+      type: 'pie',
+      data: {
+        labels: raw.labels,
+        datasets: [{ data: raw.count, backgroundColor: COLORS, borderColor: BORDER, borderWidth: 2, hoverOffset: 8 }]
+      },
+      options: countOpts
+    });
+  }
+})();
+</script>
+{% endblock %}
