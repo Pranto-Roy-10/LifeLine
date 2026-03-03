@@ -293,7 +293,7 @@ block content %}
 
     const respondedBadge =
       isSos && IS_TRUSTED_HELPER && viewerResponded
-        ? `<div style="margin-top: 8px; width: 100%; background: #0f172a; color: #34d399; border: 1px solid rgba(52, 211, 153, 0.35); padding: 8px 10px; border-radius: 10px; font-weight: 700; font-size: 12px; text-align: center;">✓ Responded</div>`
+        ? `<div style="margin-top: 8px; width: 100%; background: ${document.documentElement.classList.contains('dark') ? '#0f172a' : '#ecfdf5'}; color: #34d399; border: 1px solid rgba(52, 211, 153, 0.35); padding: 8px 10px; border-radius: 10px; font-weight: 700; font-size: 12px; text-align: center;">✓ Responded</div>`
         : "";
 
     // Allow resolve if:
@@ -723,7 +723,7 @@ block content %}
         }
         const tails = document.querySelectorAll("div[style*='transform: rotate(45deg)']");
         tails.forEach((t) => {
-          t.style.background = "#0b1220";
+          t.style.background = document.documentElement.classList.contains('dark') ? "#0b1220" : "#ffffff";
           t.style.boxShadow = "0 6px 20px rgba(0,0,0,0.35)";
         });
       } catch (e) {}
@@ -867,7 +867,7 @@ block content %}
             scale: 7 + point.weight * 8,
             fillColor: color,
             fillOpacity: 0.9,
-            strokeColor: "#0f172a",
+            strokeColor: document.documentElement.classList.contains('dark') ? "#0f172a" : "#e2e8f0",
             strokeWeight: 1,
           },
           zIndex: 2,
@@ -879,9 +879,10 @@ block content %}
           },
         });
 
+        const _dark = document.documentElement.classList.contains('dark');
         const infoContent = `
-          <div style="background: #0b1220; color: #e5e7eb; padding: 8px 10px; border-radius: 10px; min-width: 180px; font-size: 13px; line-height: 1.35;">
-            <p style="margin: 0 0 4px 0; font-weight: 800; color: #f8fafc;">${point.name}</p>
+          <div style="background: ${_dark ? '#0b1220' : '#ffffff'}; color: ${_dark ? '#e5e7eb' : '#1e293b'}; padding: 8px 10px; border-radius: 10px; min-width: 180px; font-size: 13px; line-height: 1.35;">
+            <p style="margin: 0 0 4px 0; font-weight: 800; color: ${_dark ? '#f8fafc' : '#0f172a'};">${point.name}</p>
             <p style="margin: 0 0 4px 0; font-weight: 600; color: ${point.is_helper ? "#60a5fa" : "#c084fc"};">
               ${point.is_helper ? "🔵 Verified Helper" : "👤 Community Member"}
             </p>
@@ -1008,7 +1009,7 @@ block content %}
             scale: 7 + point.weight * 8,
             fillColor: color,
             fillOpacity: 0.9,
-            strokeColor: "#0f172a",
+            strokeColor: document.documentElement.classList.contains('dark') ? "#0f172a" : "#e2e8f0",
             strokeWeight: 1
           },
           zIndex: 2,
@@ -1020,9 +1021,10 @@ block content %}
           },
         });
 
+        const _dark2 = document.documentElement.classList.contains('dark');
         const infoContent = `
-          <div style="background: #0b1220; color: #e5e7eb; padding: 8px 10px; border-radius: 10px; min-width: 180px; font-size: 13px; line-height: 1.35;">
-            <p style="margin: 0 0 4px 0; font-weight: 800; color: #f8fafc;">${point.name}</p>
+          <div style="background: ${_dark2 ? '#0b1220' : '#ffffff'}; color: ${_dark2 ? '#e5e7eb' : '#1e293b'}; padding: 8px 10px; border-radius: 10px; min-width: 180px; font-size: 13px; line-height: 1.35;">
+            <p style="margin: 0 0 4px 0; font-weight: 800; color: ${_dark2 ? '#f8fafc' : '#0f172a'};">${point.name}</p>
             <p style="margin: 0 0 4px 0; font-weight: 600; color: ${point.is_helper ? "#60a5fa" : "#c084fc"};">
               ${point.is_helper ? "🔵 Verified Helper" : "👤 Community Member"}
             </p>
@@ -1143,13 +1145,15 @@ block content %}
       mapTypeControl: false,
       streetViewControl: false,
       fullscreenControl: false,
-      styles: [
+      styles: document.documentElement.classList.contains('dark') ? [
         { elementType: "geometry", stylers: [{ color: "#020617" }] },
         { elementType: "labels.text.fill", stylers: [{ color: "#e5e7eb" }] },
         { elementType: "labels.text.stroke", stylers: [{ color: "#020617" }] },
         { featureType: "poi", stylers: [{ visibility: "off" }] },
         { featureType: "road", stylers: [{ color: "#0f172a" }] },
         { featureType: "water", stylers: [{ color: "#020617" }] },
+      ] : [
+        { featureType: "poi", stylers: [{ visibility: "off" }] },
       ],
     });
 

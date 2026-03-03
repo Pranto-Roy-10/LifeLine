@@ -1873,7 +1873,11 @@ def login():
     next_param = request.args.get("next")
     if next_param:
         session["next_after_google"] = next_param
-    return render_template("login.html")
+    google_login_enabled = bool(getattr(firebase_admin, "_apps", None))
+    return render_template(
+        "login.html",
+        google_login_enabled=google_login_enabled,
+    )
 
 
 @app.route("/logout")

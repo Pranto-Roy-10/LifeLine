@@ -197,14 +197,14 @@
       streetViewControl: false,
       fullscreenControl: true,
 
-      styles: [
+      styles: document.documentElement.classList.contains('dark') ? [
         {
           featureType: "all",
           elementType: "labels",
           stylers: [{ visibility: "off" }],
         },
         { elementType: "geometry", stylers: [{ color: "#0b1220" }] },
-      ],
+      ] : [],
     });
 
     map.addListener("click", (e) => {

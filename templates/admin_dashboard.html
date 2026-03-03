@@ -316,20 +316,21 @@ block content %}
   })();
 
   function lifelineChartDefaults() {
+    const _dk = document.documentElement.classList.contains('dark');
     return {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: { labels: { color: "#cbd5e1" } },
+        legend: { labels: { color: _dk ? "#cbd5e1" : "#334155" } },
       },
       scales: {
         x: {
-          ticks: { color: "#94a3b8" },
-          grid: { color: "rgba(148,163,184,0.12)" },
+          ticks: { color: _dk ? "#94a3b8" : "#64748b" },
+          grid: { color: _dk ? "rgba(148,163,184,0.12)" : "#e2e8f0" },
         },
         y: {
-          ticks: { color: "#94a3b8" },
-          grid: { color: "rgba(148,163,184,0.12)" },
+          ticks: { color: _dk ? "#94a3b8" : "#64748b" },
+          grid: { color: _dk ? "rgba(148,163,184,0.12)" : "#e2e8f0" },
         },
       },
     };
@@ -396,13 +397,13 @@ block content %}
             ...lifelineChartDefaults().scales,
             x: {
               stacked: false,
-              ticks: { color: "#94a3b8" },
-              grid: { color: "rgba(148,163,184,0.12)" },
+              ticks: { color: document.documentElement.classList.contains('dark') ? "#94a3b8" : "#64748b" },
+              grid: { color: document.documentElement.classList.contains('dark') ? "rgba(148,163,184,0.12)" : "#e2e8f0" },
             },
             y: {
               beginAtZero: true,
-              ticks: { color: "#94a3b8" },
-              grid: { color: "rgba(148,163,184,0.12)" },
+              ticks: { color: document.documentElement.classList.contains('dark') ? "#94a3b8" : "#64748b" },
+              grid: { color: document.documentElement.classList.contains('dark') ? "rgba(148,163,184,0.12)" : "#e2e8f0" },
             },
           },
         },

@@ -49,12 +49,12 @@ new Chart(ctx, {
     aspectRatio: 3,
     plugins: {
       legend: {
-        labels: { color: "white" }
+        labels: { color: document.documentElement.classList.contains('dark') ? "white" : "#334155" }
       }
     },
     scales: {
-      x: { ticks: { color: "white" } },
-      y: { ticks: { color: "white" } }
+      x: { ticks: { color: document.documentElement.classList.contains('dark') ? "white" : "#64748b" } },
+      y: { ticks: { color: document.documentElement.classList.contains('dark') ? "white" : "#64748b" } }
     }
   }
 });

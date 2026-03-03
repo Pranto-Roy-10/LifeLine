@@ -1,0 +1,1057 @@
+/* ============================================================
+   LIFELINE THEME SYSTEM
+   ============================================================
+   Default : LIGHT  (fresh, lively, community-focused)
+   html.dark: DARK   (original design — slate/navy)
+
+   The init script in <head> adds .dark before first paint
+   when localStorage says "dark", so NO flash occurs.
+   ============================================================ */
+
+/* ─────────────────────────────────────
+   TRANSITION  (only while toggling)
+   ───────────────────────────────────── */
+html.theme-transition,
+html.theme-transition *,
+html.theme-transition *::before,
+html.theme-transition *::after {
+  transition: background-color 0.35s ease,
+              color 0.25s ease,
+              border-color 0.35s ease,
+              box-shadow 0.35s ease,
+              background-image 0.35s ease !important;
+}
+
+/* ═════════════════════════════════════
+   1.  PAGE / BODY  BACKGROUND
+   ═════════════════════════════════════ */
+/* Green base on <html> so body can be transparent */
+html:not(.dark) {
+  background-color: #ecfdf5 !important;
+}
+html:not(.dark) body {
+  background-color: transparent !important;
+  background-image: none !important;
+  color: #1e293b !important;
+  position: relative;
+  min-height: 100vh;
+  isolation: isolate;  /* stacking-context so z-index:-1 blobs stay ABOVE html bg */
+}
+
+/* ---------- Animated floating gradient blobs ----------
+   Render via a real DOM layer (.site-bg-blobs) so it can't be
+   overridden by other pseudo-element rules.
+   --------------------------------------------------------- */
+html:not(.dark) .site-bg-blobs {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: transparent;
+}
+
+/* Ensure app content paints above the background layer */
+html:not(.dark) .top-nav { z-index: 1000; }
+html:not(.dark) main,
+html:not(.dark) footer {
+  position: relative;
+  z-index: 1;
+}
+html:not(.dark) .page-shell,
+html:not(.dark) main {
+  background-color: transparent !important;
+}
+html:not(.dark) .site-bg-blobs::before,
+html:not(.dark) .site-bg-blobs::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.72;
+}
+/* Blob A — green / emerald, top-left */
+html:not(.dark) .site-bg-blobs::before {
+  width: 60vw;
+  height: 60vw;
+  max-width: 850px;
+  max-height: 850px;
+  top: -14%;
+  left: -16%;
+  background: radial-gradient(circle, rgba(16,185,129,0.30), rgba(52,211,153,0.14) 55%, transparent 80%);
+  animation: floatBlobA 18s ease-in-out infinite alternate;
+}
+/* Blob B — sky / blue, bottom-right */
+html:not(.dark) .site-bg-blobs::after {
+  width: 55vw;
+  height: 55vw;
+  max-width: 750px;
+  max-height: 750px;
+  bottom: -12%;
+  right: -14%;
+  background: radial-gradient(circle, rgba(56,189,248,0.24), rgba(96,165,250,0.10) 55%, transparent 80%);
+  animation: floatBlobB 22s ease-in-out infinite alternate;
+}
+
+@keyframes floatBlobA {
+  0%   { transform: translate(0, 0) scale(1); }
+  33%  { transform: translate(8vw, 12vh) scale(1.08); }
+  66%  { transform: translate(-4vw, 6vh) scale(0.95); }
+  100% { transform: translate(5vw, -5vh) scale(1.04); }
+}
+@keyframes floatBlobB {
+  0%   { transform: translate(0, 0) scale(1); }
+  33%  { transform: translate(-6vw, -10vh) scale(1.05); }
+  66%  { transform: translate(5vw, -4vh) scale(0.92); }
+  100% { transform: translate(-3vw, 8vh) scale(1.02); }
+}
+
+/* ═════════════════════════════════════
+   2.  NAVIGATION BAR
+   ═════════════════════════════════════ */
+html:not(.dark) .top-nav {
+  background: rgba(236,253,245,0.80) !important;
+  background-image: none !important;
+  backdrop-filter: blur(18px) saturate(1.8) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(1.8) !important;
+  border-bottom: 1px solid rgba(167,243,208,0.35) !important;
+  box-shadow: 0 1px 8px rgba(16,185,129,0.06) !important;
+}
+html:not(.dark) .nav-brand  { color: #0f172a !important; }
+html:not(.dark) .nav-title  { color: #0f172a !important; }
+html:not(.dark) .nav-subtitle { color: #64748b !important; }
+
+html:not(.dark) .nav-link   { color: #334155 !important; }
+html:not(.dark) .nav-link:hover {
+  color: #059669 !important;
+  border-color: rgba(16,185,129,0.25) !important;
+  background: rgba(16,185,129,0.06) !important;
+}
+
+html:not(.dark) .nav-btn {
+  border-color: #cbd5e1 !important;
+  background: rgba(0,0,0,0.02) !important;
+  color: #334155 !important;
+}
+html:not(.dark) .nav-btn:hover {
+  border-color: rgba(16,185,129,0.4) !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.06) !important;
+}
+
+/* Keep accent buttons coloured */
+html:not(.dark) .nav-btn--sos {
+  color: #fff !important;
+  background: linear-gradient(120deg, #ff4d4f, #f97373) !important;
+  border-color: rgba(244,63,94,0.55) !important;
+}
+html:not(.dark) .nav-btn--upgrade {
+  color: #0b132b !important;
+  background: linear-gradient(90deg, #f59e0b, #ef4444) !important;
+}
+html:not(.dark) .nav-btn--ghost {
+  background: rgba(0,0,0,0.03) !important;
+  border-color: #cbd5e1 !important;
+  color: #334155 !important;
+}
+
+html:not(.dark) .nav-icon-btn {
+  border-color: #cbd5e1 !important;
+  background: rgba(0,0,0,0.02) !important;
+  color: #334155 !important;
+}
+html:not(.dark) .nav-icon-btn:hover {
+  border-color: rgba(16,185,129,0.4) !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.06) !important;
+}
+
+html:not(.dark) .nav-profile {
+  border-color: #cbd5e1 !important;
+  background: rgba(0,0,0,0.02) !important;
+  color: #334155 !important;
+}
+html:not(.dark) .nav-pill {
+  border-color: #cbd5e1 !important;
+  color: #334155 !important;
+  background: rgba(0,0,0,0.03) !important;
+}
+html:not(.dark) .nav-pill--accent {
+  border-color: rgba(16,185,129,0.4) !important;
+  color: #059669 !important;
+  background: rgba(16,185,129,0.06) !important;
+}
+html:not(.dark) .nav-pill--premium {
+  color: #7c3aed !important;
+  background: linear-gradient(120deg, #f9a8d4, #c4b5fd) !important;
+  border-color: rgba(196,181,253,0.5) !important;
+}
+
+/* ═════════════════════════════════════
+   3.  DROPDOWN MENUS
+   ═════════════════════════════════════ */
+html:not(.dark) #notif-dropdown,
+html:not(.dark) #user-menu-dropdown {
+  background: rgba(236,253,245,0.90) !important;
+  backdrop-filter: blur(16px) saturate(1.5) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(1.5) !important;
+  border-color: rgba(226,232,240,0.6) !important;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.08) !important;
+  --tw-ring-color: rgba(0,0,0,0.04) !important;
+}
+html:not(.dark) #notif-dropdown [class*="bg-slate-8"],
+html:not(.dark) #user-menu-dropdown [class*="bg-slate-8"],
+html:not(.dark) #user-menu-dropdown .backdrop-blur-sm {
+  background: #f8fafc !important;
+}
+html:not(.dark) #notif-dropdown [class*="border-slate"],
+html:not(.dark) #user-menu-dropdown [class*="border-slate"],
+html:not(.dark) #user-menu-dropdown [class*="border-b"] {
+  border-color: #e2e8f0 !important;
+}
+html:not(.dark) #notif-list {
+  background: #ffffff !important;
+}
+html:not(.dark) #notif-list a:hover,
+html:not(.dark) #user-menu-dropdown a:hover {
+  background: #f1f5f9 !important;
+}
+
+/* ═════════════════════════════════════
+   4.  CARDS & PANELS
+   ═════════════════════════════════════ */
+html:not(.dark) .glass-card,
+html:not(.dark) .glass-card-enhanced {
+  background: rgba(236,253,245,0.72) !important;
+  backdrop-filter: blur(12px) saturate(1.4) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(1.4) !important;
+  border-color: rgba(167,243,208,0.5) !important;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.04), 0 1px 3px rgba(16,185,129,0.06) !important;
+}
+html:not(.dark) .glass-card-enhanced:hover {
+  border-color: #34d399 !important;
+  box-shadow: 0 8px 24px rgba(16,185,129,0.10) !important;
+}
+
+html:not(.dark) .live-panel {
+  background: rgba(236,253,245,0.68) !important;
+  backdrop-filter: blur(14px) saturate(1.3) !important;
+  -webkit-backdrop-filter: blur(14px) saturate(1.3) !important;
+  border-color: rgba(209,250,229,0.55) !important;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.04) !important;
+}
+html:not(.dark) .live-panel::after {
+  background:
+    radial-gradient(circle at 80% 0%, rgba(16,185,129,0.05), transparent 42%),
+    radial-gradient(circle at 20% 100%, rgba(56,189,248,0.04), transparent 42%) !important;
+}
+
+html:not(.dark) .live-card {
+  background: rgba(248,250,252,0.8) !important;
+  border-color: rgba(209,250,229,0.5) !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.03) !important;
+}
+html:not(.dark) .skeleton-card {
+  background: rgba(240,253,244,0.5) !important;
+  border-color: rgba(16,185,129,0.2) !important;
+}
+
+html:not(.dark) .stat-chip {
+  background: rgba(16,185,129,0.08) !important;
+  border-color: rgba(16,185,129,0.2) !important;
+  color: #059669 !important;
+}
+html:not(.dark) .stat-chip.live {
+  background: linear-gradient(90deg,rgba(16,185,129,0.10),rgba(59,130,246,0.08)) !important;
+  border-color: rgba(16,185,129,0.35) !important;
+}
+
+/* ═════════════════════════════════════
+   5.  HOME / HERO
+   ═════════════════════════════════════ */
+html:not(.dark) .home-hero {
+  background: transparent !important;
+  background-image: none !important;
+  background-color: transparent !important;
+}
+html:not(.dark) .home-hero .hero-backdrop,
+html:not(.dark) .hero-backdrop {
+  display: none !important;
+}
+html:not(.dark) .hero-glow-a {
+  background: radial-gradient(circle, rgba(16,185,129,0.12), transparent 70%) !important;
+}
+html:not(.dark) .hero-glow-b {
+  background: radial-gradient(circle, rgba(56,189,248,0.12), transparent 70%) !important;
+}
+html:not(.dark) .hero-canvas {
+  display: none !important;
+}
+
+/* Remove visual breaks between sections so background is seamless */
+html:not(.dark) section[class*="border-t"] {
+  border-top-color: transparent !important;
+}
+/* Force gradient section wrappers fully transparent */
+html:not(.dark) section[class*="bg-gradient-to"] {
+  background-image: none !important;
+  background-color: transparent !important;
+}
+
+/* Hero text */
+html:not(.dark) .home-hero h1,
+html:not(.dark) .home-hero h2 {
+  color: #0f172a !important;
+}
+html:not(.dark) .home-hero h1 [class*="text-emerald"],
+html:not(.dark) .home-hero [class*="gradient-animate"] {
+  color: #047857 !important;
+}
+html:not(.dark) .home-hero p[class*="text-slate-3"] {
+  color: #475569 !important;
+}
+
+/* Emerald-300/200 text — too faint on light backgrounds */
+html:not(.dark) [class*="text-emerald-300"] {
+  color: #059669 !important;
+}
+html:not(.dark) [class*="text-emerald-200"] {
+  color: #047857 !important;
+}
+html:not(.dark) [class*="text-sky-300"] {
+  color: #0284c7 !important;
+}
+html:not(.dark) [class*="text-amber-300"] {
+  color: #d97706 !important;
+}
+html:not(.dark) [class*="text-violet-300"] {
+  color: #7c3aed !important;
+}
+html:not(.dark) [class*="text-cyan-300"] {
+  color: #0891b2 !important;
+}
+html:not(.dark) [class*="text-rose-300"] {
+  color: #e11d48 !important;
+}
+html:not(.dark) [class*="text-rose-400"] {
+  color: #e11d48 !important;
+}
+html:not(.dark) [class*="text-amber-400"] {
+  color: #d97706 !important;
+}
+html:not(.dark) [class*="text-dbeafe"],
+html:not(.dark) [class*="text-[#dbeafe]"] {
+  color: #1e40af !important;
+}
+/* More light-on-dark accent colors that need darkening */
+html:not(.dark) [class*="text-amber-200"] { color: #b45309 !important; }
+html:not(.dark) [class*="text-blue-200"]  { color: #1d4ed8 !important; }
+html:not(.dark) [class*="text-blue-300"]  { color: #2563eb !important; }
+html:not(.dark) [class*="text-sky-200"]   { color: #0369a1 !important; }
+html:not(.dark) [class*="text-indigo-200"]{ color: #4338ca !important; }
+html:not(.dark) [class*="text-indigo-300"]{ color: #4f46e5 !important; }
+html:not(.dark) [class*="text-purple-200"]{ color: #7c3aed !important; }
+html:not(.dark) [class*="text-purple-300"]{ color: #7c3aed !important; }
+
+/* ═════════════════════════════════════
+   6.  BUTTONS  (accent colours stay)
+   ═════════════════════════════════════ */
+/* btn-primary  — keep as-is (green) */
+html:not(.dark) .btn-secondary {
+  background: rgba(16,185,129,0.08) !important;
+  border-color: rgba(16,185,129,0.45) !important;
+  color: #059669 !important;
+}
+html:not(.dark) .btn-secondary:hover {
+  background: rgba(16,185,129,0.15) !important;
+}
+
+html:not(.dark) .btn-ghost {
+  background: rgba(56,189,248,0.06) !important;
+  border-color: rgba(56,189,248,0.35) !important;
+  color: #0284c7 !important;
+}
+html:not(.dark) .btn-ghost:hover {
+  background: rgba(56,189,248,0.12) !important;
+}
+
+html:not(.dark) .btn-map {
+  background: rgba(0,0,0,0.03) !important;
+  border-color: #cbd5e1 !important;
+  color: #334155 !important;
+}
+html:not(.dark) .btn-map:hover {
+  background: rgba(0,0,0,0.06) !important;
+  border-color: #94a3b8 !important;
+}
+
+/* Action-card sheen */
+html:not(.dark) .btn-sheen {
+  background: rgba(236,253,245,0.72) !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+  border-color: rgba(226,232,240,0.7) !important;
+  color: #1e293b !important;
+}
+/* Override main.css L757 which sets color: #f8fafc !important */
+html:not(.dark) .btn-sheen > p.font-semibold:not(.text-xs) {
+  color: #1e293b !important;
+}
+html:not(.dark) .btn-sheen > p {
+  color: #1e293b !important;
+}
+html:not(.dark) .btn-sheen:hover {
+  box-shadow: 0 8px 28px rgba(16,185,129,0.10), 0 2px 8px rgba(0,0,0,0.04) !important;
+  border-color: #a7f3d0 !important;
+  background: rgba(240,253,244,0.85) !important;
+}
+html:not(.dark) .btn-sheen:hover p[class*="group-hover:text-white"] {
+  color: #0f172a !important;
+}
+html:not(.dark) .btn-sheen:hover p[class*="group-hover:text-emerald-200"] {
+  color: #047857 !important;
+}
+html:not(.dark) .btn-sheen:hover p[class*="group-hover:text-slate-300"] {
+  color: #475569 !important;
+}
+/* Catch Tailwind's actual generated hover-state via broader approach */
+html:not(.dark) .group:hover [class*="group-hover:text-white"] {
+  color: #0f172a !important;
+}
+html:not(.dark) .group:hover [class*="group-hover:text-emerald-200"] {
+  color: #047857 !important;
+}
+html:not(.dark) .group:hover [class*="group-hover:text-slate-300"] {
+  color: #475569 !important;
+}
+
+/* ═════════════════════════════════════
+   7.  FORMS / INPUTS
+   ═════════════════════════════════════ */
+html:not(.dark) .form-input,
+html:not(.dark) input:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="hidden"]):not([type="range"]):not([type="color"]),
+html:not(.dark) select,
+html:not(.dark) textarea {
+  background: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #1e293b !important;
+}
+html:not(.dark) .form-input:focus,
+html:not(.dark) input:focus:not([type="checkbox"]):not([type="radio"]),
+html:not(.dark) select:focus,
+html:not(.dark) textarea:focus {
+  background: #ffffff !important;
+  border-color: #10b981 !important;
+  box-shadow: 0 0 0 3px rgba(16,185,129,0.12) !important;
+}
+html:not(.dark) input::placeholder,
+html:not(.dark) textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* Autofill */
+html:not(.dark) input:-webkit-autofill,
+html:not(.dark) input:-webkit-autofill:hover,
+html:not(.dark) input:-webkit-autofill:focus,
+html:not(.dark) textarea:-webkit-autofill,
+html:not(.dark) textarea:-webkit-autofill:hover,
+html:not(.dark) textarea:-webkit-autofill:focus,
+html:not(.dark) select:-webkit-autofill,
+html:not(.dark) select:-webkit-autofill:hover,
+html:not(.dark) select:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 50px #f8fafc inset !important;
+  -webkit-text-fill-color: #1e293b !important;
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 0 0 50px #f8fafc inset !important;
+  transition: background-color 9999s ease-in-out 0s !important;
+}
+
+html:not(.dark) select option {
+  background-color: #ffffff !important;
+  color: #1e293b !important;
+}
+
+/* ═════════════════════════════════════
+   8.  FOOTER
+   ═════════════════════════════════════ */
+html:not(.dark) footer,
+html:not(.dark) footer[class*="bg-slate"] {
+  background-color: rgba(236,253,245,0.75) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border-top-color: rgba(209,250,229,0.5) !important;
+}
+html:not(.dark) footer p {
+  color: #64748b !important;
+}
+
+/* ═════════════════════════════════════
+   9.  MODALS  (SOS, generic)
+   ═════════════════════════════════════ */
+html:not(.dark) #sos-call-modal > .absolute {
+  background-color: rgba(0,0,0,0.35) !important;
+}
+html:not(.dark) #sos-call-modal [class*="bg-slate-900"] {
+  background-color: #ffffff !important;
+}
+html:not(.dark) #sos-call-modal [class*="bg-slate-800"] {
+  background-color: #f1f5f9 !important;
+}
+
+/* ═════════════════════════════════════
+   10. FLASH MESSAGES
+   ═════════════════════════════════════ */
+html:not(.dark) [class*="bg-rose-500/10"] {
+  background-color: rgba(244,63,94,0.08) !important;
+}
+html:not(.dark) [class*="text-rose-200"] {
+  color: #be123c !important;
+}
+html:not(.dark) [class*="bg-emerald-500/10"] {
+  background-color: rgba(16,185,129,0.08) !important;
+}
+html:not(.dark) [class*="text-emerald-200"] {
+  color: #047857 !important;
+}
+
+/* ═════════════════════════════════════
+   11. SCROLLBARS
+   ═════════════════════════════════════ */
+html:not(.dark) ::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+html:not(.dark) ::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+html:not(.dark) ::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* ═════════════════════════════════════
+   12. CHAT PAGES
+   ═════════════════════════════════════ */
+/* Chat DM page (position:fixed fullscreen — blobs can't show through, so use matching bg) */
+html:not(.dark) .chat-fullpage-container {
+  background:
+    radial-gradient(circle at 15% 20%, rgba(16,185,129,0.10), transparent 30%),
+    radial-gradient(circle at 80% 10%, rgba(56,189,248,0.07), transparent 32%),
+    radial-gradient(circle at 85% 75%, rgba(16,185,129,0.06), transparent 35%),
+    #ecfdf5 !important;
+}
+html:not(.dark) .chat-sidebar {
+  background: rgba(236,253,245,0.65) !important;
+  backdrop-filter: blur(12px) saturate(1.3) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(1.3) !important;
+  border-color: rgba(209,250,229,0.5) !important;
+}
+html:not(.dark) .chat-sidebar-header {
+  background: rgba(236,253,245,0.75) !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+  border-color: rgba(209,250,229,0.5) !important;
+}
+html:not(.dark) .chat-main {
+  background: transparent !important;
+}
+html:not(.dark) .chat-header-modern {
+  background: rgba(236,253,245,0.75) !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+  border-color: rgba(209,250,229,0.5) !important;
+}
+html:not(.dark) .chat-input-container {
+  background: rgba(236,253,245,0.80) !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+  border-color: rgba(209,250,229,0.5) !important;
+}
+html:not(.dark) .chat-input-modern {
+  background: rgba(248,250,252,0.9) !important;
+  border-color: #cbd5e1 !important;
+  color: #1e293b !important;
+}
+html:not(.dark) .chat-message.received {
+  background: rgba(255,255,255,0.8) !important;
+  border: 1px solid rgba(209,250,229,0.5) !important;
+  color: #1e293b !important;
+}
+html:not(.dark) .chat-message.sent {
+  background: linear-gradient(135deg, #d1fae5, #a7f3d0) !important;
+  color: #064e3b !important;
+}
+html:not(.dark) .chat-message .meta {
+  color: #64748b !important;
+}
+
+/* Chat index (normal page flow — blobs show through) */
+html:not(.dark) .chat-index-fullpage {
+  background: transparent !important;
+}
+html:not(.dark) .chat-index-fullpage::before {
+  display: none !important;
+}
+html:not(.dark) .chat-index-container {
+  color: #1e293b !important;
+}
+html:not(.dark) .chat-index-header {
+  background: rgba(236,253,245,0.75) !important;
+  backdrop-filter: blur(12px) saturate(1.3) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(1.3) !important;
+  border-color: rgba(209,250,229,0.5) !important;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.04) !important;
+}
+html:not(.dark) .conversation-card {
+  background: rgba(236,253,245,0.72) !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+  border-color: rgba(209,250,229,0.5) !important;
+}
+html:not(.dark) .conversation-card:hover {
+  background: rgba(240,253,244,0.85) !important;
+}
+html:not(.dark) .search-input {
+  background: rgba(248,250,252,0.9) !important;
+  border-color: #cbd5e1 !important;
+  color: #1e293b !important;
+}
+html:not(.dark) .sidebar-conversation-item {
+  color: #1e293b !important;
+}
+html:not(.dark) .sidebar-conversation-item:hover {
+  background: rgba(240,253,244,0.7) !important;
+}
+/* Chat sidebar names/text from main.css that hardcode light colors */
+html:not(.dark) .chat-sidebar-header h3 { color: #0f172a !important; }
+html:not(.dark) .sidebar-user-name  { color: #1e293b !important; }
+html:not(.dark) .sidebar-conv-name  { color: #1e293b !important; }
+html:not(.dark) .sidebar-message-text { color: #64748b !important; }
+html:not(.dark) .header-user-info h2 { color: #0f172a !important; }
+
+/* ═════════════════════════════════════
+   13. BROAD  TAILWIND  UTILITY OVERRIDES
+   ═════════════════════════════════════
+   These catch the hundreds of inline Tailwind
+   dark-palette classes used across templates.
+   ═════════════════════════════════════ */
+
+/* --- Backgrounds --- */
+/* bg-slate-950 on full-page wrappers → transparent so animated blobs show through */
+html:not(.dark) [class*="bg-slate-950"][class*="min-h-screen"]:not(.nav-btn--sos):not(.nav-btn--upgrade) {
+  background-color: transparent !important;
+}
+/* bg-slate-950 on cards/components → frosted glass */
+html:not(.dark) [class*="bg-slate-950"]:not(.nav-btn--sos):not(.nav-btn--upgrade):not([class*="min-h-screen"]) {
+  background-color: rgba(236,253,245,0.72) !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+}
+/* Modal/overlay backdrops with bg-slate-950 → keep as dark overlay */
+html:not(.dark) .absolute[class*="bg-slate-950"],
+html:not(.dark) .fixed[class*="bg-slate-950"] {
+  background-color: rgba(0,0,0,0.35) !important;
+}
+/* Cards / panels / modals with bg-slate-900 → frosted glass */
+html:not(.dark) [class*="bg-slate-900"]:not(.nav-btn--sos):not(.nav-btn--upgrade) {
+  background-color: rgba(236,253,245,0.72) !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+}
+/* Sticky headers need blur so content doesn't show through */
+html:not(.dark) [class*="bg-slate-950"][class*="sticky"],
+html:not(.dark) [class*="bg-slate-950"][class*="border-b"] {
+  background-color: rgba(240,253,244,0.85) !important;
+  backdrop-filter: blur(12px) saturate(1.4) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(1.4) !important;
+}
+html:not(.dark) [class*="bg-slate-800"]:not(.nav-btn--sos):not(.nav-btn--upgrade):not(button) {
+  background-color: rgba(241,245,249,0.6) !important;
+}
+html:not(.dark) [class*="bg-slate-700"] {
+  background-color: rgba(226,232,240,0.7) !important;
+}
+
+/* Arbitrary hex backgrounds (create_event etc.) */
+html:not(.dark) [class*="bg-[#0b1220]"],
+html:not(.dark) [class*="bg-[#111827]"],
+html:not(.dark) [class*="bg-[#0f172a]"] {
+  background-color: rgba(255,255,255,0.65) !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+}
+
+/* --- Text --- */
+html:not(.dark) [class*="text-slate-100"]:not(button):not([class*="btn-"]) {
+  color: #0f172a !important;
+}
+html:not(.dark) [class*="text-slate-200"]:not(button):not([class*="btn-"]) {
+  color: #1e293b !important;
+}
+html:not(.dark) [class*="text-slate-300"] {
+  color: #334155 !important;
+}
+html:not(.dark) [class*="text-slate-400"] {
+  color: #64748b !important;
+}
+html:not(.dark) [class*="text-slate-500"] {
+  color: #94a3b8 !important;
+}
+/* slate-600…950 are already dark → no override */
+
+/* Gray variants (some templates use gray-*) */
+html:not(.dark) [class*="text-gray-400"] { color: #64748b !important; }
+html:not(.dark) [class*="text-gray-500"] { color: #94a3b8 !important; }
+html:not(.dark) [class*="border-gray-700"],
+html:not(.dark) [class*="border-gray-800"] {
+  border-color: #e2e8f0 !important;
+}
+html:not(.dark) [class*="bg-gray-700"] {
+  background-color: #e2e8f0 !important;
+}
+html:not(.dark) [class*="bg-gray-600"] {
+  background-color: #d1d5db !important;
+}
+
+/* Broad text-white override — catches all elements on now-light backgrounds.
+   Exclude elements that sit on colored buttons/badges (those keep white text). */
+html:not(.dark) [class*="text-white"]:not([class*="bg-emerald-"]):not([class*="bg-rose-"]):not([class*="bg-red-"]):not([class*="bg-green-"]):not([class*="bg-sky-"]):not([class*="bg-blue-"]):not([class*="bg-indigo-"]):not([class*="bg-pink-"]):not([class*="bg-purple-"]):not([class*="bg-violet-"]):not([class*="bg-amber-"]):not([class*="bg-yellow-"]):not([class*="bg-cyan-"]):not([class*="bg-gradient-to"]) {
+  color: #1e293b !important;
+}
+
+/* Keep white text on gradient buttons (they have colored from/to stops) */
+html:not(.dark) [class*="bg-gradient-to"][class*="from-purple"],
+html:not(.dark) [class*="bg-gradient-to"][class*="from-sky"],
+html:not(.dark) [class*="bg-gradient-to"][class*="from-amber"],
+html:not(.dark) [class*="bg-gradient-to"][class*="from-green"],
+html:not(.dark) [class*="bg-gradient-to"][class*="from-red"] {
+  color: #ffffff !important;
+}
+/* Slate-800/900 gradient cards — lighten bg, dark text */
+html:not(.dark) [class*="bg-gradient-to"][class*="from-slate-8"],
+html:not(.dark) [class*="bg-gradient-to"][class*="from-slate-9"] {
+  color: #1e293b !important;
+}
+
+/* Keep text-white/70 readable (dashboard kindness helper, etc.) */
+html:not(.dark) [class*="text-white/"] {
+  color: #475569 !important;
+}
+
+/* Dark-900 badge backgrounds → light tints */
+html:not(.dark) [class*="bg-amber-900"]  { background-color: rgba(251,191,36,0.12) !important; }
+html:not(.dark) [class*="bg-blue-900"]   { background-color: rgba(59,130,246,0.10) !important; }
+html:not(.dark) [class*="bg-green-900"]  { background-color: rgba(34,197,94,0.10) !important; }
+html:not(.dark) [class*="bg-indigo-900"] { background-color: rgba(99,102,241,0.10) !important; }
+html:not(.dark) [class*="bg-sky-900"]    { background-color: rgba(56,189,248,0.10) !important; }
+
+/* Matching darkened border colors for badges */
+html:not(.dark) [class*="border-amber-600"]  { border-color: rgba(217,119,6,0.35) !important; }
+html:not(.dark) [class*="border-blue-600"]   { border-color: rgba(37,99,235,0.3) !important; }
+html:not(.dark) [class*="border-green-600"]  { border-color: rgba(22,163,74,0.30) !important; }
+
+/* Also handle text-green-200/300 */
+html:not(.dark) [class*="text-green-200"] { color: #15803d !important; }
+html:not(.dark) [class*="text-green-300"] { color: #16a34a !important; }
+
+/* --- Borders --- */
+html:not(.dark) [class*="border-slate-800"],
+html:not(.dark) [class*="border-slate-700"] {
+  border-color: #e2e8f0 !important;
+}
+html:not(.dark) [class*="border-slate-600"] {
+  border-color: #cbd5e1 !important;
+}
+html:not(.dark) [class*="border-emerald-500/20"] {
+  border-color: #a7f3d0 !important;
+}
+html:not(.dark) [class*="border-cyan-500/20"] {
+  border-color: #a5f3fc !important;
+}
+
+/* Keep emerald/sky/violet accent borders visible */
+html:not(.dark) [class*="border-emerald-500/30"] { border-color: #86efac !important; }
+html:not(.dark) [class*="border-sky-500/30"]     { border-color: #7dd3fc !important; }
+html:not(.dark) [class*="border-violet-500/30"]  { border-color: #c4b5fd !important; }
+
+/* --- Gradients (from / to stops) --- */
+/* Section wrappers: transparent gradient so animated blobs show through */
+html:not(.dark) [class*="from-slate-950"],
+html:not(.dark) [class*="from-slate-9"] {
+  --tw-gradient-from: transparent !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+html:not(.dark) [class*="to-slate-950"],
+html:not(.dark) [class*="to-slate-9"] {
+  --tw-gradient-to: transparent !important;
+}
+/* Rounded gradient cards (not section wrappers) → frosted glass bg */
+html:not(.dark) [class*="bg-gradient-to"][class*="rounded"] {
+  background: rgba(236,253,245,0.72) !important;
+  backdrop-filter: blur(10px) saturate(1.3) !important;
+  -webkit-backdrop-filter: blur(10px) saturate(1.3) !important;
+}
+html:not(.dark) [class*="from-slate-8"] {
+  --tw-gradient-from: rgba(248,250,252,0.65) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+html:not(.dark) [class*="to-slate-8"] {
+  --tw-gradient-to: rgba(241,245,249,0.65) !important;
+}
+
+/* Slate gradient BUTTONS (from-slate-6/7) — keep dark after broad overrides */
+html:not(.dark) [class*="bg-gradient-to"][class*="from-slate-6"],
+html:not(.dark) [class*="bg-gradient-to"][class*="from-slate-7"] {
+  --tw-gradient-from: #475569 !important;
+  --tw-gradient-to: #334155 !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+  color: #ffffff !important;
+}
+
+/* --- Divide --- */
+html:not(.dark) [class*="divide-slate"] > * + * {
+  border-color: #e2e8f0 !important;
+}
+
+/* --- Ring --- */
+html:not(.dark) [class*="ring-white/10"] {
+  --tw-ring-color: rgba(0,0,0,0.05) !important;
+}
+
+/* ═════════════════════════════════════
+   14. GRADIENT  TEXT  FIXES
+   ═════════════════════════════════════
+   (bg-clip-text + text-transparent elements)
+   ═════════════════════════════════════ */
+html:not(.dark) [class*="bg-clip-text"] {
+  color: transparent !important;   /* keep gradient text working */
+}
+/* from-emerald-300 to-cyan-300 → darker for light bg */
+html:not(.dark) [class*="from-emerald-3"][class*="to-cyan-3"] {
+  --tw-gradient-from: #059669 !important;
+  --tw-gradient-to: #0891b2 !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+/* from-slate-100 to-slate-300 → dark */
+html:not(.dark) [class*="from-slate-1"][class*="to-slate-3"] {
+  --tw-gradient-from: #0f172a !important;
+  --tw-gradient-to: #334155 !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+html:not(.dark) [class*="from-emerald-3"][class*="to-emerald-3"] {
+  --tw-gradient-from: #059669 !important;
+  --tw-gradient-to: #047857 !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+
+/* ═════════════════════════════════════
+   15. IMPACT / ACCENT  CARDS
+   ═════════════════════════════════════ */
+html:not(.dark) [class*="from-emerald-500/10"] {
+  --tw-gradient-from: rgba(16,185,129,0.06) !important;
+}
+html:not(.dark) [class*="from-sky-500/10"] {
+  --tw-gradient-from: rgba(56,189,248,0.06) !important;
+}
+html:not(.dark) [class*="from-violet-500/10"] {
+  --tw-gradient-from: rgba(139,92,246,0.06) !important;
+}
+
+/* SVG strokes that were dark */
+html:not(.dark) svg circle[stroke="#1e293b"] {
+  stroke: #e2e8f0 !important;
+}
+
+/* ═════════════════════════════════════
+   16. RESOURCE / ITEM  CARDS
+   ═════════════════════════════════════ */
+/* Resource pages use bg-slate-950 full page — captured in section 13 */
+
+/* Resources widget ("Shared Items Nearby") — override dark bg */
+html:not(.dark) [data-resources-widget="root"] {
+  background: rgba(236,253,245,0.72) !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+  border-color: rgba(209,250,229,0.6) !important;
+}
+html:not(.dark) [data-resources-widget="root"] p[class*="text-slate-100"] {
+  color: #0f172a !important;
+}
+html:not(.dark) [data-resources-widget="root"] p[class*="text-slate-400"],
+html:not(.dark) [data-resources-widget="root"] p[class*="text-slate-500"] {
+  color: #64748b !important;
+}
+html:not(.dark) [data-resources-widget="root"] a[class*="text-emerald"] {
+  color: #059669 !important;
+}
+html:not(.dark) [data-resources-widget="root"] a[class*="border-slate"] {
+  border-color: rgba(209,250,229,0.5) !important;
+}
+html:not(.dark) [data-resources-widget="root"] a[class*="border-slate"]:hover {
+  border-color: #34d399 !important;
+  background: rgba(240,253,244,0.7) !important;
+}
+
+/* ═════════════════════════════════════
+   17. EMOTIONAL  PING  (standalone)
+   ═════════════════════════════════════
+   emotional_ping.html uses CSS custom properties.
+   We override them when html:not(.dark).
+   ═════════════════════════════════════ */
+html:not(.dark) {
+  --bg:      #ecfdf5;
+  --bg2:     #d1fae5;
+  --card:    rgba(255,255,255,0.85);
+  --card2:   rgba(248,250,252,0.9);
+  --border:  rgba(209,250,229,0.6);
+  --border2: rgba(203,213,225,0.45);
+  --ink:     #1e293b;
+  --ink2:    #334155;
+  --muted:   #64748b;
+  --accent:  #10b981;
+  --accent2: #059669;
+  --glow:    rgba(16,185,129,0.12);
+}
+
+/* ═════════════════════════════════════
+   18. THEME  TOGGLE  BUTTON
+   ═════════════════════════════════════ */
+.theme-toggle {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  border: 1px solid rgba(148,163,184,0.3);
+  background: rgba(255,255,255,0.04);
+  color: #e2e8f0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  font-size: 18px;
+  padding: 0;
+  line-height: 1;
+  position: relative;
+  overflow: hidden;
+}
+html:not(.dark) .theme-toggle {
+  border-color: #cbd5e1 !important;
+  background: rgba(0,0,0,0.02) !important;
+  color: #334155 !important;
+}
+.theme-toggle:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+/* Icons swap via CSS */
+.theme-toggle .icon-sun  { display: none; }
+.theme-toggle .icon-moon { display: inline; }
+html:not(.dark) .theme-toggle .icon-sun  { display: inline; }
+html:not(.dark) .theme-toggle .icon-moon { display: none; }
+
+/* ═════════════════════════════════════
+   19. MISC  COMPONENT  FIXES
+   ═════════════════════════════════════ */
+
+/* Progress bars / skeleton cards */
+html:not(.dark) .skeleton-card {
+  background: #e2e8f0 !important;
+}
+
+/* Micro pills */
+html:not(.dark) .micro-pill,
+html:not(.dark) .pill {
+  background: rgba(16,185,129,0.08) !important;
+  color: #059669 !important;
+  border-color: rgba(16,185,129,0.2) !important;
+}
+
+/* Offer link */
+html:not(.dark) .offer-link {
+  color: #059669 !important;
+}
+
+/* Live distance */
+html:not(.dark) .live-distance {
+  color: #64748b !important;
+}
+
+/* Live card meta */
+html:not(.dark) .live-card-meta {
+  color: #64748b !important;
+}
+
+/* Resources widget */
+html:not(.dark) .resources-widget {
+  background: rgba(236,253,245,0.72) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border-color: rgba(209,250,229,0.6) !important;
+}
+
+/* Plans page toggle */
+html:not(.dark) [class*="bg-slate-800"][role="switch"],
+html:not(.dark) [class*="bg-slate-800"][class*="toggle"] {
+  background-color: #cbd5e1 !important;
+}
+
+/* Fix table styles in light mode */
+html:not(.dark) table thead {
+  background: rgba(248,250,252,0.8) !important;
+}
+html:not(.dark) table tbody tr:hover {
+  background: rgba(240,253,244,0.6) !important;
+}
+
+/* Fix map info-window inline dark styles */
+html:not(.dark) .gm-style-iw {
+  background: rgba(255,255,255,0.95) !important;
+}
+
+/* Tailwind hover:text-white — darken on light backgrounds */
+html:not(.dark) .hover\:text-white:hover {
+  color: #0f172a !important;
+}
+/* Exception: keep white hover-text inside dark overlay modals */
+html:not(.dark) #imagePreviewModal .hover\:text-white:hover,
+html:not(.dark) #sos-call-modal .hover\:text-white:hover,
+html:not(.dark) #paymentModal .hover\:text-white:hover,
+html:not(.dark) #locationModal .hover\:text-white:hover {
+  color: #ffffff !important;
+}
+
+/* Text on SOLID colored badges — keep white.
+   Use :not() to avoid matching tinted variants like bg-emerald-500/10 */
+html:not(.dark) [class*="bg-emerald-5"]:not([class*="bg-emerald-500/"]):not([class*="bg-emerald-5/"])  { color: #fff !important; }
+html:not(.dark) [class*="bg-rose-5"]:not([class*="bg-rose-500/"]):not([class*="bg-rose-5/"])          { color: #fff !important; }
+html:not(.dark) [class*="bg-red-5"]:not([class*="bg-red-500/"]):not([class*="bg-red-5/"])             { color: #fff !important; }
+html:not(.dark) [class*="bg-sky-5"]:not([class*="bg-sky-500/"]):not([class*="bg-sky-5/"])             { color: #fff !important; }
+
+/* ═════════════════════════════════════
+   20. REDUCED MOTION — disable blob animations
+   ═════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  html:not(.dark) .site-bg-blobs::before,
+  html:not(.dark) .site-bg-blobs::after {
+    animation: none !important;
+  }
+}
+
+/* ═════════════════════════════════════
+   21. PRINT  — always light
+   ═════════════════════════════════════ */
+@media print {
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+  .top-nav, footer, .theme-toggle { display: none !important; }
+}
+
+/* ═════════════════════════════════════
+   21. FOCUS  /  A11Y
+   ═════════════════════════════════════ */
+html:not(.dark) input:focus-visible,
+html:not(.dark) select:focus-visible,
+html:not(.dark) textarea:focus-visible,
+html:not(.dark) button:focus-visible,
+html:not(.dark) a:focus-visible {
+  outline: 2px solid #10b981 !important;
+  outline-offset: 2px !important;
+}
