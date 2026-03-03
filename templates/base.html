@@ -6,7 +6,8 @@
     <script>
       (function(){
         var t = localStorage.getItem('lifeline-theme');
-        if (t === 'dark') document.documentElement.classList.add('dark');
+        // Default to dark mode; only go light if user explicitly chose 'light'
+        if (t !== 'light') document.documentElement.classList.add('dark');
       })();
     </script>
     <title>{% block title %}LifeLine{% endblock %}</title>
@@ -15,7 +16,7 @@
       name="description"
       content="LifeLine - Neighborhood Help & Emergency Network. Connect with nearby people for help and support."
     />
-    <meta name="theme-color" id="meta-theme-color" content="#f0fdf4" />
+    <meta name="theme-color" id="meta-theme-color" content="#040915" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta
       name="apple-mobile-web-app-status-bar-style"
