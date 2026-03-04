@@ -1,863 +1,538 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <script>
-      (function(){
-        var t = localStorage.getItem('lifeline-theme');
-        if (t === 'dark') document.documentElement.classList.add('dark');
-      })();
-    </script>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Emotional Ping • LifeLine</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}" />
+{% extends 'base.html' %}
 
-    <style>
-      :root {
-        --bg: #050b18;
-        --bg2: #071126;
-        --card: rgba(15, 23, 42, 0.72);
-        --card2: rgba(2, 6, 23, 0.7);
-        --border: rgba(148, 163, 184, 0.18);
-        --ink: #e5e7eb;
-        --muted: #9ca3af;
-        --muted2: #94a3b8;
+{% block title %}Emotional Ping • LifeLine{% endblock %}
 
-        --accent: #22c55e;
-        --accent2: #06b6d4;
-        --danger: #ef4444;
+{% block content %}
+<style>
+  /* ── Emotional Ping page-specific styles ── */
+  .ep-page {
+    width: 100%;
+    padding: 22px 16px 40px;
+  }
 
-        --shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
-        --shadow2: 0 10px 24px rgba(0, 0, 0, 0.28);
+  .ep-shell {
+    width: min(1240px, 100%);
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr 1.25fr 1fr;
+    gap: 16px;
+    align-items: start;
+  }
 
-        --radius: 20px;
-      }
+  .ep-card {
+    background: rgba(15, 23, 42, 0.72);
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 20px;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+    padding: 18px;
+    backdrop-filter: blur(10px);
+  }
 
-      /* Light mode overrides for emotional ping */
-      html:not(.dark) :root,
-      html:not(.dark) {
-        --bg:      #f0fdf4;
-        --bg2:     #ecfdf5;
-        --card:    rgba(255,255,255,0.88);
-        --card2:   rgba(248,250,252,0.9);
-        --border:  rgba(209,250,229,0.65);
-        --ink:     #1e293b;
-        --muted:   #64748b;
-        --muted2:  #475569;
-        --shadow:  0 8px 24px rgba(0,0,0,0.06);
-        --shadow2: 0 4px 12px rgba(0,0,0,0.04);
-      }
+  .ep-card h1 { margin: 0 0 6px; font-size: 34px; }
+  .ep-card h2 { margin: 0 0 6px; font-size: 20px; }
+  .ep-sub { color: #9ca3af; font-size: 13px; line-height: 1.35; }
 
-      html:not(.dark) body {
-        background: var(--bg) !important;
-        background-image: none !important;
-      }
-      html:not(.dark) .btn {
-        background: rgba(255,255,255,0.7) !important;
-        color: var(--ink) !important;
-        border-color: var(--border) !important;
-      }
-      html:not(.dark) .btn:hover {
-        background: rgba(255,255,255,0.9) !important;
-      }
-      html:not(.dark) .btn.primary {
-        background: linear-gradient(180deg, rgba(16,185,129,0.15), rgba(16,185,129,0.06)) !important;
-        border-color: rgba(16,185,129,0.35) !important;
-        color: #047857 !important;
-      }
+  .ep-chips { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 10px; }
+  .ep-chip {
+    padding: 9px 12px; border-radius: 999px;
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    background: rgba(2, 6, 23, 0.35);
+    cursor: pointer; user-select: none; font-weight: 650; font-size: 13px;
+    transition: transform 0.08s ease, border-color 0.2s ease, background 0.2s ease;
+  }
+  .ep-chip:hover { transform: translateY(-1px); }
+  .ep-chip.selected {
+    border-color: rgba(34, 197, 94, 0.45);
+    background: rgba(34, 197, 94, 0.14);
+  }
 
-      * {
-        box-sizing: border-box;
-      }
+  .ep-msg {
+    width: 100%; margin-top: 14px; min-height: 84px; resize: none;
+    border-radius: 16px; border: 1px solid rgba(148, 163, 184, 0.18);
+    background: rgba(2, 6, 23, 0.35); padding: 12px; color: #e5e7eb; outline: none;
+  }
+  .ep-msg::placeholder { color: rgba(156, 163, 175, 0.7); }
 
-      body {
-        margin: 0;
-        font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial,
-          sans-serif;
-        color: var(--ink);
-        min-height: 100vh;
-        background: radial-gradient(
-            900px 500px at 20% 20%,
-            rgba(34, 197, 94, 0.12),
-            transparent 60%
-          ),
-          radial-gradient(
-            900px 500px at 80% 10%,
-            rgba(6, 182, 212, 0.12),
-            transparent 60%
-          ),
-          linear-gradient(180deg, var(--bg2), var(--bg));
-        overflow-x: hidden;
-      }
+  .ep-hint { margin-top: 10px; font-size: 13px; color: #9ca3af; }
+  .ep-hint.error { color: #fecaca; }
+  .ep-hint.success { color: #bbf7d0; }
 
-      .page {
-        min-height: 100vh;
-        padding: 22px 16px 40px;
-      }
+  .ep-actions { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+  .ep-spacer { flex: 1; }
 
-      .topbar {
-        width: min(1060px, 100%);
-        margin: 0 auto 14px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-      }
+  .ep-btn {
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    background: rgba(15, 23, 42, 0.45); color: #e5e7eb;
+    padding: 10px 14px; border-radius: 999px; cursor: pointer;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+    transition: transform 0.08s ease, background 0.2s ease;
+    font-weight: 650; text-decoration: none;
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .ep-btn:hover { transform: translateY(-1px); background: rgba(15, 23, 42, 0.65); }
+  .ep-btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+  .ep-btn.primary {
+    background: linear-gradient(180deg, rgba(34, 197, 94, 0.25), rgba(34, 197, 94, 0.12));
+    border-color: rgba(34, 197, 94, 0.35);
+  }
+  .ep-btn.small { padding: 8px 11px; font-size: 12px; }
 
-      .brand {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        font-weight: 800;
-        letter-spacing: 0.2px;
-      }
+  #ep-feed { margin-top: 12px; display: grid; gap: 10px; }
 
-      .brand-text {
-        display: flex;
-        flex-direction: column;
-        line-height: 1.05;
-      }
+  .ep-empty {
+    padding: 14px; border-radius: 16px;
+    border: 1px dashed rgba(148, 163, 184, 0.25);
+    background: rgba(2, 6, 23, 0.25); color: #94a3b8;
+  }
 
-      .brand-title {
-        font-size: 18px;
-        font-weight: 800;
-        letter-spacing: 0.2px;
-        color: var(--ink);
-      }
+  .ep-post {
+    border-radius: 18px; border: 1px solid rgba(148, 163, 184, 0.18);
+    background: rgba(2, 6, 23, 0.3); padding: 12px;
+  }
+  .ep-post-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+  .ep-who { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .ep-avatar {
+    width: 38px; height: 38px; border-radius: 16px; display: grid; place-items: center;
+    font-weight: 800;
+    background: linear-gradient(180deg, rgba(6, 182, 212, 0.18), rgba(34, 197, 94, 0.18));
+    border: 1px solid rgba(6, 182, 212, 0.22); flex: 0 0 auto;
+  }
+  .ep-name { font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px; }
+  .ep-meta { font-size: 12px; color: #9ca3af; margin-top: 1px; }
+  .ep-mood { font-size: 12px; color: #c7d2fe; opacity: 0.95; flex: 0 0 auto; }
+  .ep-post-body { color: rgba(229, 231, 235, 0.92); line-height: 1.35; white-space: pre-wrap; }
+  .ep-post-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
 
-      .brand-subtitle {
-        margin-top: 4px;
-        font-size: 12px;
-        color: var(--muted2);
-        font-weight: 600;
-      }
+  .ep-psy-list { margin-top: 12px; display: grid; gap: 10px; }
+  .ep-psy-item {
+    border-radius: 18px; border: 1px solid rgba(148, 163, 184, 0.18);
+    background: rgba(2, 6, 23, 0.3); padding: 12px;
+  }
+  .ep-psy-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .ep-psy-name { font-weight: 850; line-height: 1.2; }
+  .ep-psy-hospital { margin-top: 4px; font-size: 12px; color: #94a3b8; }
+  .ep-psy-meta { margin-top: 8px; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .ep-stars { display: inline-flex; gap: 2px; align-items: center; font-size: 12px; color: rgba(34, 197, 94, 0.95); }
+  .ep-rating-num { margin-left: 6px; font-size: 12px; color: #9ca3af; font-weight: 700; }
+  .ep-fee { font-size: 12px; font-weight: 850; color: rgba(34, 197, 94, 0.95); }
 
-      .brand-badge {
-        width: 42px;
-        height: 42px;
-        border-radius: 16px;
-        background: linear-gradient(
-          180deg,
-          rgba(6, 182, 212, 0.25),
-          rgba(34, 197, 94, 0.25)
-        );
-        border: 1px solid rgba(6, 182, 212, 0.25);
-        box-shadow: var(--shadow2);
-        display: grid;
-        place-items: center;
-      }
-      .brand-badge span {
-        font-size: 18px;
-      }
-      .brand-badge.logo {
-        width: 46px;
-        height: 46px;
-        border-radius: 14px;
-        background: #ffffff;
-        border: 1px solid rgba(0, 0, 0, 0.08);
-        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
-        display: grid;
-        place-items: center;
-        padding: 6px;
-        text-decoration: none;
-      }
+  @media (max-width: 980px) {
+    .ep-shell { grid-template-columns: 1fr; }
+  }
 
-      .brand-badge.logo img {
-        width: 100%;
-        height: 100%;
-        object-fit: contain;
-        display: block;
-      }
+  /* ── Light-mode overrides ── */
+  html:not(.dark) .ep-card {
+    background: rgba(255,255,255,0.75) !important;
+    border-color: rgba(190,210,205,0.5) !important;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.05) !important;
+  }
+  html:not(.dark) .ep-chip {
+    background: rgba(255,255,255,0.6) !important;
+    border-color: rgba(180,200,195,0.45) !important;
+    color: #1e293b !important;
+  }
+  html:not(.dark) .ep-chip.selected {
+    border-color: rgba(34,197,94,0.5) !important;
+    background: rgba(34,197,94,0.12) !important;
+  }
+  html:not(.dark) .ep-msg {
+    background: rgba(255,255,255,0.7) !important;
+    border-color: rgba(180,200,195,0.45) !important;
+    color: #1e293b !important;
+  }
+  html:not(.dark) .ep-msg::placeholder { color: #94a3b8 !important; }
+  html:not(.dark) .ep-btn {
+    background: rgba(255,255,255,0.7) !important;
+    border-color: rgba(180,200,195,0.45) !important;
+    color: #1e293b !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04) !important;
+  }
+  html:not(.dark) .ep-btn:hover {
+    background: rgba(255,255,255,0.9) !important;
+  }
+  html:not(.dark) .ep-btn.primary {
+    background: linear-gradient(180deg, rgba(16,185,129,0.15), rgba(16,185,129,0.06)) !important;
+    border-color: rgba(16,185,129,0.35) !important;
+    color: #047857 !important;
+  }
+  html:not(.dark) .ep-sub { color: #475569 !important; }
+  html:not(.dark) .ep-hint { color: #64748b !important; }
+  html:not(.dark) .ep-hint.error { color: #dc2626 !important; }
+  html:not(.dark) .ep-hint.success { color: #059669 !important; }
+  html:not(.dark) .ep-post {
+    background: rgba(255,255,255,0.6) !important;
+    border-color: rgba(190,210,205,0.45) !important;
+  }
+  html:not(.dark) .ep-post-body { color: #334155 !important; }
+  html:not(.dark) .ep-mood { color: #6366f1 !important; }
+  html:not(.dark) .ep-meta { color: #64748b !important; }
+  html:not(.dark) .ep-name { color: #1e293b !important; }
+  html:not(.dark) .ep-empty {
+    background: rgba(255,255,255,0.4) !important;
+    border-color: rgba(180,200,195,0.35) !important;
+    color: #64748b !important;
+  }
+  html:not(.dark) .ep-psy-item {
+    background: rgba(255,255,255,0.6) !important;
+    border-color: rgba(190,210,205,0.45) !important;
+  }
+  html:not(.dark) .ep-psy-name { color: #1e293b !important; }
+  html:not(.dark) .ep-psy-hospital { color: #64748b !important; }
+  html:not(.dark) .ep-avatar {
+    background: linear-gradient(180deg, rgba(6,182,212,0.12), rgba(34,197,94,0.12)) !important;
+    border-color: rgba(6,182,212,0.2) !important;
+    color: #1e293b !important;
+  }
+  html:not(.dark) .ep-rating-num { color: #64748b !important; }
+</style>
 
-      .btn {
-        border: 1px solid var(--border);
-        background: rgba(15, 23, 42, 0.45);
-        color: var(--ink);
-        padding: 10px 14px;
-        border-radius: 999px;
-        cursor: pointer;
-        box-shadow: var(--shadow2);
-        transition: transform 0.08s ease, background 0.2s ease;
-        font-weight: 650;
-        text-decoration: none;
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-      }
-      .btn:hover {
-        transform: translateY(-1px);
-        background: rgba(15, 23, 42, 0.65);
-      }
-      .btn:disabled {
-        opacity: 0.55;
-        cursor: not-allowed;
-        transform: none;
-      }
-      .btn.primary {
-        background: linear-gradient(
-          180deg,
-          rgba(34, 197, 94, 0.25),
-          rgba(34, 197, 94, 0.12)
-        );
-        border-color: rgba(34, 197, 94, 0.35);
-      }
-      .btn.small {
-        padding: 8px 11px;
-        font-size: 12px;
-      }
+<div class="ep-page">
+  <div class="ep-shell">
+    <!-- Left column: Ping form -->
+    <div class="ep-card">
+      <h1>Emotional Ping</h1>
+      <p class="ep-sub">
+        Share how you feel. Your ping will notify trusted helpers. You can
+        also browse other pings in the feed.
+      </p>
 
-      .shell {
-        width: min(1240px, 100%);
-        margin: 0 auto;
-        display: grid;
-        grid-template-columns: 1fr 1.25fr 1fr;
-        gap: 16px;
-        align-items: start;
-      }
-
-      .card {
-        background: linear-gradient(180deg, var(--card), var(--card2));
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-        box-shadow: var(--shadow);
-        padding: 18px;
-        backdrop-filter: blur(10px);
-      }
-
-      h1 {
-        margin: 0 0 6px;
-        font-size: 34px;
-      }
-      h2 {
-        margin: 0 0 6px;
-        font-size: 20px;
-      }
-      .sub {
-        color: var(--muted2);
-        font-size: 13px;
-        line-height: 1.35;
-      }
-
-      .chips {
-        margin-top: 14px;
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-      }
-      .chip {
-        padding: 9px 12px;
-        border-radius: 999px;
-        border: 1px solid rgba(148, 163, 184, 0.22);
-        background: rgba(2, 6, 23, 0.35);
-        cursor: pointer;
-        user-select: none;
-        font-weight: 650;
-        font-size: 13px;
-        transition: transform 0.08s ease, border-color 0.2s ease,
-          background 0.2s ease;
-      }
-      .chip:hover {
-        transform: translateY(-1px);
-      }
-      .chip.selected {
-        border-color: rgba(34, 197, 94, 0.45);
-        background: rgba(34, 197, 94, 0.14);
-      }
-
-      .msg {
-        width: 100%;
-        margin-top: 14px;
-        min-height: 84px;
-        resize: none;
-        border-radius: 16px;
-        border: 1px solid rgba(148, 163, 184, 0.18);
-        background: rgba(2, 6, 23, 0.35);
-        padding: 12px 12px;
-        color: var(--ink);
-        outline: none;
-      }
-      .msg::placeholder {
-        color: rgba(156, 163, 175, 0.7);
-      }
-
-      .hint {
-        margin-top: 10px;
-        font-size: 13px;
-        color: var(--muted);
-      }
-      .hint.error {
-        color: #fecaca;
-      }
-      .hint.success {
-        color: #bbf7d0;
-      }
-
-      .actions {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        margin-top: 12px;
-      }
-      .spacer {
-        flex: 1;
-      }
-
-      #feed {
-        margin-top: 12px;
-        display: grid;
-        gap: 10px;
-      }
-      .empty {
-        padding: 14px;
-        border-radius: 16px;
-        border: 1px dashed rgba(148, 163, 184, 0.25);
-        background: rgba(2, 6, 23, 0.25);
-        color: var(--muted2);
-      }
-
-      .post {
-        border-radius: 18px;
-        border: 1px solid rgba(148, 163, 184, 0.18);
-        background: rgba(2, 6, 23, 0.3);
-        padding: 12px;
-      }
-      .post-head {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        margin-bottom: 8px;
-      }
-      .who {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        min-width: 0;
-      }
-      .avatar {
-        width: 38px;
-        height: 38px;
-        border-radius: 16px;
-        display: grid;
-        place-items: center;
-        font-weight: 800;
-        background: linear-gradient(
-          180deg,
-          rgba(6, 182, 212, 0.18),
-          rgba(34, 197, 94, 0.18)
-        );
-        border: 1px solid rgba(6, 182, 212, 0.22);
-        flex: 0 0 auto;
-      }
-      .name {
-        font-weight: 800;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        max-width: 240px;
-      }
-      .meta {
-        font-size: 12px;
-        color: var(--muted);
-        margin-top: 1px;
-      }
-      .mood {
-        font-size: 12px;
-        color: #c7d2fe;
-        opacity: 0.95;
-        flex: 0 0 auto;
-      }
-
-      .post-body {
-        color: rgba(229, 231, 235, 0.92);
-        line-height: 1.35;
-        white-space: pre-wrap;
-      }
-      .post-actions {
-        display: flex;
-        gap: 8px;
-        margin-top: 10px;
-        flex-wrap: wrap;
-      }
-
-      .psy-list {
-        margin-top: 12px;
-        display: grid;
-        gap: 10px;
-      }
-
-      .psy-item {
-        border-radius: 18px;
-        border: 1px solid rgba(148, 163, 184, 0.18);
-        background: rgba(2, 6, 23, 0.3);
-        padding: 12px;
-      }
-
-      .psy-top {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 10px;
-      }
-
-      .psy-name {
-        font-weight: 850;
-        line-height: 1.2;
-      }
-
-      .psy-hospital {
-        margin-top: 4px;
-        font-size: 12px;
-        color: var(--muted2);
-      }
-
-      .psy-meta {
-        margin-top: 8px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 10px;
-        flex-wrap: wrap;
-      }
-
-      .stars {
-        display: inline-flex;
-        gap: 2px;
-        align-items: center;
-        font-size: 12px;
-        color: rgba(34, 197, 94, 0.95);
-      }
-
-      .rating-num {
-        margin-left: 6px;
-        font-size: 12px;
-        color: var(--muted);
-        font-weight: 700;
-      }
-
-      .fee {
-        font-size: 12px;
-        font-weight: 850;
-        color: rgba(34, 197, 94, 0.95);
-      }
-
-      @media (max-width: 980px) {
-        .shell {
-          grid-template-columns: 1fr;
-        }
-      }
-    </style>
-  </head>
-
-  <body>
-    <div class="page">
-      <div class="topbar">
-        <div class="brand">
-          <a
-            href="{{ url_for('home') }}"
-            class="brand-badge logo"
-            aria-label="LifeLine Home"
-          >
-            <img
-              src="{{ url_for('static', filename='images/lifeline_logo.png') }}"
-              alt="LifeLine"
-            />
-          </a>
-
-          <div class="brand-text">
-            <div class="brand-title">LifeLine</div>
-            <div class="brand-subtitle">
-              Neighborhood Help &amp; Emergency Network
-            </div>
-          </div>
-        </div>
-
-        <a class="btn" href="{{ url_for('home') }}">Return Home</a>
+      <div class="ep-chips" id="chips">
+        <div class="ep-chip" data-mood="FEELING_LOW">😔 Feeling Low</div>
+        <div class="ep-chip" data-mood="FRUSTRATED">😤 Frustrated</div>
+        <div class="ep-chip" data-mood="HAPPY">😊 Happy</div>
+        <div class="ep-chip" data-mood="ANXIOUS">😰 Anxious</div>
+        <div class="ep-chip" data-mood="NEED_MOTIVATION">🫶 Need Motivation</div>
+        <div class="ep-chip" data-mood="FEELING_FESTIVE">🎉 Feeling Festive</div>
       </div>
 
-      <div class="shell">
-        <div class="card">
-          <h1>Emotional Ping</h1>
-          <p class="sub">
-            Share how you feel. Your ping will notify trusted helpers. You can
-            also browse other pings in the feed.
-          </p>
+      <textarea class="ep-msg" id="message" placeholder="Add a short message (optional)"></textarea>
 
-          <div class="chips" id="chips">
-            <div class="chip" data-mood="FEELING_LOW">😔 Feeling Low</div>
-            <div class="chip" data-mood="FRUSTRATED">😤 Frustrated</div>
-            <div class="chip" data-mood="HAPPY">😊 Happy</div>
-            <div class="chip" data-mood="ANXIOUS">😰 Anxious</div>
-            <div class="chip" data-mood="NEED_MOTIVATION">
-              🫶 Need Motivation
-            </div>
-            <div class="chip" data-mood="FEELING_FESTIVE">
-              🎉 Feeling Festive
-            </div>
-          </div>
+      <div class="ep-hint" id="hint">Pick a feeling to enable sending.</div>
 
-          <textarea
-            class="msg"
-            id="message"
-            placeholder="Add a short message (optional)"
-          ></textarea>
-
-          <div class="hint" id="hint">Pick a feeling to enable sending.</div>
-
-          <div class="actions">
-            <button class="btn primary" id="sendBtn" disabled>Send Ping</button>
-            <div class="spacer"></div>
-            <button class="btn" id="refreshBtn" type="button">
-              Refresh Feed
-            </button>
-          </div>
-        </div>
-
-        <div class="card feed">
-          <h2>Others Emotional Pings</h2>
-          <div class="sub">
-            Browse recent emotional pings. You can chat, mark listened, or
-            uplift.
-          </div>
-
-          <div id="feed"></div>
-        </div>
-
-        <div class="card">
-          <h2>Renowned Psychiatrists</h2>
-          <div class="sub">
-            Book an appointment with verified specialists. Pay first to confirm
-            your slot.
-          </div>
-
-          <div class="psy-list">
-            {% if psychiatrists and psychiatrists|length > 0 %} {% for p in psychiatrists %}
-            <div class="psy-item">
-              <div class="psy-top">
-                <div style="min-width:0">
-                  <div class="psy-name">{{ p.name }}</div>
-                  <div class="psy-hospital">{{ p.hospital }}</div>
-                  <div class="psy-hospital" style="color:#6ee7b7;font-size:10px;margin-top:2px">{{ p.title }}</div>
-                </div>
-                <a class="btn small primary" href="{{ url_for('book_psychiatrist', psychiatrist_id=p.id) }}">Book</a>
-              </div>
-
-              <div class="psy-meta">
-                <div>
-                  <span class="stars" aria-label="Rating">
-                    ★★★★★
-                    <span class="rating-num">{{ "%.1f"|format(p.rating) }}</span>
-                  </span>
-                </div>
-                <div class="fee">৳{{ p.fee_bdt }}+</div>
-              </div>
-            </div>
-            {% endfor %} {% else %}
-            <div class="empty">No psychiatrists configured yet.</div>
-            {% endif %}
-          </div>
-
-          <div style="margin-top: 12px">
-            <a class="btn" href="{{ url_for('psychiatrists_list') }}">View all</a>
-          </div>
-        </div>
+      <div class="ep-actions">
+        <button class="ep-btn primary" id="sendBtn" disabled>Send Ping</button>
+        <div class="ep-spacer"></div>
+        <button class="ep-btn" id="refreshBtn" type="button">Refresh Feed</button>
       </div>
     </div>
 
-    <script>
-      const API_PING_URL = "{{ url_for('api_emotional_ping') }}";
-      const API_FEED_URL = "{{ url_for('api_emotional_pings') }}";
-      const LOGIN_URL = "/login"; // ✅ fixed (no globals())
+    <!-- Center column: Feed -->
+    <div class="ep-card feed">
+      <h2>Others Emotional Pings</h2>
+      <div class="ep-sub">
+        Browse recent emotional pings. You can chat, mark listened, or uplift.
+      </div>
+      <div id="ep-feed"></div>
+    </div>
 
-      let selectedMood = null;
+    <!-- Right column: Psychiatrists -->
+    <div class="ep-card">
+      <h2>Renowned Psychiatrists</h2>
+      <div class="ep-sub">
+        Book an appointment with verified specialists. Pay first to confirm your slot.
+      </div>
 
-      const chips = document.querySelectorAll(".chip");
-      const sendBtn = document.getElementById("sendBtn");
-      const refreshBtn = document.getElementById("refreshBtn");
-      const hint = document.getElementById("hint");
-      const feed = document.getElementById("feed");
+      <div class="ep-psy-list">
+        {% if psychiatrists and psychiatrists|length > 0 %}
+          {% for p in psychiatrists %}
+          <div class="ep-psy-item">
+            <div class="ep-psy-top">
+              <div style="min-width:0">
+                <div class="ep-psy-name">{{ p.name }}</div>
+                <div class="ep-psy-hospital">{{ p.hospital }}</div>
+                <div class="ep-psy-hospital" style="color:#6ee7b7;font-size:10px;margin-top:2px">{{ p.title }}</div>
+              </div>
+              <a class="ep-btn small primary" href="{{ url_for('book_psychiatrist', psychiatrist_id=p.id) }}">Book</a>
+            </div>
+            <div class="ep-psy-meta">
+              <div>
+                <span class="ep-stars" aria-label="Rating">
+                  ★★★★★
+                  <span class="ep-rating-num">{{ "%.1f"|format(p.rating) }}</span>
+                </span>
+              </div>
+              <div class="ep-fee">৳{{ p.fee_bdt }}+</div>
+            </div>
+          </div>
+          {% endfor %}
+        {% else %}
+          <div class="ep-empty">No psychiatrists configured yet.</div>
+        {% endif %}
+      </div>
 
-      function setHint(text, type) {
-        hint.textContent = text;
-        hint.classList.remove("error", "success");
-        if (type) hint.classList.add(type);
+      <div style="margin-top: 12px">
+        <a class="ep-btn" href="{{ url_for('psychiatrists_list') }}">View all</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const API_PING_URL = "{{ url_for('api_emotional_ping') }}";
+  const API_FEED_URL = "{{ url_for('api_emotional_pings') }}";
+  const LOGIN_URL = "/login";
+  const CURRENT_USER_ID = {{ current_user.id | tojson }};
+  const IS_ADMIN = {{ (current_user.is_admin) | tojson }};
+
+  let selectedMood = null;
+
+  const chips = document.querySelectorAll(".ep-chip");
+  const sendBtn = document.getElementById("sendBtn");
+  const refreshBtn = document.getElementById("refreshBtn");
+  const hint = document.getElementById("hint");
+  const feed = document.getElementById("ep-feed");
+
+  function setHint(text, type) {
+    hint.textContent = text;
+    hint.classList.remove("error", "success");
+    if (type) hint.classList.add(type);
+  }
+
+  function updateSendState() {
+    sendBtn.disabled = !selectedMood;
+  }
+
+  function prettyMood(m) {
+    return (m || "").replaceAll("_", " ").toLowerCase();
+  }
+
+  function initials(name) {
+    const s = (name || "?").trim();
+    if (!s) return "?";
+    const parts = s.split(/\s+/);
+    const a = parts[0]?.[0] || "?";
+    const b = parts.length > 1 ? parts[parts.length - 1]?.[0] : "";
+    return (a + b).toUpperCase();
+  }
+
+  function escapeHTML(str) {
+    return (str || "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  async function fetchJSON(url, options = {}) {
+    const res = await fetch(url, { credentials: "same-origin", ...options });
+    const contentType = res.headers.get("content-type") || "";
+    const isJson = contentType.includes("application/json");
+
+    if (res.status === 401) return { __unauthorized: true, status: 401 };
+
+    if (!res.ok) {
+      let json = null;
+      let text = "";
+      if (isJson) json = await res.json().catch(() => null);
+      else text = await res.text().catch(() => "");
+      return { __error: true, status: res.status, json, text };
+    }
+
+    if (!isJson) {
+      const text = await res.text().catch(() => "");
+      if ((text || "").toLowerCase().includes("<html")) {
+        return { __unauthorized: true, status: 401 };
       }
+      return { message: text || "OK" };
+    }
 
-      function updateSendState() {
-        sendBtn.disabled = !selectedMood;
-      }
+    return await res.json().catch(() => ({}));
+  }
 
-      function prettyMood(m) {
-        return (m || "").replaceAll("_", " ").toLowerCase();
-      }
+  function renderPost(p) {
+    const div = document.createElement("div");
+    div.className = "ep-post";
 
-      function initials(name) {
-        const s = (name || "?").trim();
-        if (!s) return "?";
-        const parts = s.split(/\s+/);
-        const a = parts[0]?.[0] || "?";
-        const b = parts.length > 1 ? parts[parts.length - 1]?.[0] : "";
-        return (a + b).toUpperCase();
-      }
+    const safeName = escapeHTML(p.user_name || "Unknown");
+    const safeMeta = escapeHTML(p.created_at_human || "");
+    const safeMood = escapeHTML(prettyMood(p.mood));
+    const safeMsg = p.message ? escapeHTML(p.message) : "";
+    
+    // Check if current user can delete this ping
+    const canDelete = CURRENT_USER_ID != null && (Number(p.user_id) === Number(CURRENT_USER_ID) || IS_ADMIN === true);
 
-      function escapeHTML(str) {
-        return (str || "")
-          .replaceAll("&", "&amp;")
-          .replaceAll("<", "&lt;")
-          .replaceAll(">", "&gt;")
-          .replaceAll('"', "&quot;")
-          .replaceAll("'", "&#039;");
-      }
-
-      async function fetchJSON(url, options = {}) {
-        const res = await fetch(url, {
-          credentials: "same-origin",
-          ...options,
-        });
-
-        const contentType = res.headers.get("content-type") || "";
-        const isJson = contentType.includes("application/json");
-
-        if (res.status === 401) return { __unauthorized: true, status: 401 };
-
-        if (!res.ok) {
-          let json = null;
-          let text = "";
-          if (isJson) json = await res.json().catch(() => null);
-          else text = await res.text().catch(() => "");
-          return { __error: true, status: res.status, json, text };
-        }
-
-        if (!isJson) {
-          const text = await res.text().catch(() => "");
-          // If Flask-Login redirected us to an HTML login page, treat as unauthorized.
-          if ((text || "").toLowerCase().includes("<html")) {
-            return { __unauthorized: true, status: 401 };
-          }
-          // Some endpoints may return 204/empty or plain-text on success.
-          // Treat any 2xx non-HTML response as success to avoid false "Failed".
-          return { message: text || "OK" };
-        }
-
-        return await res.json().catch(() => ({}));
-      }
-
-      function renderPost(p) {
-        const div = document.createElement("div");
-        div.className = "post";
-
-        const safeName = escapeHTML(p.user_name || "Unknown");
-        const safeMeta = escapeHTML(p.created_at_human || "");
-        const safeMood = escapeHTML(prettyMood(p.mood));
-        const safeMsg = p.message ? escapeHTML(p.message) : "";
-
-        div.innerHTML = `
-                      <div class="post-head">
-                        <div class="who">
-                          <div class="avatar">${initials(p.user_name)}</div>
-                          <div style="min-width:0">
-                            <div class="name">${safeName}</div>
-                            <div class="meta">${safeMeta}</div>
-                          </div>
-                        </div>
-                        <div class="mood">${safeMood}</div>
-                      </div>
-
-                      <div class="post-body">${
-                        safeMsg
-                          ? safeMsg
-                          : "<span style='color:rgba(156,163,175,0.85)'>No message provided.</span>"
-                      }</div>
-
-                      <div class="post-actions">
-        <button class="btn small listened" data-action="listen" data-ping-id="${
-          p.id
-        }"
+    div.innerHTML = `
+      <div class="ep-post-head">
+        <div class="ep-who">
+          <div class="ep-avatar">${initials(p.user_name)}</div>
+          <div style="min-width:0">
+            <div class="ep-name">${safeName}</div>
+            <div class="ep-meta">${safeMeta}</div>
+          </div>
+        </div>
+        <div class="ep-mood">${safeMood}</div>
+      </div>
+      <div class="ep-post-body">${
+        safeMsg ? safeMsg : "<span style='opacity:.6'>No message provided.</span>"
+      }</div>
+      <div class="ep-post-actions">
+        <button class="ep-btn small listened" data-action="listen" data-ping-id="${p.id}"
           ${p.is_listened ? "disabled" : ""}>
           ${p.is_listened ? "Listened ✔" : "Listen"}
         </button>
-
-        <button class="btn small" data-action="chat" data-user-id="${
-          p.user_id ?? ""
-        }">
-          Chat
-        </button>
-
-        <button class="btn small" data-action="uplift" data-ping-id="${p.id}">
-          Uplift
-        </button>
+        <button class="ep-btn small" data-action="chat" data-user-id="${p.user_id ?? ""}">Chat</button>
+        <button class="ep-btn small" data-action="uplift" data-ping-id="${p.id}">Uplift</button>
+        ${canDelete ? `<button class="ep-btn small" data-action="delete" data-ping-id="${p.id}" style="color:#ef4444;border-color:rgba(239,68,68,0.3)">Delete</button>` : ''}
       </div>
+    `;
 
-                    `;
+    div.addEventListener("click", (e) => {
+      const btn = e.target.closest("button");
+      if (!btn) return;
+      const action = btn.dataset.action;
 
-        div.addEventListener("click", (e) => {
-          const btn = e.target.closest("button");
-          if (!btn) return;
-
-          const action = btn.dataset.action;
-
-          if (action === "chat") {
-            const uid = btn.dataset.userId;
-            if (!uid) return alert("Cannot start chat: user not found.");
-            window.location.href = `/chat/${uid}`;
-            return;
-          }
-
-          if (action === "listen") {
-            const pingId = btn.dataset.pingId;
-
-            fetch(`/api/emotional_pings/${pingId}/listen`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-            })
-              .then((res) => res.json())
-              .then((data) => {
-                if (data.ok) {
-                  btn.textContent = "Listened ✔";
-                  btn.disabled = true;
-                } else {
-                  alert("Failed to mark as listened");
-                }
-              })
-              .catch((err) => {
-                console.error(err);
-                alert("Error connecting to server");
-              });
-
-            return;
-          }
-
-          if (action === "uplift") {
-            const pingId = btn.dataset.pingId;
-
-            fetch(`/api/emotional_pings/${pingId}/uplift`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-            })
-              .then((res) => res.json())
-              .then((data) => {
-                if (data.ok) {
-                  // 🔥 IMPORTANT: reload feed so uplifted post moves to top
-                  loadFeed();
-                } else {
-                  alert("Failed to uplift");
-                }
-              })
-              .catch((err) => {
-                console.error(err);
-                alert("Error uplifting post");
-              });
-
-            return;
-          }
-        });
-
-        return div;
+      if (action === "chat") {
+        const uid = btn.dataset.userId;
+        if (!uid) return alert("Cannot start chat: user not found.");
+        window.location.href = `/chat/${uid}`;
+        return;
       }
 
-      async function loadFeed() {
-        feed.innerHTML = `<div class="empty">Loading emotional pings…</div>`;
-
-        const data = await fetchJSON(API_FEED_URL);
-
-        if (data.__unauthorized) {
-          feed.innerHTML = `
-                        <div class="empty">
-                          You are not logged in. <a href="${LOGIN_URL}" style="color:#93c5fd">Log in</a> to see the feed.
-                        </div>`;
-          return;
-        }
-
-        if (data.__error) {
-          feed.innerHTML = `
-                        <div class="empty">
-                          Could not load feed (HTTP ${data.status}).<br/>
-                          <span style="opacity:.85">${escapeHTML(
-                            data.json?.error ||
-                              data.json?.message ||
-                              data.text ||
-                              ""
-                          )}</span>
-                        </div>`;
-          return;
-        }
-
-        const pings = data.pings || [];
-        feed.innerHTML = "";
-
-        if (!pings.length) {
-          feed.innerHTML = `<div class="empty">No emotional pings yet. Be the first to post one 💗</div>`;
-          return;
-        }
-
-        pings.forEach((p) => feed.appendChild(renderPost(p)));
-      }
-
-      chips.forEach((chip) => {
-        chip.addEventListener("click", () => {
-          chips.forEach((c) => c.classList.remove("selected"));
-          chip.classList.add("selected");
-          selectedMood = chip.dataset.mood;
-          updateSendState();
-          setHint("Ready — click Send Ping.");
-        });
-      });
-
-      sendBtn.addEventListener("click", async () => {
-        const message = document.getElementById("message").value.trim();
-
-        if (!selectedMood)
-          return setHint("Please pick a feeling first.", "error");
-
-        sendBtn.disabled = true;
-        const oldText = sendBtn.textContent;
-        sendBtn.textContent = "Sending…";
-        setHint("Sending ping…");
-
-        const data = await fetchJSON(API_PING_URL, {
+      if (action === "listen") {
+        const pingId = btn.dataset.pingId;
+        fetch(`/api/emotional_pings/${pingId}/listen`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mood: selectedMood, message }),
-        });
+        })
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.ok) { btn.textContent = "Listened ✔"; btn.disabled = true; }
+            else alert("Failed to mark as listened");
+          })
+          .catch((err) => { console.error(err); alert("Error connecting to server"); });
+        return;
+      }
 
-        if (data.__unauthorized) {
-          setHint("Please log in to send an emotional ping.", "error");
-          setTimeout(() => (window.location.href = LOGIN_URL), 600);
-          sendBtn.textContent = oldText;
-          updateSendState();
-          return;
-        }
+      if (action === "uplift") {
+        const pingId = btn.dataset.pingId;
+        fetch(`/api/emotional_pings/${pingId}/uplift`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        })
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.ok) loadFeed();
+            else alert("Failed to uplift");
+          })
+          .catch((err) => { console.error(err); alert("Error uplifting post"); });
+        return;
+      }
 
-        if (data.__error) {
-          const msg =
-            data.json?.error ||
-            data.json?.message ||
-            data.text ||
-            `Failed (HTTP ${data.status})`;
-          setHint(msg, "error");
-          sendBtn.textContent = oldText;
-          updateSendState();
-          return;
-        }
+      if (action === "delete") {
+        const pingId = btn.dataset.pingId;
+        if (!confirm("Are you sure you want to delete this emotional ping?")) return;
+        
+        btn.disabled = true;
+        btn.textContent = "Deleting...";
+        
+        fetch(`/api/emotional_pings/${pingId}`, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+        })
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.ok) {
+              loadFeed(); // Reload the feed to remove the deleted ping
+            } else {
+              alert(data.error || "Failed to delete ping");
+              btn.disabled = false;
+              btn.textContent = "Delete";
+            }
+          })
+          .catch((err) => {
+            console.error(err);
+            alert("Error connecting to server");
+            btn.disabled = false;
+            btn.textContent = "Delete";
+          });
+        return;
+      }
+    });
 
-        setHint(data.message || "Ping sent successfully 💗", "success");
+    return div;
+  }
 
-        document.getElementById("message").value = "";
-        chips.forEach((c) => c.classList.remove("selected"));
-        selectedMood = null;
-        updateSendState();
+  async function loadFeed() {
+    feed.innerHTML = `<div class="ep-empty">Loading emotional pings…</div>`;
 
-        await loadFeed();
+    const data = await fetchJSON(API_FEED_URL);
 
-        sendBtn.textContent = oldText;
-        updateSendState();
-      });
+    if (data.__unauthorized) {
+      feed.innerHTML = `<div class="ep-empty">You are not logged in. <a href="${LOGIN_URL}" style="color:#059669">Log in</a> to see the feed.</div>`;
+      return;
+    }
 
-      refreshBtn.addEventListener("click", loadFeed);
+    if (data.__error) {
+      feed.innerHTML = `<div class="ep-empty">Could not load feed (HTTP ${data.status}).<br/><span style="opacity:.85">${escapeHTML(
+        data.json?.error || data.json?.message || data.text || ""
+      )}</span></div>`;
+      return;
+    }
 
-      loadFeed();
-    </script>
-  </body>
-</html>
+    const pings = data.pings || [];
+    feed.innerHTML = "";
+
+    if (!pings.length) {
+      feed.innerHTML = `<div class="ep-empty">No emotional pings yet. Be the first to post one 💗</div>`;
+      return;
+    }
+
+    pings.forEach((p) => feed.appendChild(renderPost(p)));
+  }
+
+  chips.forEach((chip) => {
+    chip.addEventListener("click", () => {
+      chips.forEach((c) => c.classList.remove("selected"));
+      chip.classList.add("selected");
+      selectedMood = chip.dataset.mood;
+      updateSendState();
+      setHint("Ready — click Send Ping.");
+    });
+  });
+
+  sendBtn.addEventListener("click", async () => {
+    const message = document.getElementById("message").value.trim();
+    if (!selectedMood) return setHint("Please pick a feeling first.", "error");
+
+    sendBtn.disabled = true;
+    const oldText = sendBtn.textContent;
+    sendBtn.textContent = "Sending…";
+    setHint("Sending ping…");
+
+    const data = await fetchJSON(API_PING_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mood: selectedMood, message }),
+    });
+
+    if (data.__unauthorized) {
+      setHint("Please log in to send an emotional ping.", "error");
+      setTimeout(() => (window.location.href = LOGIN_URL), 600);
+      sendBtn.textContent = oldText;
+      updateSendState();
+      return;
+    }
+
+    if (data.__error) {
+      const msg = data.json?.error || data.json?.message || data.text || `Failed (HTTP ${data.status})`;
+      setHint(msg, "error");
+      sendBtn.textContent = oldText;
+      updateSendState();
+      return;
+    }
+
+    setHint(data.message || "Ping sent successfully 💗", "success");
+    document.getElementById("message").value = "";
+    chips.forEach((c) => c.classList.remove("selected"));
+    selectedMood = null;
+    updateSendState();
+    await loadFeed();
+    sendBtn.textContent = oldText;
+    updateSendState();
+  });
+
+  refreshBtn.addEventListener("click", loadFeed);
+  loadFeed();
+</script>
+{% endblock %}

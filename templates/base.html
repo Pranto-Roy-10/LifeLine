@@ -1097,7 +1097,7 @@
         <div id="panel-detail-view" class="flex flex-col h-full hidden">
           <div class="px-5 py-4 flex items-center justify-between flex-shrink-0 border-b border-slate-800 bg-slate-900/80">
             <div class="flex items-center gap-2.5 flex-1 min-w-0">
-              <button onclick="showShopListView()" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 flex items-center justify-center text-slate-400 hover:text-slate-200 transition cursor-pointer flex-shrink-0">
+              <button onclick="showShopListView()" title="Back to service list" aria-label="Back to service list" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 flex items-center justify-center text-slate-400 hover:text-slate-200 transition cursor-pointer flex-shrink-0">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
               </button>
               <div class="min-w-0">
@@ -1134,7 +1134,7 @@
                 <div class="w-7 h-7 rounded-md bg-slate-800 flex items-center justify-center flex-shrink-0">
                   <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
                 </div>
-                <a id="panel-shop-phone" href="#" class="text-sm text-emerald-400 font-semibold hover:text-emerald-300 hover:underline transition"></a>
+                <a id="panel-shop-phone" href="#" title="Call shop" aria-label="Call shop" class="text-sm text-emerald-400 font-semibold hover:text-emerald-300 hover:underline transition"></a>
               </div>
               <div class="flex items-center gap-3">
                 <div class="w-7 h-7 rounded-md bg-slate-800 flex items-center justify-center flex-shrink-0">
@@ -1158,11 +1158,19 @@
                 </div>
                 <div class="flex justify-between text-sm">
                   <span class="text-slate-400">Parts / Materials (est.)</span>
-                  <span class="text-slate-600 italic text-xs">calculated on request</span>
+                  <span id="panel-parts-cost" class="font-semibold text-slate-200"></span>
                 </div>
                 <div class="flex justify-between text-sm">
                   <span class="text-slate-400">LifeLine Commission (5%)</span>
-                  <span class="text-slate-600 italic text-xs">calculated on request</span>
+                  <span id="panel-commission" class="font-semibold text-slate-200"></span>
+                </div>
+                <div id="panel-bonus-row" class="flex justify-between text-sm hidden">
+                  <span class="text-emerald-400">Membership Bonus <span id="panel-bonus-rate"></span></span>
+                  <span id="panel-bonus-discount" class="font-semibold text-emerald-300"></span>
+                </div>
+                <div id="panel-voucher-row" class="flex justify-between text-sm hidden">
+                  <span class="text-cyan-400">Voucher Discount <span id="panel-voucher-rate"></span></span>
+                  <span id="panel-voucher-discount" class="font-semibold text-cyan-300"></span>
                 </div>
                 <div class="border-t border-dashed border-slate-700 pt-2.5 mt-1 flex justify-between text-sm">
                   <span class="font-bold text-slate-200">Estimated Total</span>
@@ -1188,6 +1196,8 @@
                   <hr class="border-slate-700">
                   <div class="flex justify-between"><span class="text-slate-400">Subtotal</span><span id="rcpt-subtotal" class="font-medium text-slate-200">-</span></div>
                   <div class="flex justify-between"><span class="text-slate-400">LifeLine Commission <span id="rcpt-rate" class="text-[10px]">(5%)</span></span><span id="rcpt-commission" class="font-medium text-slate-200">-</span></div>
+                  <div id="rcpt-bonus-row" class="flex justify-between hidden"><span class="text-emerald-400">Membership Bonus <span id="rcpt-bonus-rate" class="text-[10px]"></span></span><span id="rcpt-bonus" class="font-medium text-emerald-300">-</span></div>
+                  <div id="rcpt-voucher-row" class="flex justify-between hidden"><span class="text-cyan-400">Voucher Discount <span id="rcpt-voucher-rate" class="text-[10px]"></span></span><span id="rcpt-voucher" class="font-medium text-cyan-300">-</span></div>
                   <hr class="border-slate-600">
                   <div class="flex justify-between font-bold text-emerald-400 text-base"><span>Total</span><span id="rcpt-total">-</span></div>
                 </div>
@@ -1215,6 +1225,11 @@
 
           <!-- Panel Footer: Payment Method + Send Request -->
           <div id="panel-actions" class="px-5 py-4 border-t border-slate-800 flex-shrink-0 bg-slate-900/80">
+            <div id="panel-voucher-select-wrap" class="mb-3 hidden">
+              <label for="panel-voucher-select" class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Apply Voucher</label>
+              <select id="panel-voucher-select" title="Select voucher" aria-label="Select voucher to apply" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-slate-200"></select>
+              <p id="panel-voucher-note" class="text-[10px] text-slate-500 mt-1"></p>
+            </div>
             <div class="mb-3">
               <p class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Payment Method</p>
               <div class="flex gap-2">
@@ -1255,6 +1270,90 @@
       let _currentShopData = null;
       let _currentRequestId = null;
       let _cachedShopList = []; // cached shops for current list view
+      let _activeVouchers = [];
+      let _selectedVoucherId = null;
+      const _membershipTier = "{{ membership_tier or 'basic' }}";
+      const _membershipBonusRate = {{ (service_bonus_percent or 0) / 100 }};
+
+      function _estimatedPartsByShopType(shopType) {
+        const estimates = {
+          tire_shop: 500,
+          hospital: 1400,
+          pharmacy: 350,
+          grocery: 0,
+          stationary: 0,
+          restaurant: 450,
+          salon: 250,
+        };
+        return estimates[shopType] != null ? estimates[shopType] : 300;
+      }
+
+      function _getSelectedVoucher() {
+        if (!_selectedVoucherId) return null;
+        return _activeVouchers.find(v => Number(v.id) === Number(_selectedVoucherId)) || null;
+      }
+
+      function _renderVoucherSelector() {
+        const wrap = document.getElementById('panel-voucher-select-wrap');
+        const sel = document.getElementById('panel-voucher-select');
+        const note = document.getElementById('panel-voucher-note');
+        if (!wrap || !sel || !note) return;
+
+        if (!_activeVouchers.length) {
+          wrap.classList.add('hidden');
+          sel.innerHTML = '';
+          note.textContent = 'No active voucher available.';
+          _selectedVoucherId = null;
+          return;
+        }
+
+        wrap.classList.remove('hidden');
+        const options = ['<option value="">No voucher</option>'].concat(
+          _activeVouchers.map(v => `<option value="${v.id}">${v.discount_percent}% off - ${v.store_name} (${v.code})</option>`)
+        );
+        sel.innerHTML = options.join('');
+
+        if (_selectedVoucherId) {
+          sel.value = String(_selectedVoucherId);
+        } else {
+          // Default to highest discount voucher.
+          const best = _activeVouchers.slice().sort((a, b) => Number(b.discount_percent || 0) - Number(a.discount_percent || 0))[0];
+          _selectedVoucherId = best ? best.id : null;
+          sel.value = _selectedVoucherId ? String(_selectedVoucherId) : '';
+        }
+
+        const selected = _getSelectedVoucher();
+        note.textContent = selected
+          ? `Using ${selected.discount_percent}% voucher (${selected.code}) for this request.`
+          : 'Choose a voucher to apply, or continue without one.';
+
+        sel.onchange = () => {
+          _selectedVoucherId = sel.value ? Number(sel.value) : null;
+          const current = _getSelectedVoucher();
+          note.textContent = current
+            ? `Using ${current.discount_percent}% voucher (${current.code}) for this request.`
+            : 'Choose a voucher to apply, or continue without one.';
+          if (typeof window._rerenderShopEstimate === 'function') {
+            window._rerenderShopEstimate();
+          }
+        };
+      }
+
+      async function _loadActiveVouchers() {
+        try {
+          const resp = await fetch('/api/vouchers/my');
+          const data = await resp.json();
+          const vouchers = Array.isArray(data.vouchers) ? data.vouchers : [];
+          _activeVouchers = vouchers
+            .filter(v => !v.is_used)
+            .sort((a, b) => (Number(b.discount_percent || 0) - Number(a.discount_percent || 0)));
+          _renderVoucherSelector();
+        } catch (e) {
+          _activeVouchers = [];
+          _selectedVoucherId = null;
+          _renderVoucherSelector();
+        }
+      }
 
       function renderStarsInline(rating) {
         const full = Math.floor(rating);
@@ -1357,8 +1456,46 @@
           laborRow.classList.remove('hidden');
           document.getElementById('panel-labor-cost').textContent = '৳' + lc;
         }
-        const est = Math.round((sf + lc) * 1.3);
-        document.getElementById('panel-est-total').textContent = '৳' + est + '+';
+        const _renderEstimate = () => {
+          const parts = Number(shop.parts_cost ?? _estimatedPartsByShopType(shop.shop_type) ?? 0);
+          const subtotal = Number(sf) + Number(lc) + Number(parts);
+          const commission = Math.round(subtotal * 0.05);
+          const preBonusTotal = subtotal + commission;
+          const bonusDiscount = Math.round(preBonusTotal * _membershipBonusRate);
+          const afterMembership = Math.max(0, preBonusTotal - bonusDiscount);
+
+          const selectedVoucher = _getSelectedVoucher();
+          const voucherRate = selectedVoucher ? (Number(selectedVoucher.discount_percent || 0) / 100) : 0;
+          const voucherDiscount = Math.round(afterMembership * voucherRate);
+          const est = Math.max(0, afterMembership - voucherDiscount);
+
+          document.getElementById('panel-parts-cost').textContent = '৳' + parts;
+          document.getElementById('panel-commission').textContent = '৳' + commission;
+
+          const bonusRow = document.getElementById('panel-bonus-row');
+          if (_membershipBonusRate > 0) {
+            bonusRow.classList.remove('hidden');
+            document.getElementById('panel-bonus-rate').textContent = `(${Math.round(_membershipBonusRate * 100)}%)`;
+            document.getElementById('panel-bonus-discount').textContent = '-৳' + bonusDiscount;
+          } else {
+            bonusRow.classList.add('hidden');
+          }
+
+          const voucherRow = document.getElementById('panel-voucher-row');
+          if (selectedVoucher && voucherRate > 0) {
+            voucherRow.classList.remove('hidden');
+            document.getElementById('panel-voucher-rate').textContent = `(${selectedVoucher.discount_percent}% · ${selectedVoucher.code})`;
+            document.getElementById('panel-voucher-discount').textContent = '-৳' + voucherDiscount;
+          } else {
+            voucherRow.classList.add('hidden');
+          }
+
+          document.getElementById('panel-est-total').textContent = '৳' + est;
+        };
+
+        window._rerenderShopEstimate = _renderEstimate;
+        _renderEstimate();
+        _loadActiveVouchers().then(_renderEstimate);
 
         // Reset state
         const cashRadio = document.querySelector('input[name="payment_method"][value="cash"]');
@@ -1425,7 +1562,8 @@
               user_lat: _currentShopData._sg_lat || null,
               user_lng: _currentShopData._sg_lng || null,
               user_area: _currentShopData._sg_area || '',
-              payment_method: paymentMethod
+              payment_method: paymentMethod,
+              voucher_id: _selectedVoucherId || null
             })
           });
           const data = await res.json();
@@ -1439,6 +1577,28 @@
             document.getElementById('rcpt-commission').textContent = '৳' + r.lifeline_commission;
             document.getElementById('rcpt-rate').textContent = '(' + r.commission_rate + ')';
             document.getElementById('rcpt-total').textContent = '৳' + r.total_cost;
+            const rcptBonusRow = document.getElementById('rcpt-bonus-row');
+            if ((r.bonus_discount || 0) > 0) {
+              rcptBonusRow.classList.remove('hidden');
+              document.getElementById('rcpt-bonus-rate').textContent = '(' + (r.bonus_rate || '0%') + ')';
+              document.getElementById('rcpt-bonus').textContent = '-৳' + r.bonus_discount;
+            } else {
+              rcptBonusRow.classList.add('hidden');
+            }
+            const rcptVoucherRow = document.getElementById('rcpt-voucher-row');
+            if ((r.voucher_discount_amount || 0) > 0) {
+              rcptVoucherRow.classList.remove('hidden');
+              document.getElementById('rcpt-voucher-rate').textContent = `(${r.voucher_discount_percent || 0}%${r.voucher_code ? ' · ' + r.voucher_code : ''})`;
+              document.getElementById('rcpt-voucher').textContent = '-৳' + r.voucher_discount_amount;
+            } else {
+              rcptVoucherRow.classList.add('hidden');
+            }
+
+            if (_selectedVoucherId) {
+              _activeVouchers = _activeVouchers.filter(v => Number(v.id) !== Number(_selectedVoucherId));
+              _selectedVoucherId = null;
+              _renderVoucherSelector();
+            }
             const payMethod = document.querySelector('input[name="payment_method"]:checked')?.value || 'cash';
             const payLabel = payMethod === 'bkash' ? '📱 bKash (Mobile Payment)' : '💵 Cash (Hand to Hand)';
             document.getElementById('rcpt-eta').textContent = 'Estimated arrival: ' + data.estimated_wait;
