@@ -1024,7 +1024,7 @@ p[class*="text-[11px]"][class*="text-emerald-300"] {
   display: flex;
   background: #020617;
   overflow: hidden;
-  z-index: 1000;
+  z-index: 1100;
 }
 
 .chat-sidebar {

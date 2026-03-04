@@ -163,7 +163,7 @@
                 {% if t.source == 'Psychiatry' and t.psy_actionable %}
                   <div class="flex gap-2 justify-end">
                     <form method="post" action="{{ url_for('admin_psychiatry_payment_action', appointment_id=t.source_id, action='approve') }}">
-                      <button class="btn-sheen bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-lg shadow-emerald-900/20">Approve</button>
+                      <button class="btn-sheen admin-approve-btn bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-lg shadow-emerald-900/20">Approve</button>
                     </form>
                     <form method="post" action="{{ url_for('admin_psychiatry_payment_action', appointment_id=t.source_id, action='reject') }}">
                       <button onclick="return confirm('Reject this payment?')" class="text-rose-400 hover:text-rose-300 hover:underline text-xs font-bold">Reject</button>

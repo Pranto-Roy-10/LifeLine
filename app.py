@@ -1449,6 +1449,42 @@ def _is_admin_user(user) -> bool:
         return False
 
 
+def _membership_tier_for_user(user) -> str:
+    """Return one of: basic, premium, angel.
+
+    We infer Angel from the user's latest approved higher-tier payment amount.
+    """
+    try:
+        if not user:
+            return "basic"
+        if not bool(getattr(user, "is_premium", False)):
+            return "basic"
+
+        latest_approved = (
+            Payment.query.filter_by(user_id=user.id, status="approved")
+            .order_by(Payment.created_at.desc())
+            .first()
+        )
+
+        amt = float(getattr(latest_approved, "amount", 0) or 0)
+        if amt >= 2000:
+            return "angel"
+        return "premium"
+    except Exception:
+        # Safe fallback: premium flag still means premium access.
+        if user and bool(getattr(user, "is_premium", False)):
+            return "premium"
+        return "basic"
+
+
+def _service_bonus_rate_for_tier(tier: str) -> float:
+    if tier == "angel":
+        return 0.08
+    if tier == "premium":
+        return 0.03
+    return 0.0
+
+
 def admin_required(view_func):
     from functools import wraps
 
@@ -1573,11 +1609,15 @@ def inject_user():
         translation_enabled = True
 
     user = current_user()
+    membership_tier = _membership_tier_for_user(user)
+    service_bonus_percent = int(round(_service_bonus_rate_for_tier(membership_tier) * 100))
 
     unread_chat_count = _compute_unread_chat_count(user.id) if user else 0
 
     return dict(
         current_user=user,
+        membership_tier=membership_tier,
+        service_bonus_percent=service_bonus_percent,
         translation_enabled=translation_enabled,
         unread_chat_count=int(unread_chat_count or 0),
     )
@@ -2562,6 +2602,26 @@ def api_uplift_ping(ping_id):
         print("UPLIFT ERROR:", e)
         return jsonify({"ok": False}), 500
 
+@app.route("/api/emotional_pings/<int:ping_id>", methods=["DELETE"])
+@login_required
+def api_delete_emotional_ping(ping_id):
+    try:
+        ping = EmotionalPing.query.get_or_404(ping_id)
+        
+        # Check authorization: user owns the ping OR user is admin
+        _cu = current_user()
+        if ping.user_id != _cu.id and not _is_admin_user(_cu):
+            return jsonify({"ok": False, "error": "Unauthorized"}), 403
+        
+        db.session.delete(ping)
+        db.session.commit()
+        
+        return jsonify({"ok": True, "message": "Ping deleted successfully"}), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        print("DELETE PING ERROR:", e)
+        return jsonify({"ok": False, "error": "Failed to delete ping"}), 500
 
 
 # ---------- GOOGLE / FIREBASE AUTH ----------
@@ -7310,6 +7370,7 @@ def create_shop_request():
         user_lat = data.get("user_lat")
         user_lng = data.get("user_lng")
         user_area = data.get("user_area", "").strip()
+        voucher_id = data.get("voucher_id")
         
         if not shop_id or not title:
             return jsonify({
@@ -7352,7 +7413,31 @@ def create_shop_request():
         subtotal = shop_service_fee + shop_labor_cost + parts_cost
         commission_rate = 0.05  # LifeLine takes 5%
         lifeline_commission = round(subtotal * commission_rate, 2)
-        total_cost = round(subtotal + lifeline_commission, 2)
+
+        tier = _membership_tier_for_user(user)
+        bonus_rate = _service_bonus_rate_for_tier(tier)
+        pre_bonus_total = round(subtotal + lifeline_commission, 2)
+        bonus_discount = round(pre_bonus_total * bonus_rate, 2)
+        after_membership_total = round(pre_bonus_total - bonus_discount, 2)
+
+        voucher_discount_percent = 0
+        voucher_discount_amount = 0.0
+        voucher_code = None
+        voucher_obj = None
+        if voucher_id:
+            try:
+                vid = int(voucher_id)
+            except (TypeError, ValueError):
+                vid = None
+
+            if vid:
+                voucher_obj = Voucher.query.filter_by(id=vid, user_id=user.id, is_used=False).first()
+                if voucher_obj:
+                    voucher_discount_percent = int(voucher_obj.discount_percent or 0)
+                    voucher_discount_amount = round(after_membership_total * (voucher_discount_percent / 100.0), 2)
+                    voucher_code = voucher_obj.code
+
+        total_cost = round(after_membership_total - voucher_discount_amount, 2)
         
         # Create shop request
         shop_req = ShopRequest(
@@ -7373,6 +7458,10 @@ def create_shop_request():
         )
         
         db.session.add(shop_req)
+
+        if voucher_obj:
+            voucher_obj.is_used = True
+
         db.session.commit()
         
         print(f"[Shop Request] User {user.id} requested service from shop {shop_id}: {title} | Total: ৳{total_cost}")
@@ -7391,6 +7480,13 @@ def create_shop_request():
                 "subtotal": subtotal,
                 "lifeline_commission": lifeline_commission,
                 "commission_rate": f"{int(commission_rate*100)}%",
+                "membership_tier": tier,
+                "bonus_rate": f"{int(bonus_rate*100)}%",
+                "bonus_discount": bonus_discount,
+                "pre_bonus_total": pre_bonus_total,
+                "voucher_discount_percent": voucher_discount_percent,
+                "voucher_discount_amount": voucher_discount_amount,
+                "voucher_code": voucher_code,
                 "total_cost": total_cost,
             }
         }), 200

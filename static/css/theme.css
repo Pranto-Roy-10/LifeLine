@@ -25,9 +25,10 @@ html.theme-transition *::after {
 /* ═════════════════════════════════════
    1.  PAGE / BODY  BACKGROUND
    ═════════════════════════════════════ */
-/* Green base on <html> so body can be transparent */
+/* Soft pastel gradient base for entire light theme */
 html:not(.dark) {
-  background-color: #ecfdf5 !important;
+  background: linear-gradient(135deg, #b8d8c8 0%, #c6dbd2 30%, #d0cedd 65%, #d2c5dc 100%) !important;
+  background-attachment: fixed !important;
 }
 html:not(.dark) body {
   background-color: transparent !important;
@@ -46,7 +47,7 @@ html:not(.dark) .site-bg-blobs {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  z-index: 0;
+  z-index: -1;
   background: transparent;
 }
 
@@ -55,7 +56,6 @@ html:not(.dark) .top-nav { z-index: 1000; }
 html:not(.dark) main,
 html:not(.dark) footer {
   position: relative;
-  z-index: 1;
 }
 html:not(.dark) .page-shell,
 html:not(.dark) main {
@@ -109,12 +109,12 @@ html:not(.dark) .site-bg-blobs::after {
    2.  NAVIGATION BAR
    ═════════════════════════════════════ */
 html:not(.dark) .top-nav {
-  background: rgba(236,253,245,0.80) !important;
+  background: rgba(195,216,206,0.55) !important;
   background-image: none !important;
   backdrop-filter: blur(18px) saturate(1.8) !important;
   -webkit-backdrop-filter: blur(18px) saturate(1.8) !important;
-  border-bottom: 1px solid rgba(167,243,208,0.35) !important;
-  box-shadow: 0 1px 8px rgba(16,185,129,0.06) !important;
+  border-bottom: 1px solid rgba(180,210,195,0.35) !important;
+  box-shadow: 0 1px 8px rgba(0,0,0,0.04) !important;
 }
 html:not(.dark) .nav-brand  { color: #0f172a !important; }
 html:not(.dark) .nav-title  { color: #0f172a !important; }
@@ -189,10 +189,10 @@ html:not(.dark) .nav-pill--premium {
    ═════════════════════════════════════ */
 html:not(.dark) #notif-dropdown,
 html:not(.dark) #user-menu-dropdown {
-  background: rgba(236,253,245,0.90) !important;
+  background: rgba(210,216,220,0.90) !important;
   backdrop-filter: blur(16px) saturate(1.5) !important;
   -webkit-backdrop-filter: blur(16px) saturate(1.5) !important;
-  border-color: rgba(226,232,240,0.6) !important;
+  border-color: rgba(200,210,215,0.6) !important;
   box-shadow: 0 8px 30px rgba(0,0,0,0.08) !important;
   --tw-ring-color: rgba(0,0,0,0.04) !important;
 }
@@ -219,11 +219,11 @@ html:not(.dark) #user-menu-dropdown a:hover {
    ═════════════════════════════════════ */
 html:not(.dark) .glass-card,
 html:not(.dark) .glass-card-enhanced {
-  background: rgba(236,253,245,0.72) !important;
+  background: rgba(220,230,228,0.65) !important;
   backdrop-filter: blur(12px) saturate(1.4) !important;
   -webkit-backdrop-filter: blur(12px) saturate(1.4) !important;
-  border-color: rgba(167,243,208,0.5) !important;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.04), 0 1px 3px rgba(16,185,129,0.06) !important;
+  border-color: rgba(190,210,205,0.5) !important;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.04), 0 1px 3px rgba(0,0,0,0.03) !important;
 }
 html:not(.dark) .glass-card-enhanced:hover {
   border-color: #34d399 !important;
@@ -231,10 +231,10 @@ html:not(.dark) .glass-card-enhanced:hover {
 }
 
 html:not(.dark) .live-panel {
-  background: rgba(236,253,245,0.68) !important;
+  background: rgba(220,230,228,0.60) !important;
   backdrop-filter: blur(14px) saturate(1.3) !important;
   -webkit-backdrop-filter: blur(14px) saturate(1.3) !important;
-  border-color: rgba(209,250,229,0.55) !important;
+  border-color: rgba(190,210,205,0.55) !important;
   box-shadow: 0 8px 24px rgba(0,0,0,0.04) !important;
 }
 html:not(.dark) .live-panel::after {
@@ -243,14 +243,26 @@ html:not(.dark) .live-panel::after {
     radial-gradient(circle at 20% 100%, rgba(56,189,248,0.04), transparent 42%) !important;
 }
 
+/* Homepage-only LIVE badge in Nearby activity (light mode) */
+html:not(.dark) .home-hero .live-panel .live-pill {
+  background: linear-gradient(90deg, rgba(16,185,129,0.20), rgba(56,189,248,0.16)) !important;
+  border-color: rgba(5,150,105,0.35) !important;
+  color: #065f46 !important;
+  box-shadow: 0 8px 20px rgba(6,95,70,0.14) !important;
+}
+html:not(.dark) .home-hero .live-panel .live-pill::after {
+  background: radial-gradient(circle at 35% 30%, #ffffff 0%, rgba(255,255,255,0.65) 14%, #10b981 52%, #059669 100%) !important;
+  box-shadow: 0 0 10px rgba(16,185,129,0.45), 0 0 22px rgba(5,150,105,0.20) !important;
+}
+
 html:not(.dark) .live-card {
-  background: rgba(248,250,252,0.8) !important;
-  border-color: rgba(209,250,229,0.5) !important;
+  background: rgba(235,240,238,0.75) !important;
+  border-color: rgba(190,210,205,0.5) !important;
   box-shadow: 0 2px 8px rgba(0,0,0,0.03) !important;
 }
 html:not(.dark) .skeleton-card {
-  background: rgba(240,253,244,0.5) !important;
-  border-color: rgba(16,185,129,0.2) !important;
+  background: rgba(220,230,228,0.45) !important;
+  border-color: rgba(180,200,195,0.25) !important;
 }
 
 html:not(.dark) .stat-chip {
@@ -270,6 +282,9 @@ html:not(.dark) .home-hero {
   background: transparent !important;
   background-image: none !important;
   background-color: transparent !important;
+}
+html:not(.dark) .home-hero::before {
+  background: none !important;
 }
 html:not(.dark) .home-hero .hero-backdrop,
 html:not(.dark) .hero-backdrop {
@@ -308,6 +323,87 @@ html:not(.dark) .home-hero p[class*="text-slate-3"] {
   color: #475569 !important;
 }
 
+/* Homepage donation section readability in light mode */
+html:not(.dark) #donate-section {
+  background-image: none !important;
+  background-color: transparent !important;
+}
+html:not(.dark) #donate-section h3,
+html:not(.dark) #donate-section h4 {
+  color: #0f172a !important;
+}
+html:not(.dark) #donate-section p[class*="text-slate-3"],
+html:not(.dark) #donate-section p[class*="text-slate-4"],
+html:not(.dark) #donate-section p[class*="text-slate-5"] {
+  color: #475569 !important;
+}
+html:not(.dark) #donate-section .rounded-2xl.border {
+  background: rgba(228, 237, 234, 0.78) !important;
+  border-color: rgba(167, 189, 181, 0.55) !important;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06) !important;
+}
+html:not(.dark) #donate-section .donor-list-box {
+  background: rgba(223, 233, 230, 0.82) !important;
+  border-color: rgba(153, 176, 168, 0.6) !important;
+}
+html:not(.dark) #donate-section .donor-list-box > div > div {
+  background: rgba(235, 242, 240, 0.9) !important;
+  border-color: rgba(165, 186, 179, 0.6) !important;
+}
+html:not(.dark) #donate-section .text-rose-200,
+html:not(.dark) #donate-section .text-rose-300 {
+  color: #be123c !important;
+}
+html:not(.dark) #donate-section .text-amber-200 {
+  color: #b45309 !important;
+}
+
+/* Admin Donations page readability in light mode */
+html:not(.dark) .admin-donations-page h1,
+html:not(.dark) .admin-donations-page h2,
+html:not(.dark) .admin-donations-page h3 {
+  color: #0f172a !important;
+}
+html:not(.dark) .admin-donations-page [class*="text-slate-300"],
+html:not(.dark) .admin-donations-page [class*="text-slate-400"],
+html:not(.dark) .admin-donations-page [class*="text-slate-500"] {
+  color: #475569 !important;
+}
+html:not(.dark) .admin-donations-page [class*="bg-slate-900"],
+html:not(.dark) .admin-donations-page [class*="bg-slate-800"] {
+  background-color: rgba(229, 238, 235, 0.86) !important;
+}
+html:not(.dark) .admin-donations-page [class*="border-slate-800"],
+html:not(.dark) .admin-donations-page [class*="border-slate-700"] {
+  border-color: rgba(163, 184, 175, 0.55) !important;
+}
+html:not(.dark) .admin-donations-page thead {
+  background: rgba(221, 234, 229, 0.9) !important;
+}
+html:not(.dark) .admin-donations-page tbody tr:hover {
+  background: rgba(214, 231, 224, 0.75) !important;
+}
+html:not(.dark) .admin-donations-page .tab-btn.bg-slate-800 {
+  background: rgba(205, 221, 215, 0.95) !important;
+  color: #334155 !important;
+  border: 1px solid rgba(148, 163, 184, 0.35) !important;
+}
+html:not(.dark) .admin-donations-page .tab-btn.bg-slate-800:hover {
+  background: rgba(193, 214, 206, 0.98) !important;
+}
+html:not(.dark) .admin-donations-page .tab-btn.bg-emerald-600 {
+  background: #059669 !important;
+  color: #ffffff !important;
+}
+/* Dark token cards in summary area become soft tinted cards in light mode */
+html:not(.dark) .admin-donations-page [class*="bg-emerald-950"],
+html:not(.dark) .admin-donations-page [class*="bg-pink-950"],
+html:not(.dark) .admin-donations-page [class*="bg-cyan-950"],
+html:not(.dark) .admin-donations-page [class*="bg-amber-950"],
+html:not(.dark) .admin-donations-page [class*="bg-orange-950"] {
+  background-color: rgba(223, 234, 230, 0.9) !important;
+}
+
 /* Emerald-300/200 text — too faint on light backgrounds */
 html:not(.dark) [class*="text-emerald-300"] {
   color: #059669 !important;
@@ -335,6 +431,21 @@ html:not(.dark) [class*="text-rose-400"] {
 }
 html:not(.dark) [class*="text-amber-400"] {
   color: #d97706 !important;
+}
+html:not(.dark) [class*="text-pink-300"] {
+  color: #be185d !important;
+}
+html:not(.dark) [class*="text-pink-400"] {
+  color: #9d174d !important;
+}
+html:not(.dark) [class*="text-orange-300"] {
+  color: #c2410c !important;
+}
+html:not(.dark) [class*="text-orange-400"] {
+  color: #9a3412 !important;
+}
+html:not(.dark) [class*="text-yellow-300"] {
+  color: #a16207 !important;
 }
 html:not(.dark) [class*="text-dbeafe"],
 html:not(.dark) [class*="text-[#dbeafe]"] {
@@ -410,6 +521,18 @@ html:not(.dark) .btn-sheen:hover p[class*="group-hover:text-emerald-200"] {
 }
 html:not(.dark) .btn-sheen:hover p[class*="group-hover:text-slate-300"] {
   color: #475569 !important;
+}
+/* Keep admin Approve buttons high-contrast in light mode. */
+html:not(.dark) .admin-approve-btn {
+  background: #059669 !important;
+  border: 1px solid #047857 !important;
+  color: #ffffff !important;
+  box-shadow: 0 8px 18px rgba(5, 150, 105, 0.28) !important;
+}
+html:not(.dark) .admin-approve-btn:hover {
+  background: #047857 !important;
+  border-color: #065f46 !important;
+  color: #ffffff !important;
 }
 /* Catch Tailwind's actual generated hover-state via broader approach */
 html:not(.dark) .group:hover [class*="group-hover:text-white"] {
@@ -530,14 +653,10 @@ html:not(.dark) ::-webkit-scrollbar-thumb:hover {
    ═════════════════════════════════════ */
 /* Chat DM page (position:fixed fullscreen — blobs can't show through, so use matching bg) */
 html:not(.dark) .chat-fullpage-container {
-  background:
-    radial-gradient(circle at 15% 20%, rgba(16,185,129,0.10), transparent 30%),
-    radial-gradient(circle at 80% 10%, rgba(56,189,248,0.07), transparent 32%),
-    radial-gradient(circle at 85% 75%, rgba(16,185,129,0.06), transparent 35%),
-    #ecfdf5 !important;
+  background: linear-gradient(135deg, #b8d8c8 0%, #c6dbd2 30%, #d0cedd 65%, #d2c5dc 100%) !important;
 }
 html:not(.dark) .chat-sidebar {
-  background: rgba(236,253,245,0.65) !important;
+  background: rgba(195,216,210,0.60) !important;
   backdrop-filter: blur(12px) saturate(1.3) !important;
   -webkit-backdrop-filter: blur(12px) saturate(1.3) !important;
   border-color: rgba(209,250,229,0.5) !important;
@@ -607,10 +726,36 @@ html:not(.dark) .conversation-card {
 html:not(.dark) .conversation-card:hover {
   background: rgba(240,253,244,0.85) !important;
 }
+html:not(.dark) .search-container {
+  background: rgba(248,250,252,0.75) !important;
+  border-color: rgba(148,163,184,0.45) !important;
+}
+html:not(.dark) .search-container:focus-within {
+  background: rgba(255,255,255,0.85) !important;
+  border-color: rgba(16,185,129,0.45) !important;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.10) !important;
+}
 html:not(.dark) .search-input {
-  background: rgba(248,250,252,0.9) !important;
-  border-color: #cbd5e1 !important;
-  color: #1e293b !important;
+  background: transparent !important;
+  color: #0f172a !important;
+}
+html:not(.dark) .search-input::placeholder {
+  color: rgba(51,65,85,0.75) !important;
+}
+html:not(.dark) .search-btn {
+  color: rgba(51,65,85,0.95) !important;
+}
+html:not(.dark) .conversation-name {
+  color: #0f172a !important;
+}
+html:not(.dark) .conversation-preview {
+  color: rgba(51,65,85,0.82) !important;
+}
+html:not(.dark) .conversation-preview.unread {
+  color: #0f172a !important;
+}
+html:not(.dark) .delete-btn {
+  color: rgba(51,65,85,0.70) !important;
 }
 html:not(.dark) .sidebar-conversation-item {
   color: #1e293b !important;
@@ -685,19 +830,19 @@ html:not(.dark) [class*="text-slate-200"]:not(button):not([class*="btn-"]) {
   color: #1e293b !important;
 }
 html:not(.dark) [class*="text-slate-300"] {
-  color: #334155 !important;
+  color: #1f2937 !important;
 }
 html:not(.dark) [class*="text-slate-400"] {
-  color: #64748b !important;
+  color: #475569 !important;
 }
 html:not(.dark) [class*="text-slate-500"] {
-  color: #94a3b8 !important;
+  color: #64748b !important;
 }
 /* slate-600…950 are already dark → no override */
 
 /* Gray variants (some templates use gray-*) */
 html:not(.dark) [class*="text-gray-400"] { color: #64748b !important; }
-html:not(.dark) [class*="text-gray-500"] { color: #94a3b8 !important; }
+html:not(.dark) [class*="text-gray-500"] { color: #64748b !important; }
 html:not(.dark) [class*="border-gray-700"],
 html:not(.dark) [class*="border-gray-800"] {
   border-color: #e2e8f0 !important;
@@ -731,7 +876,30 @@ html:not(.dark) [class*="bg-gradient-to"][class*="from-slate-9"] {
 
 /* Keep text-white/70 readable (dashboard kindness helper, etc.) */
 html:not(.dark) [class*="text-white/"] {
+  color: #334155 !important;
+}
+
+/* Tiny labels are often low-contrast in light mode; strengthen them globally. */
+html:not(.dark) [class*="text-[10px]"][class*="text-slate"],
+html:not(.dark) [class*="text-[11px]"][class*="text-slate"],
+html:not(.dark) [class*="text-xs"][class*="text-slate"],
+html:not(.dark) [class*="text-[10px]"][class*="text-gray"],
+html:not(.dark) [class*="text-[11px]"][class*="text-gray"],
+html:not(.dark) [class*="text-xs"][class*="text-gray"] {
   color: #475569 !important;
+}
+
+/* Improve readability for slate utility buttons/tabs in light mode. */
+html:not(.dark) button[class*="bg-slate-800"],
+html:not(.dark) a[class*="bg-slate-800"] {
+  background-color: rgba(226,232,240,0.9) !important;
+  border-color: #cbd5e1 !important;
+  color: #1e293b !important;
+}
+html:not(.dark) button[class*="bg-slate-800"]:hover,
+html:not(.dark) a[class*="bg-slate-800"]:hover {
+  background-color: rgba(203,213,225,0.95) !important;
+  color: #0f172a !important;
 }
 
 /* Dark-900 badge backgrounds → light tints */
@@ -782,7 +950,7 @@ html:not(.dark) [class*="to-slate-9"] {
   --tw-gradient-to: transparent !important;
 }
 /* Rounded gradient cards (not section wrappers) → frosted glass bg */
-html:not(.dark) [class*="bg-gradient-to"][class*="rounded"] {
+html:not(.dark) [class*="bg-gradient-to"][class*="rounded"]:not(a):not(button):not([role="button"]):not(input[type="submit"]):not(input[type="button"]) {
   background: rgba(236,253,245,0.72) !important;
   backdrop-filter: blur(10px) saturate(1.3) !important;
   -webkit-backdrop-filter: blur(10px) saturate(1.3) !important;
@@ -895,8 +1063,8 @@ html:not(.dark) [data-resources-widget="root"] a[class*="border-slate"]:hover {
    We override them when html:not(.dark).
    ═════════════════════════════════════ */
 html:not(.dark) {
-  --bg:      #ecfdf5;
-  --bg2:     #d1fae5;
+  --bg:      #c4d8ce;
+  --bg2:     #d0cedd;
   --card:    rgba(255,255,255,0.85);
   --card2:   rgba(248,250,252,0.9);
   --border:  rgba(209,250,229,0.6);
@@ -979,10 +1147,197 @@ html:not(.dark) .live-card-meta {
 
 /* Resources widget */
 html:not(.dark) .resources-widget {
-  background: rgba(236,253,245,0.72) !important;
+  background: rgba(210,220,218,0.70) !important;
   backdrop-filter: blur(12px) !important;
   -webkit-backdrop-filter: blur(12px) !important;
-  border-color: rgba(209,250,229,0.6) !important;
+  border-color: rgba(190,210,205,0.55) !important;
+}
+
+/* Resources pages and subpages: strong light-mode readability */
+html:not(.dark) .resources-page {
+  color: #1e293b !important;
+}
+html:not(.dark) .resources-page h1,
+html:not(.dark) .resources-page h2,
+html:not(.dark) .resources-page h3,
+html:not(.dark) .resources-page h4 {
+  color: #0f172a !important;
+}
+html:not(.dark) .resources-page p[class*="text-slate-4"],
+html:not(.dark) .resources-page p[class*="text-slate-5"],
+html:not(.dark) .resources-page span[class*="text-slate-4"],
+html:not(.dark) .resources-page span[class*="text-slate-5"],
+html:not(.dark) .resources-page div[class*="text-slate-4"],
+html:not(.dark) .resources-page div[class*="text-slate-5"] {
+  color: #475569 !important;
+}
+html:not(.dark) .resources-page [class*="bg-slate-900"],
+html:not(.dark) .resources-page [class*="bg-slate-800"],
+html:not(.dark) .resources-page [class*="bg-slate-700"] {
+  background-color: rgba(229, 238, 235, 0.84) !important;
+}
+html:not(.dark) .resources-page [class*="border-slate-800"],
+html:not(.dark) .resources-page [class*="border-slate-700"],
+html:not(.dark) .resources-page [class*="border-slate-600"] {
+  border-color: rgba(160, 181, 173, 0.58) !important;
+}
+html:not(.dark) .resources-page .card-item,
+html:not(.dark) .resources-page [class*="bg-gradient-to-br"][class*="from-slate-8"] {
+  background: rgba(224, 235, 232, 0.86) !important;
+  border-color: rgba(160, 181, 173, 0.58) !important;
+}
+html:not(.dark) .resources-page input,
+html:not(.dark) .resources-page select,
+html:not(.dark) .resources-page textarea {
+  background: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #1e293b !important;
+}
+html:not(.dark) .resources-page input::placeholder,
+html:not(.dark) .resources-page textarea::placeholder {
+  color: #64748b !important;
+}
+html:not(.dark) .resources-page .section-header::after {
+  background: linear-gradient(90deg, #0284c7, transparent) !important;
+}
+html:not(.dark) .resources-page button[class*="from-slate-"],
+html:not(.dark) .resources-page a[class*="from-slate-"] {
+  --tw-gradient-from: #475569 !important;
+  --tw-gradient-to: #334155 !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+  color: #ffffff !important;
+}
+html:not(.dark) .resources-page a[class*="from-sky-"],
+html:not(.dark) .resources-page button[class*="from-sky-"] {
+  --tw-gradient-from: #0284c7 !important;
+  --tw-gradient-to: #1d4ed8 !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+  color: #ffffff !important;
+}
+html:not(.dark) .resources-page a[class*="from-purple-"],
+html:not(.dark) .resources-page button[class*="from-purple-"] {
+  --tw-gradient-from: #7c3aed !important;
+  --tw-gradient-to: #be185d !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+  color: #ffffff !important;
+}
+html:not(.dark) .resources-page .text-sky-300,
+html:not(.dark) .resources-page .text-sky-200 {
+  color: #0369a1 !important;
+}
+html:not(.dark) .resources-page .text-emerald-400,
+html:not(.dark) .resources-page .text-emerald-300,
+html:not(.dark) .resources-page .text-emerald-200 {
+  color: #047857 !important;
+}
+html:not(.dark) .resources-page .text-amber-400,
+html:not(.dark) .resources-page .text-amber-300,
+html:not(.dark) .resources-page .text-amber-200 {
+  color: #b45309 !important;
+}
+
+/* Dashboard voucher shop readability in light mode */
+html:not(.dark) button[onclick="openVoucherShop()"] {
+  background: linear-gradient(90deg, #f59e0b, #ea580c) !important;
+  border-color: #c2410c !important;
+  color: #ffffff !important;
+}
+html:not(.dark) button[onclick="openVoucherShop()"]:hover {
+  background: linear-gradient(90deg, #d97706, #c2410c) !important;
+  color: #ffffff !important;
+}
+
+html:not(.dark) #voucher-shop-modal .bg-gradient-to-b,
+html:not(.dark) #my-vouchers-modal .bg-gradient-to-b {
+  background: rgba(238, 245, 242, 0.98) !important;
+}
+html:not(.dark) #voucher-shop-modal h2,
+html:not(.dark) #my-vouchers-modal h2 {
+  color: #b45309 !important;
+}
+html:not(.dark) #voucher-shop-modal p,
+html:not(.dark) #my-vouchers-modal p {
+  color: #475569 !important;
+}
+html:not(.dark) #voucher-shop-modal [class*="bg-slate-800"],
+html:not(.dark) #my-vouchers-modal [class*="bg-slate-800"] {
+  background: rgba(226, 236, 233, 0.92) !important;
+}
+html:not(.dark) #voucher-shop-modal [class*="border-slate-7"],
+html:not(.dark) #voucher-shop-modal [class*="border-slate-8"],
+html:not(.dark) #my-vouchers-modal [class*="border-slate-7"],
+html:not(.dark) #my-vouchers-modal [class*="border-slate-8"] {
+  border-color: rgba(148, 163, 184, 0.45) !important;
+}
+html:not(.dark) #voucher-shop-modal #voucher-tiers-list .text-white,
+html:not(.dark) #my-vouchers-modal #my-vouchers-list .text-white {
+  color: #0f172a !important;
+}
+html:not(.dark) #voucher-shop-modal #voucher-tiers-list button {
+  color: #ffffff !important;
+}
+html:not(.dark) #voucher-shop-modal #voucher-tiers-list button[disabled] {
+  color: #475569 !important;
+  background: rgba(203, 213, 225, 0.85) !important;
+  border: 1px solid rgba(148, 163, 184, 0.45) !important;
+}
+html:not(.dark) #voucher-shop-modal .text-amber-400 {
+  color: #b45309 !important;
+}
+html:not(.dark) #voucher-shop-modal .text-emerald-400 {
+  color: #047857 !important;
+}
+html:not(.dark) #voucher-shop-modal .text-cyan-400,
+html:not(.dark) #my-vouchers-modal .text-cyan-400 {
+  color: #0369a1 !important;
+}
+
+html:not(.dark) #panel-voucher-select {
+  background: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #1e293b !important;
+}
+html:not(.dark) #panel-voucher-note {
+  color: #64748b !important;
+}
+
+/* Service panel amount readability in light mode */
+html:not(.dark) #panel-service-fee,
+html:not(.dark) #panel-labor-cost,
+html:not(.dark) #panel-parts-cost,
+html:not(.dark) #panel-commission,
+html:not(.dark) #rcpt-service,
+html:not(.dark) #rcpt-labor,
+html:not(.dark) #rcpt-parts,
+html:not(.dark) #rcpt-subtotal,
+html:not(.dark) #rcpt-commission,
+html:not(.dark) #rcpt-total {
+  color: #0f172a !important;
+}
+
+html:not(.dark) #panel-bonus-discount,
+html:not(.dark) #panel-voucher-discount,
+html:not(.dark) #rcpt-bonus,
+html:not(.dark) #rcpt-voucher {
+  color: #065f46 !important;
+  font-weight: 700 !important;
+}
+
+html:not(.dark) #panel-est-total {
+  color: #064e3b !important;
+  font-weight: 800 !important;
+}
+
+/* Shop suggestion side panel (list view) green-text readability in light mode */
+html:not(.dark) #shop-panel-inner .text-emerald-400 {
+  color: #065f46 !important;
+}
+html:not(.dark) #shop-panel-inner [class*="bg-emerald-500/10"] {
+  background-color: rgba(16, 185, 129, 0.16) !important;
+}
+html:not(.dark) #shop-panel-inner [class*="border-emerald-500/20"],
+html:not(.dark) #shop-panel-inner [class*="border-emerald-500/30"] {
+  border-color: rgba(5, 150, 105, 0.42) !important;
 }
 
 /* Plans page toggle */
@@ -994,6 +1349,9 @@ html:not(.dark) [class*="bg-slate-800"][class*="toggle"] {
 /* Fix table styles in light mode */
 html:not(.dark) table thead {
   background: rgba(248,250,252,0.8) !important;
+}
+html:not(.dark) table thead th {
+  color: #334155 !important;
 }
 html:not(.dark) table tbody tr:hover {
   background: rgba(240,253,244,0.6) !important;
