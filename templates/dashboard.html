@@ -218,6 +218,9 @@ block content %}
       <p class="mt-3 text-white/70 text-sm">
         Earn points by helping & getting 5★ reviews!
       </p>
+      <button onclick="openVoucherShop()" class="mt-4 btn-sheen inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm transition border bg-gradient-to-r from-amber-500/20 to-orange-500/20 border-amber-500/40 text-amber-200 hover:from-amber-500/30 hover:to-orange-500/30 hover:border-amber-400/60 shadow-lg">
+        🎁 Redeem Voucher
+      </button>
     </div>
     <div
       class="glass-card-enhanced p-8 rounded-3xl border border-slate-800 stagger-item card-hover"
@@ -954,5 +957,510 @@ block content %}
       // ignore
     }
   });
+</script>
+
+<!-- ==================== VOUCHER SHOP MODAL ==================== -->
+<div id="voucher-shop-modal" class="hidden fixed inset-0 z-[60]" onclick="closeVoucherShop()">
+  <div class="absolute inset-0 bg-slate-950/85 backdrop-blur-sm"></div>
+  <div class="relative w-full h-full flex items-center justify-center p-4 overflow-y-auto">
+    <div class="w-full max-w-xl rounded-2xl border border-amber-500/30 bg-gradient-to-b from-slate-900 to-slate-950 p-6 shadow-2xl relative" onclick="event.stopPropagation()">
+      <button onclick="closeVoucherShop()" class="absolute top-4 right-4 text-slate-500 hover:text-white text-xl transition">&times;</button>
+      <h2 class="text-2xl font-bold text-amber-300 mb-1 flex items-center gap-2">🎁 Voucher Shop</h2>
+      <p class="text-slate-400 text-sm mb-2">Spend your kindness points for exclusive discount vouchers at top Bangladeshi stores!</p>
+      <p class="text-xs text-slate-500 mb-4 italic">Stores: Daraz · Rokomari · Chaldal · Othoba · Pickaboo · Evaly — randomly assigned!</p>
+
+      <div class="flex items-center justify-between mb-4 p-3 rounded-xl bg-slate-800/50 border border-slate-700/50">
+        <div>
+          <p class="text-xs text-slate-400 uppercase tracking-wider">Available Points</p>
+          <p class="text-2xl font-bold text-amber-400" id="voucher-kindness-pts">{{ stats.kindness }}</p>
+        </div>
+        <div class="text-right">
+          <p class="text-xs text-slate-400 uppercase tracking-wider">Total Earned</p>
+          <p class="text-lg font-semibold text-emerald-400">{{ stats.kindness_total }}</p>
+        </div>
+      </div>
+
+      <!-- Cooldown banner -->
+      <div id="voucher-cooldown-banner" class="hidden mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-center">
+        <p class="text-rose-300 text-sm font-semibold">⏳ Some Tiers on Cooldown</p>
+        <p class="text-rose-400/70 text-xs mt-1" id="cooldown-msg"></p>
+      </div>
+
+      <div id="voucher-tiers-list" class="space-y-3">
+        <!-- populated by JS -->
+      </div>
+      <div class="mt-5 border-t border-slate-800 pt-4 flex items-center justify-between">
+        <button onclick="openMyVouchers()" class="text-sm text-cyan-400 hover:text-cyan-300 underline transition">🎟️ View My Vouchers</button>
+        <p class="text-[10px] text-slate-600">Each tier: one per 30 days</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== VOUCHER DISPLAY POPUP (LANDSCAPE) ==================== -->
+<div id="voucher-popup-modal" class="hidden fixed inset-0 z-[70]" onclick="closeVoucherPopup()">
+  <div class="absolute inset-0 bg-slate-950/90 backdrop-blur-md"></div>
+  <div class="relative w-full h-full flex items-center justify-center p-4">
+    <div id="voucher-card" class="voucher-card-animate w-full max-w-3xl relative" onclick="event.stopPropagation()">
+      <!-- Dynamically filled by JS -->
+    </div>
+  </div>
+</div>
+
+<!-- ==================== MY VOUCHERS MODAL ==================== -->
+<div id="my-vouchers-modal" class="hidden fixed inset-0 z-[65]" onclick="closeMyVouchers()">
+  <div class="absolute inset-0 bg-slate-950/85 backdrop-blur-sm"></div>
+  <div class="relative w-full h-full flex items-center justify-center p-4 overflow-y-auto">
+    <div class="w-full max-w-xl rounded-2xl border border-cyan-500/30 bg-gradient-to-b from-slate-900 to-slate-950 p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
+      <button onclick="closeMyVouchers()" class="absolute top-4 right-4 text-slate-500 hover:text-white text-xl transition">&times;</button>
+      <h2 class="text-2xl font-bold text-cyan-300 mb-4 flex items-center gap-2">🎟️ My Vouchers</h2>
+      <div id="my-vouchers-list" class="space-y-3">
+        <p class="text-slate-500 italic">Loading...</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+/* Voucher card animations */
+@keyframes voucherSlideIn {
+  0%   { opacity:0; transform: scale(0.6) rotateX(15deg) rotateY(25deg); }
+  50%  { opacity:1; transform: scale(1.03) rotateX(-3deg) rotateY(-5deg); }
+  100% { opacity:1; transform: scale(1) rotateX(0deg) rotateY(0deg); }
+}
+@keyframes voucherShine {
+  0%   { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+@keyframes confettiFall {
+  0%   { transform: translateY(-20px) rotate(0deg) scale(1); opacity:1; }
+  100% { transform: translateY(120px) rotate(720deg) scale(0.3); opacity:0; }
+}
+@keyframes floatParticle {
+  0%, 100% { transform: translateY(0px) rotate(0deg); opacity:0.4; }
+  50% { transform: translateY(-15px) rotate(180deg); opacity:0.8; }
+}
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 0 20px rgba(255,255,255,0.05); }
+  50% { box-shadow: 0 0 40px rgba(255,255,255,0.12); }
+}
+@keyframes stampIn {
+  0% { transform: scale(3) rotate(-15deg); opacity:0; }
+  60% { transform: scale(0.9) rotate(2deg); opacity:1; }
+  100% { transform: scale(1) rotate(0deg); opacity:1; }
+}
+.voucher-card-animate {
+  animation: voucherSlideIn 0.7s cubic-bezier(.23,1.02,.32,1) forwards;
+  perspective: 1000px;
+}
+.voucher-shine {
+  background: linear-gradient(110deg, transparent 25%, rgba(255,255,255,0.12) 50%, transparent 75%);
+  background-size: 200% 100%;
+  animation: voucherShine 3s ease-in-out infinite;
+}
+.confetti-piece {
+  position: absolute;
+  border-radius: 2px;
+  animation: confettiFall 2s ease-out forwards;
+  pointer-events: none;
+}
+.voucher-float-particle {
+  position: absolute;
+  width: 4px; height: 4px;
+  border-radius: 50%;
+  animation: floatParticle 3s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* 6 landscape voucher design variants */
+.voucher-design-1 {
+  background: linear-gradient(135deg, #0a1628 0%, #132d5e 30%, #1a4a8a 60%, #0f2347 100%);
+  border-color: #3b82f6;
+}
+.voucher-design-2 {
+  background: linear-gradient(135deg, #150a2e 0%, #3d1a6e 30%, #6b21a8 50%, #2d0f5e 100%);
+  border-color: #a855f7;
+}
+.voucher-design-3 {
+  background: linear-gradient(135deg, #071f17 0%, #0d4a33 30%, #15804d 50%, #0a3626 100%);
+  border-color: #10b981;
+}
+.voucher-design-4 {
+  background: linear-gradient(135deg, #1f1005 0%, #5c3106 30%, #a85e0a 50%, #3d2008 100%);
+  border-color: #f59e0b;
+}
+.voucher-design-5 {
+  background: linear-gradient(135deg, #1f0a18 0%, #6e1a4a 30%, #be185d 50%, #4a1035 100%);
+  border-color: #ec4899;
+}
+.voucher-design-6 {
+  background: linear-gradient(135deg, #071520 0%, #0e3a50 30%, #0e7490 50%, #0a2a3d 100%);
+  border-color: #06b6d4;
+}
+
+.voucher-design-1 .voucher-accent { color: #60a5fa; }
+.voucher-design-2 .voucher-accent { color: #c084fc; }
+.voucher-design-3 .voucher-accent { color: #34d399; }
+.voucher-design-4 .voucher-accent { color: #fbbf24; }
+.voucher-design-5 .voucher-accent { color: #f472b6; }
+.voucher-design-6 .voucher-accent { color: #22d3ee; }
+
+.voucher-design-1 .voucher-accent-bg { background: rgba(59,130,246,0.12); border-color: rgba(59,130,246,0.35); }
+.voucher-design-2 .voucher-accent-bg { background: rgba(168,85,247,0.12); border-color: rgba(168,85,247,0.35); }
+.voucher-design-3 .voucher-accent-bg { background: rgba(16,185,129,0.12); border-color: rgba(16,185,129,0.35); }
+.voucher-design-4 .voucher-accent-bg { background: rgba(245,158,11,0.12); border-color: rgba(245,158,11,0.35); }
+.voucher-design-5 .voucher-accent-bg { background: rgba(236,72,153,0.12); border-color: rgba(236,72,153,0.35); }
+.voucher-design-6 .voucher-accent-bg { background: rgba(6,182,212,0.12); border-color: rgba(6,182,212,0.35); }
+
+.voucher-design-1 .voucher-glow { box-shadow: 0 0 60px rgba(59,130,246,0.15), inset 0 0 60px rgba(59,130,246,0.05); }
+.voucher-design-2 .voucher-glow { box-shadow: 0 0 60px rgba(168,85,247,0.15), inset 0 0 60px rgba(168,85,247,0.05); }
+.voucher-design-3 .voucher-glow { box-shadow: 0 0 60px rgba(16,185,129,0.15), inset 0 0 60px rgba(16,185,129,0.05); }
+.voucher-design-4 .voucher-glow { box-shadow: 0 0 60px rgba(245,158,11,0.15), inset 0 0 60px rgba(245,158,11,0.05); }
+.voucher-design-5 .voucher-glow { box-shadow: 0 0 60px rgba(236,72,153,0.15), inset 0 0 60px rgba(236,72,153,0.05); }
+.voucher-design-6 .voucher-glow { box-shadow: 0 0 60px rgba(6,182,212,0.15), inset 0 0 60px rgba(6,182,212,0.05); }
+
+.voucher-code-box {
+  letter-spacing: 0.4em;
+  font-family: 'Courier New', Courier, monospace;
+}
+.voucher-dashed-line {
+  border-left: 2px dashed rgba(255,255,255,0.12);
+}
+.voucher-stamp {
+  animation: stampIn 0.8s cubic-bezier(.22,.68,0,1.32) forwards;
+  animation-delay: 0.4s;
+  opacity: 0;
+}
+</style>
+
+<script>
+// ==================== VOUCHER SYSTEM JS ====================
+const STORE_ICONS = {
+  'Daraz':   '🛒',
+  'Rokomari':'📚',
+  'Chaldal': '🛍️',
+  'Othoba':  '🏪',
+  'Pickaboo':'📱',
+  'Evaly':   '🎯'
+};
+
+const STORE_TAGLINES = {
+  'Daraz':   'Shop anything, save big!',
+  'Rokomari':'Books, stationery & more',
+  'Chaldal': 'Groceries delivered fast',
+  'Othoba':  'Everything you need online',
+  'Pickaboo':'Gadgets & electronics',
+  'Evaly':   'Deals you can\'t miss'
+};
+
+const STORE_MOTTOS = {
+  'Daraz':   'Bangladesh\'s #1 Online Marketplace',
+  'Rokomari':'The Largest Bengali Book Store',
+  'Chaldal': 'Fresh Groceries at Your Doorstep',
+  'Othoba':  'Your Complete Shopping Destination',
+  'Pickaboo':'Tech & Gadgets Made Affordable',
+  'Evaly':   'Best Deals, Guaranteed!'
+};
+
+function openVoucherShop() {
+  document.getElementById('voucher-shop-modal').classList.remove('hidden');
+  loadVoucherTiers();
+}
+function closeVoucherShop() {
+  document.getElementById('voucher-shop-modal').classList.add('hidden');
+}
+function openMyVouchers() {
+  document.getElementById('my-vouchers-modal').classList.remove('hidden');
+  loadMyVouchers();
+}
+function closeMyVouchers() {
+  document.getElementById('my-vouchers-modal').classList.add('hidden');
+}
+function closeVoucherPopup() {
+  document.getElementById('voucher-popup-modal').classList.add('hidden');
+}
+
+async function loadVoucherTiers() {
+  try {
+    const resp = await fetch('/api/vouchers/available-tiers');
+    const data = await resp.json();
+    const available = data.kindness_score || 0;
+    document.getElementById('voucher-kindness-pts').textContent = available;
+
+    // Hide global cooldown banner (we show per-tier now)
+    const cdBanner = document.getElementById('voucher-cooldown-banner');
+    // Check if ANY tier is on cooldown
+    const anyCooldown = data.tiers.some(t => t.cooldown);
+    if (anyCooldown) {
+      cdBanner.classList.remove('hidden');
+      const cdTiers = data.tiers.filter(t => t.cooldown);
+      const cdText = cdTiers.map(t => `${t.discount_percent}% (${t.cooldown_days}d)`).join(', ');
+      document.getElementById('cooldown-msg').innerHTML = `Claimed tiers on cooldown: <span class="font-bold text-rose-300">${cdText}</span>. Other tiers are still available!`;
+    } else {
+      cdBanner.classList.add('hidden');
+    }
+
+    const container = document.getElementById('voucher-tiers-list');
+    container.innerHTML = '';
+
+    data.tiers.forEach((tier, idx) => {
+      const canClaim = tier.can_claim;
+      const hasPoints = available >= tier.points_cost;
+      const onCooldown = tier.cooldown;
+
+      let btnText, btnClass, btnAction, extraInfo = '';
+      if (canClaim) {
+        btnText = '🎁 Claim';
+        btnClass = 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 hover:from-amber-400 hover:to-orange-400 shadow-lg shadow-amber-500/20';
+        btnAction = `claimVoucher(${idx})`;
+      } else if (onCooldown) {
+        btnText = `⏳ ${tier.cooldown_days}d`;
+        btnClass = 'bg-slate-700 text-rose-300 cursor-not-allowed';
+        btnAction = '';
+        extraInfo = `<p class="text-[10px] text-rose-400/60 mt-0.5">Available ${tier.cooldown_date}</p>`;
+      } else {
+        btnText = `Need ${tier.points_cost} pts`;
+        btnClass = 'bg-slate-700 text-slate-500 cursor-not-allowed';
+        btnAction = '';
+      }
+
+      const div = document.createElement('div');
+      div.className = `flex items-center justify-between p-4 rounded-xl border transition ${
+        canClaim
+          ? 'border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10'
+          : onCooldown
+            ? 'border-rose-500/20 bg-rose-500/5 opacity-70'
+            : 'border-slate-700/50 bg-slate-800/30 opacity-60'
+      }`;
+      div.innerHTML = `
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-full flex items-center justify-center text-lg font-black ${
+            canClaim ? 'bg-amber-500/20 text-amber-400' : onCooldown ? 'bg-rose-500/15 text-rose-400' : 'bg-slate-700/50 text-slate-500'
+          }">${tier.discount_percent}%</div>
+          <div>
+            <p class="font-bold text-white text-sm">${tier.discount_percent}% Discount Voucher ${onCooldown ? '<span class="text-[10px] text-rose-400 ml-1">⏳ COOLDOWN</span>' : ''}</p>
+            <p class="text-xs text-slate-400 mt-0.5">${tier.points_cost} kindness points · Valid at partner stores</p>
+            ${extraInfo}
+          </div>
+        </div>
+        <button onclick="${btnAction}"
+                class="px-4 py-2 rounded-lg text-xs font-semibold transition ${btnClass}" ${canClaim ? '' : 'disabled'}>
+          ${btnText}
+        </button>
+      `;
+      container.appendChild(div);
+    });
+  } catch (e) {
+    console.error('Failed to load voucher tiers:', e);
+  }
+}
+
+async function claimVoucher(tierIndex) {
+  try {
+    const resp = await fetch('/api/vouchers/claim', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({tier_index: tierIndex})
+    });
+    const data = await resp.json();
+    if (!resp.ok) {
+      alert(data.error || 'Failed to claim voucher');
+      return;
+    }
+    // Update kindness display
+    const kEl = document.getElementById('voucher-kindness-pts');
+    if (kEl) kEl.textContent = data.new_kindness;
+    const kScoreEl = document.getElementById('kindness-score-val');
+    if (kScoreEl) kScoreEl.textContent = data.new_kindness;
+
+    // Close shop, show voucher popup
+    closeVoucherShop();
+    showVoucherPopup(data.voucher);
+    loadVoucherTiers();
+  } catch (e) {
+    console.error('Claim error:', e);
+    alert('Something went wrong. Please try again.');
+  }
+}
+
+function showVoucherPopup(v) {
+  const modal = document.getElementById('voucher-popup-modal');
+  const card = document.getElementById('voucher-card');
+  const icon = STORE_ICONS[v.store_name] || '🎁';
+  const tagline = STORE_TAGLINES[v.store_name] || 'Great deals await!';
+  const motto = STORE_MOTTOS[v.store_name] || 'Your favourite store!';
+  const design = v.design_variant || 1;
+  const userName = {{ user.name | tojson }};
+
+  // Floating particles HTML
+  let particles = '';
+  for (let i = 0; i < 12; i++) {
+    const left = Math.random() * 100;
+    const top = Math.random() * 100;
+    const delay = Math.random() * 3;
+    const size = 3 + Math.random() * 4;
+    particles += `<div class="voucher-float-particle" style="left:${left}%;top:${top}%;width:${size}px;height:${size}px;animation-delay:${delay}s;background:rgba(255,255,255,0.15)"></div>`;
+  }
+
+  card.innerHTML = `
+    <div class="voucher-design-${design} voucher-glow rounded-2xl border-2 overflow-hidden shadow-2xl relative" style="animation: pulseGlow 3s ease-in-out infinite;">
+      <!-- Confetti -->
+      <div id="confetti-container" class="absolute inset-0 overflow-hidden pointer-events-none z-20"></div>
+      <!-- Shine -->
+      <div class="voucher-shine absolute inset-0 rounded-2xl pointer-events-none z-10"></div>
+      <!-- Floating particles -->
+      ${particles}
+
+      <!-- Close button -->
+      <button onclick="closeVoucherPopup()" class="absolute top-3 right-4 z-30 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/60 hover:text-white transition text-lg">&times;</button>
+
+      <!-- ===== LANDSCAPE LAYOUT ===== -->
+      <div class="flex flex-col md:flex-row relative z-[5]">
+        
+        <!-- LEFT: Store & Discount -->
+        <div class="flex-shrink-0 md:w-[45%] p-6 md:p-8 flex flex-col items-center justify-center text-center border-b md:border-b-0 md:border-r border-white/10">
+          <!-- Decorative top corner -->
+          <div class="absolute top-0 left-0 w-20 h-20 border-t-2 border-l-2 rounded-tl-2xl opacity-20" style="border-color: inherit;"></div>
+
+          <div class="text-6xl mb-2 drop-shadow-lg">${icon}</div>
+          <h3 class="text-3xl font-black text-white tracking-wide mb-1">${v.store_name}</h3>
+          <p class="text-white/40 text-xs italic mb-4">${tagline}</p>
+
+          <!-- Big discount circle -->
+          <div class="voucher-accent-bg border-2 rounded-full w-28 h-28 flex flex-col items-center justify-center voucher-stamp">
+            <span class="voucher-accent text-5xl font-black leading-none">${v.discount_percent}%</span>
+            <span class="text-white/60 text-[10px] uppercase font-bold tracking-[0.2em] mt-1">Discount</span>
+          </div>
+
+          <p class="text-white/30 text-[10px] mt-4 max-w-[200px]">${motto}</p>
+        </div>
+
+        <!-- RIGHT: Details -->
+        <div class="flex-1 p-6 md:p-8 flex flex-col justify-between">
+          <!-- Header ribbon -->
+          <div class="mb-4">
+            <div class="flex items-center gap-2 mb-3">
+              <span class="text-emerald-400 text-xl font-extrabold tracking-wide">LifeLine</span>
+              <span class="text-white/20">×</span>
+              <span class="text-white/50 text-sm font-medium">${v.store_name}</span>
+            </div>
+            <p class="text-white/30 text-[11px] uppercase tracking-[0.15em] font-semibold">Official Discount Voucher</p>
+            <div class="w-12 h-0.5 voucher-accent-bg rounded mt-2"></div>
+          </div>
+
+          <!-- Voucher details grid -->
+          <div class="space-y-3 mb-4">
+            <div class="flex items-center justify-between">
+              <span class="text-white/40 text-[11px] uppercase tracking-wider font-medium">Voucher Code</span>
+              <div class="voucher-accent-bg border rounded-lg px-4 py-2">
+                <span class="voucher-code-box voucher-accent text-xl font-black">${v.code}</span>
+              </div>
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-white/40 text-[11px] uppercase tracking-wider font-medium">Discount Value</span>
+              <span class="voucher-accent text-lg font-bold">${v.discount_percent}% OFF</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-white/40 text-[11px] uppercase tracking-wider font-medium">Issued To</span>
+              <span class="text-white font-semibold text-sm">${userName}</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-white/40 text-[11px] uppercase tracking-wider font-medium">Points Spent</span>
+              <span class="text-amber-400 font-semibold text-sm">${v.points_spent} pts</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-white/40 text-[11px] uppercase tracking-wider font-medium">Issue Date</span>
+              <span class="text-white/60 text-sm">${v.created_at}</span>
+            </div>
+          </div>
+
+          <!-- Footer -->
+          <div class="border-t border-white/10 pt-3 flex items-center justify-between">
+            <div>
+              <p class="text-white/25 text-[9px] uppercase tracking-wider">Powered by LifeLine Community</p>
+              <p class="text-white/15 text-[8px] mt-0.5">Thank you for spreading kindness 💚</p>
+            </div>
+            <div class="text-right">
+              <p class="voucher-accent text-[10px] font-semibold">Apply at checkout</p>
+              <p class="text-white/20 text-[8px]">${v.store_name}.com.bd</p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Bottom decorative corner -->
+      <div class="absolute bottom-0 right-0 w-20 h-20 border-b-2 border-r-2 rounded-br-2xl opacity-20" style="border-color: inherit;"></div>
+    </div>
+  `;
+
+  modal.classList.remove('hidden');
+  spawnConfetti();
+}
+
+function spawnConfetti() {
+  const container = document.getElementById('confetti-container');
+  if (!container) return;
+  const colors = ['#f59e0b','#10b981','#3b82f6','#ec4899','#a855f7','#ef4444','#22d3ee','#fbbf24','#f97316','#84cc16'];
+  const shapes = ['8px', '6px', '10px'];
+  for (let i = 0; i < 60; i++) {
+    const piece = document.createElement('div');
+    piece.className = 'confetti-piece';
+    const s = shapes[Math.floor(Math.random() * shapes.length)];
+    piece.style.width = s;
+    piece.style.height = Math.random() > 0.5 ? s : (parseInt(s) * 2) + 'px';
+    piece.style.left = Math.random() * 100 + '%';
+    piece.style.top = (Math.random() * 20 - 10) + '%';
+    piece.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+    piece.style.animationDelay = (Math.random() * 1) + 's';
+    piece.style.animationDuration = (1.5 + Math.random() * 2) + 's';
+    piece.style.borderRadius = Math.random() > 0.5 ? '50%' : '2px';
+    container.appendChild(piece);
+  }
+  setTimeout(() => { container.innerHTML = ''; }, 4000);
+}
+
+async function loadMyVouchers() {
+  try {
+    const resp = await fetch('/api/vouchers/my');
+    const data = await resp.json();
+    const container = document.getElementById('my-vouchers-list');
+
+    if (!data.vouchers || data.vouchers.length === 0) {
+      container.innerHTML = '<p class="text-slate-500 italic text-center py-6">No vouchers yet. Earn kindness points and redeem them!</p>';
+      return;
+    }
+
+    container.innerHTML = '';
+    data.vouchers.forEach(v => {
+      const icon = STORE_ICONS[v.store_name] || '🎁';
+      const div = document.createElement('div');
+      div.className = `flex items-center gap-4 p-4 rounded-xl border border-slate-700/50 bg-slate-800/30 hover:bg-slate-800/50 transition cursor-pointer`;
+      div.onclick = () => { closeMyVouchers(); showVoucherPopup(v); };
+      div.innerHTML = `
+        <span class="text-3xl">${icon}</span>
+        <div class="flex-1 min-w-0">
+          <p class="font-bold text-white text-sm">${v.store_name} — ${v.discount_percent}% OFF</p>
+          <p class="text-xs text-slate-400 mt-0.5">Code: <span class="font-mono text-amber-400 tracking-wider">${v.code}</span> · ${v.created_at} · ${v.points_spent} pts</p>
+        </div>
+        <div class="text-right">
+          ${v.is_used ? '<span class="text-xs bg-slate-700 text-slate-400 px-2 py-1 rounded-full">Used</span>' : '<span class="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded-full border border-emerald-500/30">Active</span>'}
+        </div>
+      `;
+      container.appendChild(div);
+    });
+  } catch (e) {
+    console.error('Failed to load vouchers:', e);
+  }
+}
+
+// Close voucher modals with Escape key
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    closeVoucherPopup();
+    closeVoucherShop();
+    closeMyVouchers();
+  }
+});
 </script>
 {% endblock %}

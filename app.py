@@ -1272,6 +1272,54 @@ class Notification(db.Model):
         }
 
 
+# ------------------ VOUCHER / COUPON MODEL ------------------
+class Voucher(db.Model):
+    __tablename__ = "vouchers"
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    store_name = db.Column(db.String(100), nullable=False)          # Daraz, Rokomari, etc.
+    code = db.Column(db.String(6), unique=True, nullable=False)     # unique 6-char alphanumeric
+    discount_percent = db.Column(db.Integer, nullable=False)        # e.g. 5, 10, 15, 20, 25
+    points_spent = db.Column(db.Integer, nullable=False, default=0) # kindness points redeemed
+    design_variant = db.Column(db.Integer, default=1)               # 1-6 for different designs
+    is_used = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship("User", backref="vouchers")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "store_name": self.store_name,
+            "code": self.code,
+            "discount_percent": self.discount_percent,
+            "points_spent": self.points_spent,
+            "design_variant": self.design_variant,
+            "is_used": self.is_used,
+            "created_at": self.created_at.strftime("%b %d, %Y") if self.created_at else "",
+        }
+
+
+# Voucher tiers: (min_kindness_points,  discount_percent,  points_cost)
+VOUCHER_TIERS = [
+    (20,   5,  20),
+    (50,  10,  50),
+    (80,  15,  80),
+    (120, 20, 120),
+    (200, 25, 200),
+]
+
+VOUCHER_STORES = ["Daraz", "Rokomari", "Chaldal", "Othoba", "Pickaboo", "Evaly"]
+
+
+def _generate_voucher_code():
+    """Generate a unique 6-character alphanumeric voucher code."""
+    while True:
+        code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+        if not Voucher.query.filter_by(code=code).first():
+            return code
+
+
 # ------------------- EVENT NOTIFICATION HELPERS -------------------
 def notify_interested_users(event, message):
     interests = EventInterest.query.filter_by(event_id=event.id).all()
@@ -4780,6 +4828,10 @@ def dashboard():
 
     total_hours_all = round(float(total_hours_all), 2)
 
+    # Compute available kindness (total - spent on vouchers)
+    _voucher_spent = db.session.query(func.coalesce(func.sum(Voucher.points_spent), 0)).filter(Voucher.user_id == user.id).scalar() or 0
+    available_kindness = max(0, (user.kindness_score or 0) - int(_voucher_spent))
+
     # stats object used in dashboard.html
     stats = {
         "badge": badge,
@@ -4787,7 +4839,8 @@ def dashboard():
         "helped": helped_count,          # total people helped
         "total_hours": total_hours_all,      # total hours volunteered (all-time)
         "trust": user.trust_score or 0,  # 0–100 (we already cap in update_user_scores)
-        "kindness": user.kindness_score or 0,
+        "kindness": available_kindness,
+        "kindness_total": user.kindness_score or 0,
     }
 
     # Chart data: rebuild score progression from completed requests.
@@ -4982,6 +5035,125 @@ def remove_expired_unanswered_request(request_id):
     flash("Post removed.", "success")
     return redirect(url_for("dashboard"))
 
+
+# ------------------ VOUCHER API ------------------
+
+@app.route("/api/vouchers/available-tiers", methods=["GET"])
+@login_required
+def api_voucher_tiers():
+    """Return which voucher tiers the user can currently claim."""
+    user = current_user()
+    update_user_scores(user)
+    kindness = user.kindness_score or 0
+    # Subtract points already spent on vouchers
+    spent = db.session.query(func.coalesce(func.sum(Voucher.points_spent), 0)).filter(Voucher.user_id == user.id).scalar() or 0
+    available = max(0, kindness - int(spent))
+
+    now = datetime.utcnow()
+    cutoff = now - timedelta(days=30)
+
+    # Per-tier cooldown: check each tier individually
+    tiers = []
+    for min_pts, discount, cost in VOUCHER_TIERS:
+        # Check if this specific tier (by discount_percent) was claimed in last 30 days
+        recent_claim = Voucher.query.filter(
+            Voucher.user_id == user.id,
+            Voucher.discount_percent == discount,
+            Voucher.created_at > cutoff,
+        ).first()
+
+        tier_cooldown = False
+        tier_cooldown_days = 0
+        tier_cooldown_date = None
+        if recent_claim:
+            tier_cooldown = True
+            next_date = recent_claim.created_at + timedelta(days=30)
+            tier_cooldown_days = (next_date - now).days + 1
+            tier_cooldown_date = next_date.strftime("%b %d, %Y")
+
+        tiers.append({
+            "min_points": min_pts,
+            "discount_percent": discount,
+            "points_cost": cost,
+            "can_claim": (available >= cost) and (not tier_cooldown),
+            "cooldown": tier_cooldown,
+            "cooldown_days": tier_cooldown_days,
+            "cooldown_date": tier_cooldown_date,
+        })
+    return jsonify({
+        "kindness_score": available,
+        "tiers": tiers,
+    })
+
+
+@app.route("/api/vouchers/claim", methods=["POST"])
+@login_required
+def api_voucher_claim():
+    """Claim a voucher by spending kindness points."""
+    user = current_user()
+    update_user_scores(user)
+    kindness = user.kindness_score or 0
+    # Subtract points already spent on vouchers
+    spent = db.session.query(func.coalesce(func.sum(Voucher.points_spent), 0)).filter(Voucher.user_id == user.id).scalar() or 0
+    available = max(0, kindness - int(spent))
+
+    data = request.get_json(force=True) if request.is_json else {}
+    tier_index = data.get("tier_index", None)
+    if tier_index is None:
+        return jsonify({"error": "Missing tier_index"}), 400
+    try:
+        tier_index = int(tier_index)
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid tier_index"}), 400
+
+    if tier_index < 0 or tier_index >= len(VOUCHER_TIERS):
+        return jsonify({"error": "Invalid tier"}), 400
+
+    min_pts, discount, cost = VOUCHER_TIERS[tier_index]
+    if available < cost:
+        return jsonify({"error": f"You need at least {cost} available points. You have {available}."}), 400
+
+    # Per-tier 30-day cooldown check
+    cutoff = datetime.utcnow() - timedelta(days=30)
+    recent_same_tier = Voucher.query.filter(
+        Voucher.user_id == user.id,
+        Voucher.discount_percent == discount,
+        Voucher.created_at > cutoff,
+    ).first()
+    if recent_same_tier:
+        next_date = recent_same_tier.created_at + timedelta(days=30)
+        days_left = (next_date - datetime.utcnow()).days + 1
+        return jsonify({"error": f"This {discount}% tier is on cooldown! You can claim it again in {days_left} days (after {next_date.strftime('%b %d, %Y')}). Try a different tier!"}), 400
+
+    # Pick random store and design
+    store = random.choice(VOUCHER_STORES)
+    design = random.randint(1, 6)
+    code = _generate_voucher_code()
+
+    voucher = Voucher(
+        user_id=user.id,
+        store_name=store,
+        code=code,
+        discount_percent=discount,
+        points_spent=cost,
+        design_variant=design,
+    )
+    db.session.add(voucher)
+    db.session.commit()
+
+    new_available = max(0, available - cost)
+    return jsonify({"voucher": voucher.to_dict(), "new_kindness": new_available})
+
+
+@app.route("/api/vouchers/my", methods=["GET"])
+@login_required
+def api_my_vouchers():
+    """Return all vouchers claimed by the current user."""
+    user = current_user()
+    vouchers = Voucher.query.filter_by(user_id=user.id).order_by(Voucher.created_at.desc()).all()
+    return jsonify({"vouchers": [v.to_dict() for v in vouchers]})
+
+
 # ------------------ API: Dashboard & Impact  ------------------
 
 # 1) Dashboard summary
@@ -5007,11 +5179,15 @@ def api_dashboard_summary():
         .scalar()
     ) or 0
 
+    # Available kindness = total - spent on vouchers
+    _v_spent = db.session.query(func.coalesce(func.sum(Voucher.points_spent), 0)).filter(Voucher.user_id == user.id).scalar() or 0
+    avail_kindness = max(0, int(user.kindness_score or 0) - int(_v_spent))
+
     return jsonify({
         "total_hours": total_hours,
         "people_helped": int(people_helped),
         "trust_score": int(user.trust_score or 0),
-        "kindness_score": int(user.kindness_score or 0)
+        "kindness_score": avail_kindness,
     })
 
 
