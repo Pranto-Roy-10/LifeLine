@@ -54,12 +54,12 @@
 
     <!-- Tabs -->
     <div class="flex gap-2 mb-6 stagger-item flex-wrap">
-      <button onclick="showTab('all')" id="tab-all" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition bg-emerald-600 text-white">All Donations</button>
-      <button onclick="showTab('general')" id="tab-general" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition bg-slate-800 text-slate-300 hover:bg-slate-700">General</button>
-      <button onclick="showTab('event')" id="tab-event" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition bg-slate-800 text-slate-300 hover:bg-slate-700">Event Funds</button>
-      <button onclick="showTab('pending')" id="tab-pending" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition bg-slate-800 text-slate-300 hover:bg-slate-700">Pending</button>
-      <button onclick="showTab('funds')" id="tab-funds" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition bg-slate-800 text-slate-300 hover:bg-slate-700">Event Fundraisers</button>
-      <button onclick="showTab('sponsors')" id="tab-sponsors" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition bg-slate-800 text-slate-300 hover:bg-slate-700">Sponsors</button>
+      <button type="button" onclick="showTab('all')" id="tab-all" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition bg-emerald-600 text-white">All Donations</button>
+      <button type="button" onclick="showTab('general')" id="tab-general" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition bg-slate-800 text-slate-300 hover:bg-slate-700">General</button>
+      <button type="button" onclick="showTab('event')" id="tab-event" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition bg-slate-800 text-slate-300 hover:bg-slate-700">Event Funds</button>
+      <button type="button" onclick="showTab('pending')" id="tab-pending" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition bg-slate-800 text-slate-300 hover:bg-slate-700">Pending</button>
+      <button type="button" onclick="showTab('funds')" id="tab-funds" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition bg-slate-800 text-slate-300 hover:bg-slate-700">Event Fundraisers</button>
+      <button type="button" onclick="showTab('sponsors')" id="tab-sponsors" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition bg-slate-800 text-slate-300 hover:bg-slate-700">Sponsors</button>
     </div>
 
     <!-- ALL / GENERAL / EVENT / PENDING DONATIONS TABLE -->
@@ -128,23 +128,23 @@
                   <div class="flex gap-1">
                     {% if d.status == 'pending' %}
                     <form method="POST" action="{{ url_for('admin_donation_action', donation_id=d.id, action='approve') }}" class="inline">
-                      <button class="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold transition">✓ Approve</button>
+                      <button type="submit" class="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold transition">✓ Approve</button>
                     </form>
                     <form method="POST" action="{{ url_for('admin_donation_action', donation_id=d.id, action='reject') }}" class="inline">
-                      <button class="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold transition">✗ Reject</button>
+                      <button type="submit" class="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold transition">✗ Reject</button>
                     </form>
                     {% elif d.status == 'completed' %}
                     <form method="POST" action="{{ url_for('admin_donation_action', donation_id=d.id, action='pending') }}" class="inline">
-                      <button class="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-slate-300 text-[10px] font-bold transition">↩ Undo</button>
+                      <button type="submit" class="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-slate-300 text-[10px] font-bold transition">↩ Undo</button>
                     </form>
                     {% else %}
                     <form method="POST" action="{{ url_for('admin_donation_action', donation_id=d.id, action='approve') }}" class="inline">
-                      <button class="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold transition">✓ Re-approve</button>
+                      <button type="submit" class="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold transition">✓ Re-approve</button>
                     </form>
                     {% endif %}
                     <form method="POST" action="{{ url_for('admin_donation_action', donation_id=d.id, action='delete') }}" class="inline"
                       onsubmit="return confirm('Delete donation #{{ d.id }}?')">
-                      <button class="px-2 py-1 rounded bg-red-900 hover:bg-red-800 text-red-300 text-[10px] font-bold transition">🗑</button>
+                      <button type="submit" class="px-2 py-1 rounded bg-red-900 hover:bg-red-800 text-red-300 text-[10px] font-bold transition">🗑</button>
                     </form>
                   </div>
                 </td>
@@ -246,7 +246,7 @@
                 <td class="px-4 py-3">
                   <form method="POST" action="{{ url_for('admin_sponsor_action', sponsor_id=s.id, action='delete') }}"
                     onsubmit="return confirm('Delete sponsor {{ s.sponsor_name }}?')">
-                    <button class="px-2 py-1 rounded bg-red-900 hover:bg-red-800 text-red-300 text-[10px] font-bold transition">🗑 Delete</button>
+                    <button type="submit" class="px-2 py-1 rounded bg-red-900 hover:bg-red-800 text-red-300 text-[10px] font-bold transition">🗑 Delete</button>
                   </form>
                 </td>
               </tr>

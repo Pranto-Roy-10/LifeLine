@@ -111,8 +111,8 @@ html:not(.dark) .site-bg-blobs::after {
 html:not(.dark) .top-nav {
   background: rgba(195,216,206,0.55) !important;
   background-image: none !important;
-  backdrop-filter: blur(18px) saturate(1.8) !important;
   -webkit-backdrop-filter: blur(18px) saturate(1.8) !important;
+  backdrop-filter: blur(18px) saturate(1.8) !important;
   border-bottom: 1px solid rgba(180,210,195,0.35) !important;
   box-shadow: 0 1px 8px rgba(0,0,0,0.04) !important;
 }
@@ -190,8 +190,8 @@ html:not(.dark) .nav-pill--premium {
 html:not(.dark) #notif-dropdown,
 html:not(.dark) #user-menu-dropdown {
   background: rgba(210,216,220,0.90) !important;
-  backdrop-filter: blur(16px) saturate(1.5) !important;
   -webkit-backdrop-filter: blur(16px) saturate(1.5) !important;
+  backdrop-filter: blur(16px) saturate(1.5) !important;
   border-color: rgba(200,210,215,0.6) !important;
   box-shadow: 0 8px 30px rgba(0,0,0,0.08) !important;
   --tw-ring-color: rgba(0,0,0,0.04) !important;
@@ -220,8 +220,8 @@ html:not(.dark) #user-menu-dropdown a:hover {
 html:not(.dark) .glass-card,
 html:not(.dark) .glass-card-enhanced {
   background: rgba(220,230,228,0.65) !important;
-  backdrop-filter: blur(12px) saturate(1.4) !important;
   -webkit-backdrop-filter: blur(12px) saturate(1.4) !important;
+  backdrop-filter: blur(12px) saturate(1.4) !important;
   border-color: rgba(190,210,205,0.5) !important;
   box-shadow: 0 4px 20px rgba(0,0,0,0.04), 0 1px 3px rgba(0,0,0,0.03) !important;
 }
@@ -232,8 +232,8 @@ html:not(.dark) .glass-card-enhanced:hover {
 
 html:not(.dark) .live-panel {
   background: rgba(220,230,228,0.60) !important;
-  backdrop-filter: blur(14px) saturate(1.3) !important;
   -webkit-backdrop-filter: blur(14px) saturate(1.3) !important;
+  backdrop-filter: blur(14px) saturate(1.3) !important;
   border-color: rgba(190,210,205,0.55) !important;
   box-shadow: 0 8px 24px rgba(0,0,0,0.04) !important;
 }
@@ -496,8 +496,8 @@ html:not(.dark) .btn-map:hover {
 /* Action-card sheen */
 html:not(.dark) .btn-sheen {
   background: rgba(236,253,245,0.72) !important;
-  backdrop-filter: blur(10px) !important;
   -webkit-backdrop-filter: blur(10px) !important;
+  backdrop-filter: blur(10px) !important;
   border-color: rgba(226,232,240,0.7) !important;
   color: #1e293b !important;
 }
@@ -597,8 +597,8 @@ html:not(.dark) select option {
 html:not(.dark) footer,
 html:not(.dark) footer[class*="bg-slate"] {
   background-color: rgba(236,253,245,0.75) !important;
-  backdrop-filter: blur(12px) !important;
   -webkit-backdrop-filter: blur(12px) !important;
+  backdrop-filter: blur(12px) !important;
   border-top-color: rgba(209,250,229,0.5) !important;
 }
 html:not(.dark) footer p {
@@ -657,14 +657,14 @@ html:not(.dark) .chat-fullpage-container {
 }
 html:not(.dark) .chat-sidebar {
   background: rgba(195,216,210,0.60) !important;
-  backdrop-filter: blur(12px) saturate(1.3) !important;
   -webkit-backdrop-filter: blur(12px) saturate(1.3) !important;
+  backdrop-filter: blur(12px) saturate(1.3) !important;
   border-color: rgba(209,250,229,0.5) !important;
 }
 html:not(.dark) .chat-sidebar-header {
   background: rgba(236,253,245,0.75) !important;
-  backdrop-filter: blur(10px) !important;
   -webkit-backdrop-filter: blur(10px) !important;
+  backdrop-filter: blur(10px) !important;
   border-color: rgba(209,250,229,0.5) !important;
 }
 html:not(.dark) .chat-main {
@@ -672,14 +672,14 @@ html:not(.dark) .chat-main {
 }
 html:not(.dark) .chat-header-modern {
   background: rgba(236,253,245,0.75) !important;
-  backdrop-filter: blur(10px) !important;
   -webkit-backdrop-filter: blur(10px) !important;
+  backdrop-filter: blur(10px) !important;
   border-color: rgba(209,250,229,0.5) !important;
 }
 html:not(.dark) .chat-input-container {
   background: rgba(236,253,245,0.80) !important;
-  backdrop-filter: blur(10px) !important;
   -webkit-backdrop-filter: blur(10px) !important;
+  backdrop-filter: blur(10px) !important;
   border-color: rgba(209,250,229,0.5) !important;
 }
 html:not(.dark) .chat-input-modern {
@@ -712,15 +712,15 @@ html:not(.dark) .chat-index-container {
 }
 html:not(.dark) .chat-index-header {
   background: rgba(236,253,245,0.75) !important;
-  backdrop-filter: blur(12px) saturate(1.3) !important;
   -webkit-backdrop-filter: blur(12px) saturate(1.3) !important;
+  backdrop-filter: blur(12px) saturate(1.3) !important;
   border-color: rgba(209,250,229,0.5) !important;
   box-shadow: 0 4px 20px rgba(0,0,0,0.04) !important;
 }
 html:not(.dark) .conversation-card {
   background: rgba(236,253,245,0.72) !important;
-  backdrop-filter: blur(10px) !important;
   -webkit-backdrop-filter: blur(10px) !important;
+  backdrop-filter: blur(10px) !important;
   border-color: rgba(209,250,229,0.5) !important;
 }
 html:not(.dark) .conversation-card:hover {
@@ -785,8 +785,8 @@ html:not(.dark) [class*="bg-slate-950"][class*="min-h-screen"]:not(.nav-btn--sos
 /* bg-slate-950 on cards/components → frosted glass */
 html:not(.dark) [class*="bg-slate-950"]:not(.nav-btn--sos):not(.nav-btn--upgrade):not([class*="min-h-screen"]) {
   background-color: rgba(236,253,245,0.72) !important;
-  backdrop-filter: blur(10px) !important;
   -webkit-backdrop-filter: blur(10px) !important;
+  backdrop-filter: blur(10px) !important;
 }
 /* Modal/overlay backdrops with bg-slate-950 → keep as dark overlay */
 html:not(.dark) .absolute[class*="bg-slate-950"],
@@ -796,15 +796,15 @@ html:not(.dark) .fixed[class*="bg-slate-950"] {
 /* Cards / panels / modals with bg-slate-900 → frosted glass */
 html:not(.dark) [class*="bg-slate-900"]:not(.nav-btn--sos):not(.nav-btn--upgrade) {
   background-color: rgba(236,253,245,0.72) !important;
-  backdrop-filter: blur(10px) !important;
   -webkit-backdrop-filter: blur(10px) !important;
+  backdrop-filter: blur(10px) !important;
 }
 /* Sticky headers need blur so content doesn't show through */
 html:not(.dark) [class*="bg-slate-950"][class*="sticky"],
 html:not(.dark) [class*="bg-slate-950"][class*="border-b"] {
   background-color: rgba(240,253,244,0.85) !important;
-  backdrop-filter: blur(12px) saturate(1.4) !important;
   -webkit-backdrop-filter: blur(12px) saturate(1.4) !important;
+  backdrop-filter: blur(12px) saturate(1.4) !important;
 }
 html:not(.dark) [class*="bg-slate-800"]:not(.nav-btn--sos):not(.nav-btn--upgrade):not(button) {
   background-color: rgba(241,245,249,0.6) !important;
@@ -818,8 +818,8 @@ html:not(.dark) [class*="bg-[#0b1220]"],
 html:not(.dark) [class*="bg-[#111827]"],
 html:not(.dark) [class*="bg-[#0f172a]"] {
   background-color: rgba(255,255,255,0.65) !important;
-  backdrop-filter: blur(10px) !important;
   -webkit-backdrop-filter: blur(10px) !important;
+  backdrop-filter: blur(10px) !important;
 }
 
 /* --- Text --- */
@@ -952,8 +952,8 @@ html:not(.dark) [class*="to-slate-9"] {
 /* Rounded gradient cards (not section wrappers) → frosted glass bg */
 html:not(.dark) [class*="bg-gradient-to"][class*="rounded"]:not(a):not(button):not([role="button"]):not(input[type="submit"]):not(input[type="button"]) {
   background: rgba(236,253,245,0.72) !important;
-  backdrop-filter: blur(10px) saturate(1.3) !important;
   -webkit-backdrop-filter: blur(10px) saturate(1.3) !important;
+  backdrop-filter: blur(10px) saturate(1.3) !important;
 }
 html:not(.dark) [class*="from-slate-8"] {
   --tw-gradient-from: rgba(248,250,252,0.65) !important;
@@ -1034,8 +1034,8 @@ html:not(.dark) svg circle[stroke="#1e293b"] {
 /* Resources widget ("Shared Items Nearby") — override dark bg */
 html:not(.dark) [data-resources-widget="root"] {
   background: rgba(236,253,245,0.72) !important;
-  backdrop-filter: blur(10px) !important;
   -webkit-backdrop-filter: blur(10px) !important;
+  backdrop-filter: blur(10px) !important;
   border-color: rgba(209,250,229,0.6) !important;
 }
 html:not(.dark) [data-resources-widget="root"] p[class*="text-slate-100"] {
@@ -1148,8 +1148,8 @@ html:not(.dark) .live-card-meta {
 /* Resources widget */
 html:not(.dark) .resources-widget {
   background: rgba(210,220,218,0.70) !important;
-  backdrop-filter: blur(12px) !important;
   -webkit-backdrop-filter: blur(12px) !important;
+  backdrop-filter: blur(12px) !important;
   border-color: rgba(190,210,205,0.55) !important;
 }
 

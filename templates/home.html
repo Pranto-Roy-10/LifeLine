@@ -1,6 +1,24 @@
 {% extends "base.html" %} {% block title %}LifeLine – Home{% endblock %} {%
 block content %}
 
+<style>
+  .anim-delay-1800 {
+    animation-delay: 1.8s;
+  }
+  .anim-delay-100 {
+    animation-delay: 0.1s;
+  }
+  .anim-delay-150 {
+    animation-delay: 0.15s;
+  }
+  .anim-delay-200 {
+    animation-delay: 0.2s;
+  }
+  .anim-delay-300 {
+    animation-delay: 0.3s;
+  }
+</style>
+
 <!-- HERO: MAIN BANNER (modernized) -->
 <section class="home-hero relative overflow-hidden">
   <div class="hero-backdrop float-slow"></div>
@@ -101,7 +119,7 @@ block content %}
     <!-- RIGHT: LIVE PANEL -->
     <div class="relative animate-fadeInUp">
       <div class="hero-glow-a float-slow"></div>
-      <div class="hero-glow-b float-slow" style="animation-delay: 1.8s"></div>
+      <div class="hero-glow-b float-slow anim-delay-1800"></div>
       <div class="live-panel glass-card-enhanced p-6 space-y-4 card-hover">
         <div
           class="flex justify-between items-center pb-3 border-b border-slate-800/60"
@@ -155,7 +173,7 @@ block content %}
     <!-- ACTION GRID -->
     <div class="grid md:grid-cols-3 gap-6 text-sm action-grid">
       <!-- COLUMN 1 -->
-      <div class="space-y-3 animate-fadeInUp" style="animation-delay: 0.1s">
+      <div class="space-y-3 animate-fadeInUp anim-delay-100">
         <a
           href="/requests"
           class="block btn-sheen rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-900/50 to-slate-900/30 px-5 py-4 hover:border-emerald-400/80 transition-all duration-300 hover:bg-gradient-to-br hover:from-emerald-500/10 hover:to-slate-900/40 group hover:shadow-lg hover:shadow-emerald-500/20"
@@ -223,7 +241,7 @@ block content %}
       </div>
 
       <!-- COLUMN 2 -->
-      <div class="space-y-3 animate-fadeInUp" style="animation-delay: 0.2s">
+      <div class="space-y-3 animate-fadeInUp anim-delay-200">
         <a
           href="/map"
           class="block btn-sheen rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-900/50 to-slate-900/30 px-5 py-4 hover:border-sky-400/80 transition-all duration-300 hover:bg-gradient-to-br hover:from-sky-500/10 hover:to-slate-900/40 group hover:shadow-lg hover:shadow-sky-500/20"
@@ -298,7 +316,7 @@ block content %}
       </div>
 
       <!-- COLUMN 3 -->
-      <div class="space-y-3 animate-fadeInUp" style="animation-delay: 0.3s">
+      <div class="space-y-3 animate-fadeInUp anim-delay-300">
         <a
           href="javascript:void(0)"
           id="oneTapSosCard"
@@ -387,10 +405,7 @@ block content %}
       </p>
     </div>
 
-    <div
-      class="grid md:grid-cols-3 gap-6 text-sm mb-8 animate-fadeInUp"
-      style="animation-delay: 0.1s"
-    >
+    <div class="grid md:grid-cols-3 gap-6 text-sm mb-8 animate-fadeInUp anim-delay-100">
       <div
         class="rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 to-slate-900/40 p-6 transition-all duration-300 hover:border-emerald-400/60 hover:bg-emerald-500/15 hover:shadow-lg hover:shadow-emerald-500/20 group"
       >
@@ -439,8 +454,7 @@ block content %}
 
     <!-- Impact Graphs -->
     <div
-      class="bg-gradient-to-br from-slate-900/60 to-slate-950/60 border border-slate-700/50 rounded-2xl p-6 transition-all duration-300 hover:border-slate-600/80 hover:shadow-lg hover:shadow-sky-500/10 animate-fadeInUp"
-      style="animation-delay: 0.2s"
+      class="bg-gradient-to-br from-slate-900/60 to-slate-950/60 border border-slate-700/50 rounded-2xl p-6 transition-all duration-300 hover:border-slate-600/80 hover:shadow-lg hover:shadow-sky-500/10 animate-fadeInUp anim-delay-200"
     >
       <h4 class="text-lg font-semibold mb-4 text-slate-100">
         Community Impact Over Time
@@ -481,7 +495,7 @@ block content %}
         </a>
       </div>
 
-      <div class="animate-fadeInUp" style="animation-delay:0.15s">
+      <div class="animate-fadeInUp anim-delay-150">
         <div class="donor-list-box rounded-2xl border border-slate-700/60 bg-slate-900/45 p-5 md:p-6">
           <div class="flex items-center justify-between gap-3 mb-4">
             <h4 class="text-lg font-semibold text-slate-100">Recent Donors</h4>

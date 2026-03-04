@@ -2057,7 +2057,7 @@ def emotional_ping_placeholder():
     except Exception:
         psychiatrists = []
 
-    return render_template("emotional_ping.html", psychiatrists=psychiatrists)
+    return render_template("emotional_ping.jinja2", psychiatrists=psychiatrists)
 
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime
