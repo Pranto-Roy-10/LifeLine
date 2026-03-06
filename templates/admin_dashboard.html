@@ -149,6 +149,7 @@ block content %}
                   class="inline"
                 >
                   <button
+                    type="submit"
                     onclick="return confirm('Reject this payment?')"
                     class="text-rose-400 hover:text-rose-300 hover:underline text-xs font-bold"
                   >
@@ -161,6 +162,7 @@ block content %}
                   class="inline"
                 >
                   <button
+                    type="submit"
                     class="btn-sheen admin-approve-btn bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-lg shadow-emerald-900/20"
                   >
                     Approve
@@ -279,9 +281,9 @@ block content %}
       <h3 class="text-sm font-bold text-slate-400 uppercase mb-4">
         Recent History
       </h3>
-      <ul class="space-y-2">
+      <div class="space-y-2">
         {% for h in history %}
-        <li
+        <div
           class="flex justify-between items-center text-xs p-3 rounded bg-slate-950 border border-slate-800"
         >
           <span class="text-slate-300"
@@ -292,11 +294,11 @@ block content %}
           >
             {{ h.status }}
           </span>
-        </li>
+        </div>
         {% else %}
-        <li class="text-slate-500 italic text-xs">No history yet.</li>
+        <div class="text-slate-500 italic text-xs">No history yet.</div>
         {% endfor %}
-      </ul>
+      </div>
     </div>
   </div>
 </div>
