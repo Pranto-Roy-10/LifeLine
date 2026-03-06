@@ -8,7 +8,7 @@ try:
 except Exception:
     pass
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import base64
 import json
 import os
@@ -105,6 +105,122 @@ except Exception:
 
 # email -> {"request_times": [...], "last_code_sent_at": datetime}
 otp_store = {}
+
+SUPPORTED_INTERFACE_LANGUAGES = {
+    "en": "English",
+    "bn": "Bangla",
+}
+
+HELPER_CATEGORY_CHOICES = [
+    "medicine",
+    "food",
+    "repair",
+    "ride",
+    "tutoring",
+    "blood_donor",
+    "emergency",
+]
+
+
+def normalize_language_code(value, default="en"):
+    code = (value or "").strip().lower()
+    if code.startswith("bn"):
+        return "bn"
+    if code.startswith("en"):
+        return "en"
+    return default
+
+
+def parse_helper_categories(raw_value):
+    raw = (raw_value or "").strip()
+    if not raw:
+        return []
+    return sorted({item.strip().lower() for item in raw.split(",") if item.strip()})
+
+
+def translate_text_content(text, target_language, source_language="auto"):
+    if not text:
+        return text
+
+    target = normalize_language_code(target_language, default="")
+    source = (source_language or "auto").strip().lower() or "auto"
+    if not target:
+        return text
+    if source != "auto" and normalize_language_code(source, default=source) == target:
+        return text
+
+    try:
+        if "gcloud_translate_client" in globals() and gcloud_translate_client:
+            resp = gcloud_translate_client.translate(text, target_language=target)
+            return resp.get("translatedText") or text
+        if "gt_translator" in globals() and gt_translator:
+            translated = gt_translator.translate(text, dest=target, src=source)
+            return getattr(translated, "text", text) or text
+    except Exception:
+        pass
+    return text
+
+
+def is_blood_request_category(category):
+    return str(category or "").strip().lower() in {"blood_donor", "blood donor", "blood"}
+
+
+def normalize_blood_group(value):
+    group = (value or "").strip().upper().replace(" ", "")
+    return group or None
+
+
+def blood_group_compatible(donor_group, needed_group):
+    donor = normalize_blood_group(donor_group)
+    needed = normalize_blood_group(needed_group)
+    if not donor or not needed:
+        return False
+
+    compatibility = {
+        "O-": {"O-", "O+", "A-", "A+", "B-", "B+", "AB-", "AB+"},
+        "O+": {"O+", "A+", "B+", "AB+"},
+        "A-": {"A-", "A+", "AB-", "AB+"},
+        "A+": {"A+", "AB+"},
+        "B-": {"B-", "B+", "AB-", "AB+"},
+        "B+": {"B+", "AB+"},
+        "AB-": {"AB-", "AB+"},
+        "AB+": {"AB+"},
+    }
+    return needed in compatibility.get(donor, {donor})
+
+
+def donor_eligibility_snapshot(user_obj):
+    blood_group = normalize_blood_group(getattr(user_obj, "blood_group", None))
+    last_date = getattr(user_obj, "last_donation_date", None)
+    is_registered = bool(getattr(user_obj, "is_blood_donor", False)) and bool(blood_group)
+
+    if not is_registered:
+        return {
+            "eligible": False,
+            "blood_group": blood_group,
+            "days_remaining": None,
+            "status_text": "Not registered as a donor",
+        }
+
+    if not last_date:
+        return {
+            "eligible": True,
+            "blood_group": blood_group,
+            "days_remaining": 0,
+            "status_text": "Eligible now",
+        }
+
+    if isinstance(last_date, datetime):
+        last_date = last_date.date()
+
+    days_since = (date.today() - last_date).days
+    days_remaining = max(56 - days_since, 0)
+    return {
+        "eligible": days_remaining == 0,
+        "blood_group": blood_group,
+        "days_remaining": days_remaining,
+        "status_text": "Eligible now" if days_remaining == 0 else f"Eligible in {days_remaining} day(s)",
+    }
 
 app = Flask(__name__)
 CORS(app, supports_credentials=True)
@@ -250,6 +366,11 @@ class User(db.Model):
     phone = db.Column(db.String(20))
     emergency_number = db.Column(db.String(30), nullable=True)
     dob = db.Column(db.String(20))  # or Date type if you prefer
+    preferred_language = db.Column(db.String(10), default="en")
+    helper_categories = db.Column(db.Text, nullable=True)
+    blood_group = db.Column(db.String(5), nullable=True)
+    is_blood_donor = db.Column(db.Boolean, default=False)
+    last_donation_date = db.Column(db.Date, nullable=True)
 
     impact_stories = db.relationship('ImpactStory', back_populates='user', cascade='all, delete-orphan')
 
@@ -336,6 +457,8 @@ class Request(db.Model):
     is_offer = db.Column(db.Boolean, default=False)        # false = Need Help, true = Offering Help
     radius_pref = db.Column(db.String(50), nullable=True)  # e.g. "2" (km)
     frequency = db.Column(db.String(50), nullable=True)    # one_time / few_times_week / daily
+    blood_group_needed = db.Column(db.String(5), nullable=True)
+    donor_urgency_minutes = db.Column(db.Integer, default=30)
 
     image_url = db.Column(db.String(300), nullable=True)
 
@@ -368,6 +491,8 @@ class Request(db.Model):
             "is_offer": self.is_offer,
             "radius_pref": self.radius_pref,
             "frequency": self.frequency,
+            "blood_group_needed": self.blood_group_needed,
+            "donor_urgency_minutes": self.donor_urgency_minutes,
             "image_url": self.image_url,
             "created_at": int(self.created_at.timestamp()),
             "expires_at": int(self.expires_at.timestamp()),
@@ -517,10 +642,16 @@ class ShopRequest(db.Model):
     parts_cost = db.Column(db.Float, default=0.0)    # Parts / materials cost (estimated)
     lifeline_commission = db.Column(db.Float, default=0.0)  # LifeLine platform fee
     total_cost = db.Column(db.Float, default=0.0)    # Grand total
+    dispatch_priority = db.Column(db.String(20), default="standard")
+    guarantee_status = db.Column(db.String(30), default="quote_shared")
+    funds_release_status = db.Column(db.String(30), default="held")
+    guarantee_hold_amount = db.Column(db.Float, default=0.0)
     
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     accepted_at = db.Column(db.DateTime, nullable=True)
     completed_at = db.Column(db.DateTime, nullable=True)
+    customer_confirmed_at = db.Column(db.DateTime, nullable=True)
+    funds_released_at = db.Column(db.DateTime, nullable=True)
     
     user = db.relationship("User", backref="shop_requests")
     shop = db.relationship("Shop", backref="shop_requests")
@@ -538,9 +669,20 @@ class ShopRequest(db.Model):
             "shop_name": self.shop.name if self.shop else None,
             "shop_phone": self.shop.phone if self.shop else None,
             "shop_address": self.shop.address if self.shop else None,
+            "service_fee": float(self.service_fee or 0),
+            "labor_cost": float(self.labor_cost or 0),
+            "parts_cost": float(self.parts_cost or 0),
+            "lifeline_commission": float(self.lifeline_commission or 0),
+            "total_cost": float(self.total_cost or 0),
             "created_at": int(self.created_at.timestamp()),
             "accepted_at": int(self.accepted_at.timestamp()) if self.accepted_at else None,
             "completed_at": int(self.completed_at.timestamp()) if self.completed_at else None,
+            "dispatch_priority": self.dispatch_priority,
+            "guarantee_status": self.guarantee_status,
+            "funds_release_status": self.funds_release_status,
+            "guarantee_hold_amount": float(self.guarantee_hold_amount or 0),
+            "customer_confirmed_at": int(self.customer_confirmed_at.timestamp()) if self.customer_confirmed_at else None,
+            "funds_released_at": int(self.funds_released_at.timestamp()) if self.funds_released_at else None,
         }
 
 
@@ -1348,18 +1490,27 @@ def get_or_create_conversation(user1_id, user2_id):
     return conv
 
 
-def serialize_message(msg: ChatMessage):
-    return {
+def serialize_message(msg: ChatMessage, viewer_language=None):
+    sender = User.query.get(msg.sender_id)
+    payload = {
         "id": msg.id,
         "conversation_id": msg.conversation_id,
         "sender_id": msg.sender_id,
-        "sender_name": (User.query.get(msg.sender_id).name if User.query.get(msg.sender_id) else None),
+        "sender_name": sender.name if sender else None,
         "text": msg.text,
         "created_at": int(msg.created_at.timestamp()),
         "delivered": bool(msg.delivered),
         "read": bool(msg.read),
         "language": msg.language,
     }
+    target_language = normalize_language_code(viewer_language, default="")
+    source_language = normalize_language_code(msg.language or getattr(sender, "preferred_language", None), default="")
+    if target_language and msg.text and target_language != source_language:
+        translated_text = translate_text_content(msg.text, target_language, source_language=source_language or "auto")
+        if translated_text and translated_text != msg.text:
+            payload["translated_text"] = translated_text
+            payload["translated_target"] = target_language
+    return payload
 
 
 def _compute_unread_chat_count(user_id: int) -> int:
@@ -1620,6 +1771,9 @@ def inject_user():
         service_bonus_percent=service_bonus_percent,
         translation_enabled=translation_enabled,
         unread_chat_count=int(unread_chat_count or 0),
+        preferred_language=normalize_language_code(getattr(user, "preferred_language", None) if user else "en"),
+        supported_languages=SUPPORTED_INTERFACE_LANGUAGES,
+        helper_category_choices=HELPER_CATEGORY_CHOICES,
     )
 
 # ------------------ GEO UTILS ------------------
@@ -1637,6 +1791,214 @@ def haversine_distance_km(lat1, lon1, lat2, lon2):
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
     return R * c
+
+
+def _recent_activity_score(user_id, window_minutes=20):
+    cutoff = datetime.utcnow() - timedelta(minutes=window_minutes)
+    try:
+        count = UserActivity.query.filter(
+            UserActivity.user_id == user_id,
+            UserActivity.created_at >= cutoff,
+        ).count()
+        return min(count / 4.0, 1.0)
+    except Exception:
+        return 0.0
+
+
+def _helper_success_metrics(helper_id, category=None):
+    try:
+        query = Review.query.filter(Review.helper_id == helper_id)
+        total_reviews = query.count()
+        avg_rating = float(
+            db.session.query(func.avg(Review.rating)).filter(Review.helper_id == helper_id).scalar() or 0
+        )
+        category_reviews = 0
+        if category:
+            category_reviews = (
+                db.session.query(func.count(Review.id))
+                .join(Request, Review.request_id == Request.id)
+                .filter(Review.helper_id == helper_id, func.lower(Request.category) == str(category).lower())
+                .scalar()
+                or 0
+            )
+        return {
+            "avg_rating": avg_rating,
+            "total_reviews": int(total_reviews),
+            "category_reviews": int(category_reviews),
+        }
+    except Exception:
+        return {"avg_rating": 0.0, "total_reviews": 0, "category_reviews": 0}
+
+
+def build_helper_matches_for_request(req_obj, limit=3):
+    if not req_obj:
+        return []
+
+    max_distance_km = 10 if is_blood_request_category(req_obj.category) else 15
+    urgency = str(req_obj.urgency or "normal").lower()
+    if urgency == "emergency":
+        max_distance_km = min(max_distance_km, 8)
+
+    query = User.query.filter(User.id != req_obj.user_id)
+    candidates = query.all()
+
+    matches = []
+    for helper in candidates:
+        if not helper.lat or not helper.lng:
+            continue
+
+        if req_obj.lat is not None and req_obj.lng is not None:
+            distance_km = round(haversine_distance_km(req_obj.lat, req_obj.lng, helper.lat, helper.lng), 2)
+            if distance_km > max_distance_km:
+                continue
+        else:
+            distance_km = None
+
+        expertise_tags = parse_helper_categories(getattr(helper, "helper_categories", None))
+        expertise_metrics = _helper_success_metrics(helper.id, req_obj.category)
+        explicit_expertise = str(req_obj.category or "").lower() in expertise_tags
+        activity_score = _recent_activity_score(helper.id)
+        trust_score = min(float(helper.trust_score or 0) / 100.0, 1.0)
+        kindness_score = min(float(helper.kindness_score or 0) / 100.0, 1.0)
+        review_score = min(expertise_metrics["avg_rating"] / 5.0, 1.0)
+        volume_score = min(expertise_metrics["total_reviews"] / 8.0, 1.0)
+        expertise_score = min(expertise_metrics["category_reviews"] / 3.0, 1.0)
+        if explicit_expertise:
+            expertise_score = max(expertise_score, 0.75)
+
+        donor_status = donor_eligibility_snapshot(helper)
+        if is_blood_request_category(req_obj.category):
+            if not donor_status["eligible"]:
+                continue
+            if not blood_group_compatible(helper.blood_group, req_obj.blood_group_needed):
+                continue
+            expertise_score = max(expertise_score, 0.8)
+
+        distance_score = 0.35 if distance_km is None else max(0.0, 1.0 - (distance_km / max_distance_km))
+        availability_score = max(activity_score, 0.65 if helper.is_trusted_helper else 0.15)
+
+        overall_score = (
+            distance_score * 0.28
+            + availability_score * 0.22
+            + trust_score * 0.16
+            + kindness_score * 0.08
+            + review_score * 0.12
+            + volume_score * 0.06
+            + expertise_score * 0.08
+        )
+
+        likely_10m = bool(
+            distance_km is not None
+            and distance_km <= (2.5 if urgency == "emergency" else 4.0)
+            and availability_score >= 0.30
+            and (review_score >= 0.50 or helper.is_trusted_helper)
+        )
+
+        reasons = []
+        if distance_km is not None:
+            reasons.append(f"{distance_km} km away")
+        if expertise_metrics["category_reviews"]:
+            reasons.append(f"{expertise_metrics['category_reviews']} completed {req_obj.category} task(s)")
+        elif explicit_expertise:
+            reasons.append("listed this category as an expertise")
+        if helper.is_trusted_helper:
+            reasons.append("verified trusted helper")
+        if activity_score >= 0.25:
+            reasons.append("active on radar recently")
+        if is_blood_request_category(req_obj.category):
+            reasons.append(f"{normalize_blood_group(helper.blood_group)} donor")
+            reasons.append(donor_status["status_text"])
+
+        matches.append({
+            "user_id": helper.id,
+            "name": helper.name,
+            "distance_km": distance_km,
+            "score": int(round(overall_score * 100)),
+            "avg_rating": round(expertise_metrics["avg_rating"], 1),
+            "completed_count": expertise_metrics["total_reviews"],
+            "likely_10m": likely_10m,
+            "reasons": reasons[:3],
+            "blood_group": normalize_blood_group(helper.blood_group),
+        })
+
+    matches.sort(key=lambda item: (item["likely_10m"], item["score"], -(item["distance_km"] or 9999)), reverse=True)
+    return matches[:limit]
+
+
+def send_targeted_match_notifications(req_obj, limit=3):
+    """Notify the top smart matches for a newly created request."""
+    try:
+        matches = build_helper_matches_for_request(req_obj, limit=limit)
+        sent = 0
+        for match in matches:
+            helper = User.query.get(match["user_id"])
+            if not helper:
+                continue
+
+            likely_tag = " Likely to respond fast." if match.get("likely_10m") else ""
+            body = f"{req_obj.user.name if req_obj.user else 'Someone'} needs help with {req_obj.category}: {req_obj.title}.{likely_tag}"
+            push_notification(
+                user_id=helper.id,
+                type="smart_match",
+                message=body,
+                link=url_for("list_requests", mode="need"),
+            )
+            send_fcm_to_user(
+                helper,
+                title="Smart match nearby",
+                body=body,
+                data={
+                    "type": "SMART_MATCH",
+                    "request_id": str(req_obj.id),
+                    "score": str(match.get("score", 0)),
+                },
+            )
+            sent += 1
+        return sent
+    except Exception as e:
+        print(f"[FCM] Error in send_targeted_match_notifications: {e}")
+        return 0
+
+
+def send_urgent_blood_request_notifications(req_obj, limit=5):
+    """Notify eligible nearby donors for an urgent blood request."""
+    try:
+        matches = build_helper_matches_for_request(req_obj, limit=limit)
+        sent = 0
+        urgency_minutes = int(getattr(req_obj, "donor_urgency_minutes", 30) or 30)
+        for match in matches:
+            helper = User.query.get(match["user_id"])
+            if not helper:
+                continue
+
+            distance = match.get("distance_km")
+            distance_text = f" {distance} km away." if distance is not None else ""
+            body = (
+                f"Urgent blood request for {req_obj.blood_group_needed}: {req_obj.title}. "
+                f"Need response within {urgency_minutes} minutes.{distance_text}"
+            )
+            push_notification(
+                user_id=helper.id,
+                type="blood_request",
+                message=body,
+                link=url_for("list_requests", mode="need"),
+            )
+            send_fcm_to_user(
+                helper,
+                title=f"Urgent blood request: {req_obj.blood_group_needed}",
+                body=body,
+                data={
+                    "type": "URGENT_BLOOD_REQUEST",
+                    "request_id": str(req_obj.id),
+                    "blood_group": str(req_obj.blood_group_needed or ""),
+                    "urgency_minutes": str(urgency_minutes),
+                },
+            )
+            sent += 1
+        return sent
+    except Exception as e:
+        print(f"[FCM] Error in send_urgent_blood_request_notifications: {e}")
+        return 0
 
 # ------------------ EVENT NOTIFICATION SERVICE ------------------
 def notify_nearby_users(event):
@@ -2867,6 +3229,11 @@ def update_profile():
     phone = request.form.get("phone", "").strip()
     emergency_number = request.form.get("emergency_number", "").strip()
     dob   = request.form.get("dob", "").strip()
+    preferred_language = normalize_language_code(request.form.get("preferred_language", "en"))
+    helper_categories = ", ".join(parse_helper_categories(request.form.get("helper_categories", "")))
+    blood_group = normalize_blood_group(request.form.get("blood_group"))
+    is_blood_donor = request.form.get("is_blood_donor") == "on"
+    last_donation_date_raw = (request.form.get("last_donation_date") or "").strip()
 
     if name:
         user.name = name
@@ -2874,6 +3241,10 @@ def update_profile():
         session["user_name"] = name
 
     user.phone = phone or None
+    user.preferred_language = preferred_language
+    user.helper_categories = helper_categories or None
+    user.blood_group = blood_group
+    user.is_blood_donor = is_blood_donor and bool(blood_group)
     if emergency_number:
         # allow digits/spaces and common prefixes; keep minimal validation for MVP
         cleaned = "".join(ch for ch in emergency_number if ch.isdigit() or ch in "+- ()")
@@ -2885,6 +3256,15 @@ def update_profile():
     else:
         user.emergency_number = None
     user.dob   = dob or None
+
+    if last_donation_date_raw:
+        try:
+            user.last_donation_date = datetime.strptime(last_donation_date_raw, "%Y-%m-%d").date()
+        except ValueError:
+            flash("Last donation date must be a valid date.", "error")
+            return redirect(url_for("profile"))
+    else:
+        user.last_donation_date = None
 
     # ---- profile photo upload ----
     file = request.files.get("profile_photo")
@@ -2905,6 +3285,16 @@ def update_profile():
     db.session.commit()
     flash("Profile updated successfully.", "success")
     return redirect(url_for("profile"))
+
+
+@app.route("/profile/language", methods=["POST"])
+@login_required
+def update_profile_language():
+    user = current_user()
+    user.preferred_language = normalize_language_code(request.form.get("preferred_language", "en"))
+    db.session.commit()
+    flash(f"Language preference updated to {SUPPORTED_INTERFACE_LANGUAGES.get(user.preferred_language, 'English')}.", "success")
+    return redirect(request.referrer or url_for("profile"))
 
 @app.route("/emotional_ping/<int:ping_id>/accept")
 @login_required
@@ -3394,6 +3784,11 @@ def create_request():
     category = request.form.get("category", "").strip()
     description = request.form.get("description", "").strip()
     is_offer = request.form.get("is_offer") == "on"
+    blood_group_needed = normalize_blood_group(request.form.get("blood_group_needed"))
+    try:
+        donor_urgency_minutes = int(request.form.get("donor_urgency_minutes", 30))
+    except (TypeError, ValueError):
+        donor_urgency_minutes = 30
     try:
         expiry_minutes = int(request.form.get("expiry_minutes", 60))
     except (TypeError, ValueError):
@@ -3401,6 +3796,10 @@ def create_request():
 
     if not title or not category:
         flash("Title and category are required.", "error")
+        return redirect(url_for("new_request"))
+
+    if is_blood_request_category(category) and not blood_group_needed:
+        flash("Blood donor requests require the needed blood group.", "error")
         return redirect(url_for("new_request"))
 
     # Handle prescription image for medicine requests
@@ -3429,10 +3828,20 @@ def create_request():
         description=description,
         is_offer=is_offer,
         image_url=image_url,
+        blood_group_needed=blood_group_needed if is_blood_request_category(category) else None,
+        donor_urgency_minutes=donor_urgency_minutes if is_blood_request_category(category) else 30,
         expires_at=expires_at,
     )
     db.session.add(req)
     db.session.commit()
+
+    try:
+        if is_blood_request_category(req.category):
+            send_urgent_blood_request_notifications(req, limit=5)
+        elif not req.is_offer and str(req.urgency or "").lower() in {"high", "emergency"}:
+            send_targeted_match_notifications(req, limit=3)
+    except Exception as e:
+        print("[FCM] targeted notification error:", e)
 
     flash("Your request has been posted.", "success")
     return redirect(url_for("list_requests"))
@@ -3464,6 +3873,11 @@ def need_help():
         contact_info = request.form.get("contact_info", "").strip()
 
         description_main = request.form.get("description", "").strip()
+        blood_group_needed = normalize_blood_group(request.form.get("blood_group_needed"))
+        try:
+            donor_urgency_minutes = int(request.form.get("donor_urgency_minutes", 30))
+        except (TypeError, ValueError):
+            donor_urgency_minutes = 30
 
         # lat / lng from map picker (optional)
         lat_raw = request.form.get("lat")
@@ -3482,6 +3896,10 @@ def need_help():
 
         if not title or not category:
             flash("Title and category are required.", "error")
+            return redirect(url_for("need_help"))
+
+        if is_blood_request_category(category) and not blood_group_needed:
+            flash("Blood donor requests require the needed blood group.", "error")
             return redirect(url_for("need_help"))
 
         # Handle prescription image for medicine requests
@@ -3522,6 +3940,8 @@ def need_help():
             image_url=image_url,
             lat=lat,
             lng=lng,
+            blood_group_needed=blood_group_needed if is_blood_request_category(category) else None,
+            donor_urgency_minutes=donor_urgency_minutes if is_blood_request_category(category) else 30,
             expires_at=expires_at,
         )
         db.session.add(req)
@@ -3535,6 +3955,14 @@ def need_help():
 
         except Exception as e:
             print("[FCM] nearby help push error:", e)
+
+        try:
+            if is_blood_request_category(req.category):
+                send_urgent_blood_request_notifications(req, limit=5)
+            elif str(req.urgency or "").lower() in {"high", "emergency"}:
+                send_targeted_match_notifications(req, limit=3)
+        except Exception as e:
+            print("[FCM] targeted request notification error:", e)
 
         # Fallback / additional broadcast: notify all trusted helpers with FCM tokens
         try:
@@ -3992,6 +4420,14 @@ def list_requests():
     flagged_map = build_flagged_map_for_requests(requests_list)
 
     user = current_user()
+    viewer_language = normalize_language_code(getattr(user, "preferred_language", None)) if user else "en"
+    helper_matches_map = {}
+    for req_obj in requests_list:
+        owner_language = normalize_language_code(getattr(req_obj.user, "preferred_language", None), default="en") if getattr(req_obj, "user", None) else "en"
+        req_obj.display_title = translate_text_content(req_obj.title, viewer_language, source_language=owner_language)
+        req_obj.display_description = translate_text_content(req_obj.description, viewer_language, source_language=owner_language) if req_obj.description else ""
+        if user and req_obj.user_id == user.id and not req_obj.is_offer and req_obj.status == "open":
+            helper_matches_map[req_obj.id] = build_helper_matches_for_request(req_obj, limit=3)
     try:
         offered_ids = {
             int(o.request_id)
@@ -4027,7 +4463,18 @@ def list_requests():
         sos_responded_ids=sos_responded_ids,
         sos_response_counts=sos_response_counts,
         flagged_map=flagged_map,
+        helper_matches_map=helper_matches_map,
     )
+
+
+@app.route("/api/requests/<int:request_id>/smart-matches", methods=["GET"])
+@login_required
+def api_request_smart_matches(request_id):
+    req_obj = Request.query.get_or_404(request_id)
+    user = current_user()
+    if req_obj.user_id != user.id and not user.is_admin:
+        return jsonify({"error": "Unauthorized"}), 403
+    return jsonify({"matches": build_helper_matches_for_request(req_obj, limit=3)})
 
 
 def _create_offer_record(req, user):
@@ -4726,8 +5173,16 @@ def chat_with_user(other_user_id):
     except Exception:
         pass
     # serialize messages for JSON/template safety
-    messages_serialized = [serialize_message(m) for m in messages]
-    return render_template("chat.html", conversation=conv, other_user=other, messages=messages_serialized, conversations=conversations_list)
+    viewer_language = normalize_language_code(getattr(user, "preferred_language", None))
+    messages_serialized = [serialize_message(m, viewer_language=viewer_language) for m in messages]
+    return render_template(
+        "chat.html",
+        conversation=conv,
+        other_user=other,
+        messages=messages_serialized,
+        conversations=conversations_list,
+        preferred_language=viewer_language,
+    )
 
 
 @app.route("/chat")
@@ -5734,7 +6189,11 @@ def my_orders():
             ],
             "method": "—",
             "trx_id": "—",
-            "details": f"{sr.title} · {shop_name}",
+            "details": f"{sr.title} · {shop_name} · {str(sr.dispatch_priority or 'standard').title()} dispatch",
+            "dispatch_priority": sr.dispatch_priority or "standard",
+            "guarantee_status": sr.guarantee_status or "quote_shared",
+            "funds_release_status": sr.funds_release_status or "held",
+            "customer_can_release": (sr.funds_release_status or "held") != "released",
         })
 
     # Psychiatry appointments
@@ -6530,7 +6989,8 @@ def api_get_messages(conv_id):
     if user.id not in conv.participants():
         return jsonify({"error": "Unauthorized"}), 403
     msgs = ChatMessage.query.filter_by(conversation_id=conv.id).order_by(ChatMessage.created_at.asc()).all()
-    return jsonify({"messages": [serialize_message(m) for m in msgs]})
+    viewer_language = normalize_language_code(getattr(user, "preferred_language", None))
+    return jsonify({"messages": [serialize_message(m, viewer_language=viewer_language) for m in msgs]})
 
 
 @app.route("/api/conversations/<int:conv_id>/mark_read", methods=["POST"])
@@ -6586,18 +7046,7 @@ def api_translate():
     if not text or not target:
         return jsonify({"error": "text and target required"}), 400
 
-    def translate_text(t, tgt):
-        try:
-            if 'gcloud_translate_client' in globals() and gcloud_translate_client:
-                resp = gcloud_translate_client.translate(t, target_language=tgt)
-                return resp.get("translatedText")
-            elif 'gt_translator' in globals() and gt_translator:
-                return gt_translator.translate(t, dest=tgt).text
-        except Exception:
-            pass
-        return t
-
-    translated = translate_text(text, target)
+    translated = translate_text_content(text, target)
     return jsonify({"translated": translated})
 
 
@@ -6784,7 +7233,7 @@ def on_send_message(data):
     conv_id = data.get("conversation_id")
     text = data.get("text", "")
     temp_id = data.get("temp_id")
-    lang = data.get("language")
+    lang = normalize_language_code(data.get("language") or getattr(current_user(), "preferred_language", None))
     file_data = data.get("file_data")
     file_name = data.get("file_name")
     file_size = data.get("file_size")
@@ -6857,6 +7306,13 @@ def on_send_message(data):
     # ---------- Determine the other participant ----------
     other_id = conv.user_a if conv.user_b == user.id else conv.user_b
     other_user = User.query.get(other_id) if other_id else None
+    if other_user and msg.text:
+        target_language = normalize_language_code(getattr(other_user, "preferred_language", None), default="")
+        if target_language and target_language != normalize_language_code(lang, default="en"):
+            translated_text = translate_text_content(msg.text, target_language, source_language=lang)
+            if translated_text and translated_text != msg.text:
+                payload["translated_text"] = translated_text
+                payload["translated_target"] = target_language
 
     # ---------- Create bell notification for the receiver ----------
     try:
@@ -7416,6 +7872,7 @@ def create_shop_request():
 
         tier = _membership_tier_for_user(user)
         bonus_rate = _service_bonus_rate_for_tier(tier)
+        dispatch_priority = "priority" if tier in ("premium", "angel") else "standard"
         pre_bonus_total = round(subtotal + lifeline_commission, 2)
         bonus_discount = round(pre_bonus_total * bonus_rate, 2)
         after_membership_total = round(pre_bonus_total - bonus_discount, 2)
@@ -7455,6 +7912,10 @@ def create_shop_request():
             parts_cost=parts_cost,
             lifeline_commission=lifeline_commission,
             total_cost=total_cost,
+            dispatch_priority=dispatch_priority,
+            guarantee_status="hold_active",
+            funds_release_status="held",
+            guarantee_hold_amount=total_cost,
         )
         
         db.session.add(shop_req)
@@ -7481,12 +7942,14 @@ def create_shop_request():
                 "lifeline_commission": lifeline_commission,
                 "commission_rate": f"{int(commission_rate*100)}%",
                 "membership_tier": tier,
+                "dispatch_priority": dispatch_priority,
                 "bonus_rate": f"{int(bonus_rate*100)}%",
                 "bonus_discount": bonus_discount,
                 "pre_bonus_total": pre_bonus_total,
                 "voucher_discount_percent": voucher_discount_percent,
                 "voucher_discount_amount": voucher_discount_amount,
                 "voucher_code": voucher_code,
+                "guarantee_status": "Funds held until you mark the service complete",
                 "total_cost": total_cost,
             }
         }), 200
@@ -7527,6 +7990,28 @@ def get_user_shop_requests():
             "success": False,
             "error": str(e)
         }), 500
+
+
+@app.route("/shop-request/<int:shop_request_id>/confirm-complete", methods=["POST"])
+@login_required
+def confirm_shop_request_complete(shop_request_id):
+    user = current_user()
+    shop_request = ShopRequest.query.get_or_404(shop_request_id)
+    if shop_request.user_id != user.id and not user.is_admin:
+        flash("You cannot update this service request.", "error")
+        return redirect(url_for("my_orders"))
+
+    now = datetime.utcnow()
+    shop_request.status = "completed"
+    shop_request.guarantee_status = "completed"
+    shop_request.funds_release_status = "released"
+    shop_request.customer_confirmed_at = now
+    shop_request.completed_at = now
+    shop_request.funds_released_at = now
+    db.session.commit()
+
+    flash("Service marked complete and held funds released to the provider.", "success")
+    return redirect(url_for("my_orders"))
 
 
 # ==================== ADMIN SHOP MANAGEMENT ====================
@@ -7923,6 +8408,16 @@ def _run_startup_migrations_and_bootstrap_admin():
                 stmts.append("ALTER TABLE user ADD COLUMN premium_expiry DATETIME")
             if "is_admin" not in cols:
                 stmts.append("ALTER TABLE user ADD COLUMN is_admin BOOLEAN DEFAULT 0")
+            if "preferred_language" not in cols:
+                stmts.append("ALTER TABLE user ADD COLUMN preferred_language VARCHAR(10) DEFAULT 'en'")
+            if "helper_categories" not in cols:
+                stmts.append("ALTER TABLE user ADD COLUMN helper_categories TEXT")
+            if "blood_group" not in cols:
+                stmts.append("ALTER TABLE user ADD COLUMN blood_group VARCHAR(5)")
+            if "is_blood_donor" not in cols:
+                stmts.append("ALTER TABLE user ADD COLUMN is_blood_donor BOOLEAN DEFAULT 0")
+            if "last_donation_date" not in cols:
+                stmts.append("ALTER TABLE user ADD COLUMN last_donation_date DATE")
 
             if stmts:
                 with db.engine.connect() as conn:
@@ -7964,6 +8459,50 @@ def _run_startup_migrations_and_bootstrap_admin():
                 print("✓ Added missing columns to offers")
     except Exception as e:
         print(f"Migration note (offers): {e}")
+
+    # 2c) Ensure request smart-matching / donor columns exist
+    try:
+        if "requests" in table_names:
+            cols = [c["name"] for c in inspector.get_columns("requests")]
+            stmts = []
+            if "blood_group_needed" not in cols:
+                stmts.append("ALTER TABLE requests ADD COLUMN blood_group_needed VARCHAR(5)")
+            if "donor_urgency_minutes" not in cols:
+                stmts.append("ALTER TABLE requests ADD COLUMN donor_urgency_minutes INTEGER DEFAULT 30")
+            if stmts:
+                with db.engine.connect() as conn:
+                    for stmt in stmts:
+                        conn.execute(db.text(stmt))
+                    conn.commit()
+                print("✓ Added blood donor columns to requests")
+    except Exception as e:
+        print(f"Migration note (requests): {e}")
+
+    # 2d) Ensure service guarantee columns exist
+    try:
+        if "shop_requests" in table_names:
+            cols = [c["name"] for c in inspector.get_columns("shop_requests")]
+            stmts = []
+            if "dispatch_priority" not in cols:
+                stmts.append("ALTER TABLE shop_requests ADD COLUMN dispatch_priority VARCHAR(20) DEFAULT 'standard'")
+            if "guarantee_status" not in cols:
+                stmts.append("ALTER TABLE shop_requests ADD COLUMN guarantee_status VARCHAR(30) DEFAULT 'quote_shared'")
+            if "funds_release_status" not in cols:
+                stmts.append("ALTER TABLE shop_requests ADD COLUMN funds_release_status VARCHAR(30) DEFAULT 'held'")
+            if "guarantee_hold_amount" not in cols:
+                stmts.append("ALTER TABLE shop_requests ADD COLUMN guarantee_hold_amount FLOAT DEFAULT 0")
+            if "customer_confirmed_at" not in cols:
+                stmts.append("ALTER TABLE shop_requests ADD COLUMN customer_confirmed_at DATETIME")
+            if "funds_released_at" not in cols:
+                stmts.append("ALTER TABLE shop_requests ADD COLUMN funds_released_at DATETIME")
+            if stmts:
+                with db.engine.connect() as conn:
+                    for stmt in stmts:
+                        conn.execute(db.text(stmt))
+                    conn.commit()
+                print("✓ Added service guarantee columns to shop_requests")
+    except Exception as e:
+        print(f"Migration note (shop_requests): {e}")
 
     # 3) Seed shops/service providers (nationwide Bangladesh)
     try:

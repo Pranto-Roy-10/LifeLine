@@ -9,6 +9,10 @@
   const typingEl = document.getElementById("typing");
   const translateSelect = document.getElementById("translate_to");
   const autoTranslateChk = document.getElementById("auto_translate");
+  const preferredLanguage =
+    typeof PREFERRED_LANGUAGE === "string" && PREFERRED_LANGUAGE
+      ? PREFERRED_LANGUAGE
+      : "en";
 
   console.log(
     "Chat.js loaded. CURRENT_USER_ID:",
@@ -16,6 +20,13 @@
     "CONVERSATION_ID:",
     CONVERSATION_ID
   );
+
+  if (translateSelect) {
+    translateSelect.value = preferredLanguage || "";
+  }
+  if (autoTranslateChk && preferredLanguage) {
+    autoTranslateChk.checked = true;
+  }
 
   socket.on("connect", () => {
     console.log("Socket connected:", socket.id);
@@ -104,10 +115,27 @@
       div.appendChild(av);
     }
 
+    const content = document.createElement("div");
+    content.className = "message-content";
+
     const text = document.createElement("div");
     text.className = "text";
     text.textContent = m.text;
-    div.appendChild(text);
+    content.appendChild(text);
+
+    if (
+      !me &&
+      m.translated_text &&
+      autoTranslateChk &&
+      translateSelect &&
+      autoTranslateChk.checked &&
+      (translateSelect.value || preferredLanguage) === m.translated_target
+    ) {
+      const translated = document.createElement("div");
+      translated.className = "translation";
+      translated.textContent = "Translated: " + m.translated_text;
+      content.appendChild(translated);
+    }
 
     // timestamp: show below the bubble
     const meta = document.createElement("div");
@@ -119,7 +147,9 @@
     } catch (e) {
       meta.textContent = "";
     }
-    div.appendChild(meta);
+    content.appendChild(meta);
+
+    div.appendChild(content);
 
     messagesEl.appendChild(div);
     // allow layout to settle before scrolling
@@ -268,7 +298,12 @@
     console.log("Sending message:", txt, "temp_id:", tempMsg.id);
     socket.emit(
       "send_message",
-      { conversation_id: CONVERSATION_ID, text: txt, temp_id: tempMsg.id },
+      {
+        conversation_id: CONVERSATION_ID,
+        text: txt,
+        temp_id: tempMsg.id,
+        language: preferredLanguage,
+      },
       (ack) => {
         console.log("Message ack:", ack);
         // in case server ack arrives before broadcast, update temp element

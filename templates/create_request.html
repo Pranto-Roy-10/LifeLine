@@ -31,14 +31,45 @@
                 <select
                     name="category"
                     required
+                  title="Request category"
                     class="w-full px-4 py-3 rounded-lg bg-slate-950/80 text-white border border-slate-700/60 focus:border-emerald-400 focus:outline-none transition duration-200"
                 >
                     <option value="medicine">Medicine</option>
                     <option value="food">Food</option>
                     <option value="tutoring">Tutoring</option>
                     <option value="repair">Repair</option>
+                  <option value="blood_donor">Blood Donor</option>
                 </select>
             </div>
+
+              <div id="blood-request-fields" class="hidden grid md:grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-slate-300 mb-2 font-medium">Blood Group Needed</label>
+                  <select
+                    name="blood_group_needed"
+                    title="Blood group needed"
+                    class="w-full px-4 py-3 rounded-lg bg-slate-950/80 text-white border border-slate-700/60 focus:border-rose-400 focus:outline-none transition duration-200"
+                  >
+                    <option value="">Select blood group</option>
+                    {% for group in ['A+','A-','B+','B-','AB+','AB-','O+','O-'] %}
+                    <option value="{{ group }}">{{ group }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+
+                <div>
+                  <label class="block text-slate-300 mb-2 font-medium">Urgency Window (minutes)</label>
+                  <input
+                    type="number"
+                    name="donor_urgency_minutes"
+                    title="Donor urgency minutes"
+                    value="30"
+                    min="10"
+                    max="180"
+                    class="w-full px-4 py-3 rounded-lg bg-slate-950/80 text-white border border-slate-700/60 focus:border-rose-400 focus:outline-none transition duration-200"
+                  >
+                </div>
+              </div>
 
             <!-- DESCRIPTION -->
             <div>
@@ -70,11 +101,12 @@
                 <p class="text-xs text-slate-400">Click or drag &amp; drop your prescription image</p>
                 <p class="text-[10px] text-slate-500">PNG, JPG, JPEG, GIF — max 5 MB</p>
                 <input type="file" name="prescription_image" id="rx-input"
+                    title="Upload prescription image"
                        accept="image/png,image/jpeg,image/jpg,image/gif"
                        class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
               </div>
               <div id="rx-preview" class="hidden mt-3 relative inline-block">
-                <img id="rx-preview-img" class="max-h-40 rounded-lg border border-emerald-500/30" />
+                  <img id="rx-preview-img" alt="Prescription preview" class="max-h-40 rounded-lg border border-emerald-500/30" />
                 <button type="button" onclick="clearRx()"
                         class="absolute -top-2 -right-2 bg-red-600 hover:bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">&times;</button>
               </div>
@@ -85,6 +117,7 @@
                 <input
                     type="checkbox"
                     name="is_offer"
+                  title="I am offering help"
                     class="h-5 w-5 rounded border-slate-600 bg-slate-700"
                 >
                 <label class="text-slate-300">
@@ -98,6 +131,7 @@
                 <input
                     type="number"
                     name="expiry_minutes"
+                  title="Expiry in minutes"
                     value="60"
                     min="5"
                     max="1440"
@@ -109,6 +143,7 @@
 
             <!-- SUBMIT BUTTON -->
             <button
+              type="submit"
                 class="w-full mt-4 bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-semibold
                        px-6 py-3 rounded-lg transition"
             >
@@ -123,19 +158,28 @@
 (function() {
   const catSelect = document.querySelector('select[name="category"]');
   const section = document.getElementById('rx-section');
+  const bloodFields = document.getElementById('blood-request-fields');
   const fileInput = document.getElementById('rx-input');
   const preview = document.getElementById('rx-preview');
   const previewImg = document.getElementById('rx-preview-img');
+  const bloodGroupInput = document.querySelector('select[name="blood_group_needed"]');
+  const form = document.querySelector('form');
 
   function toggle() {
     const isMedicine = catSelect.value === 'medicine';
+    const isBlood = catSelect.value === 'blood_donor';
     section.classList.toggle('hidden', !isMedicine);
+    bloodFields.classList.toggle('hidden', !isBlood);
     if (isMedicine) {
       fileInput.setAttribute('required', 'required');
     } else {
       fileInput.removeAttribute('required');
       fileInput.value = '';
       preview.classList.add('hidden');
+    }
+    if (bloodGroupInput) {
+      if (isBlood) bloodGroupInput.setAttribute('required', 'required');
+      else bloodGroupInput.removeAttribute('required');
     }
   }
   catSelect.addEventListener('change', toggle);
@@ -157,10 +201,14 @@
     preview.classList.add('hidden');
   };
 
-  document.querySelector('form').addEventListener('submit', function(e) {
+  form.addEventListener('submit', function(e) {
     if (catSelect.value === 'medicine' && (!fileInput.files || !fileInput.files[0])) {
       e.preventDefault();
       alert('Please attach a prescription photo for medicine requests.');
+    }
+    if (catSelect.value === 'blood_donor' && (!bloodGroupInput || !bloodGroupInput.value)) {
+      e.preventDefault();
+      alert('Please choose the blood group needed for this donor request.');
     }
   });
 })();

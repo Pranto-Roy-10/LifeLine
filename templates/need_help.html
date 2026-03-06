@@ -51,16 +51,44 @@ content %}
             <label class="text-xs text-slate-300"
               >Category <span class="text-emerald-400">*</span></label
             >
-            <select name="category" required class="form-input w-full mt-1">
+            <select name="category" required title="Need help category" class="form-input w-full mt-1">
               <option value="" disabled selected>Select a category</option>
               <option value="medicine">Medicine</option>
               <option value="food">Food</option>
               <option value="tutoring">Tutoring</option>
               <option value="repair">Repair</option>
               <option value="ride">Ride</option>
+              <option value="blood_donor">Blood Donor</option>
               <option value="other">Other</option>
             </select>
           </div>
+        </div>
+
+        <div id="blood-donor-section" class="hidden rounded-2xl border border-rose-500/20 bg-rose-500/5 p-4">
+          <div class="grid md:grid-cols-2 gap-4">
+            <div>
+              <label class="text-xs text-slate-300">Blood group needed</label>
+              <select name="blood_group_needed" title="Blood group needed" class="form-input w-full mt-1">
+                <option value="">Select blood group</option>
+                {% for group in ['A+','A-','B+','B-','AB+','AB-','O+','O-'] %}
+                <option value="{{ group }}">{{ group }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div>
+              <label class="text-xs text-slate-300">Need donor within (minutes)</label>
+              <input
+                type="number"
+                name="donor_urgency_minutes"
+                title="Donor urgency minutes"
+                value="30"
+                min="10"
+                max="180"
+                class="form-input w-full mt-1"
+              />
+            </div>
+          </div>
+          <p class="text-[11px] text-rose-200/80 mt-3">LifeLine will prioritize nearby eligible donors and show a rapid-response timer on the request.</p>
         </div>
 
         <!-- LOCATION INFO -->
@@ -73,6 +101,7 @@ content %}
               >
               <input
                 name="area"
+                title="Area or neighborhood"
                 placeholder="Badda, near BRACU"
                 class="w-full mt-1 px-4 py-2.5 rounded-xl bg-slate-950/80 text-white border border-emerald-500/20 focus:border-emerald-400/40 focus:outline-none text-sm transition"
               />
@@ -138,6 +167,7 @@ content %}
             <label class="text-xs text-slate-300">When do you need help?</label>
             <select
               name="time_window"
+              title="Time window"
               class="w-full mt-2 px-4 py-2.5 rounded-xl bg-slate-950/80 text-white border border-emerald-500/20 focus:border-emerald-400/40 focus:outline-none text-sm transition"
             >
               <option value="anytime_today">Anytime today</option>
@@ -162,6 +192,7 @@ content %}
               >
               <select
                 name="contact_method"
+                title="Preferred contact method"
                 class="w-full mt-1 px-4 py-2.5 rounded-xl bg-slate-950/80 text-white border border-emerald-500/20 focus:border-emerald-400/40 focus:outline-none text-sm transition"
               >
                 <option value="lifeline_chat">LifeLine chat only</option>
@@ -223,12 +254,13 @@ content %}
             <p class="text-xs text-slate-400">Click or drag &amp; drop your prescription image</p>
             <p class="text-[10px] text-slate-500">PNG, JPG, JPEG, GIF — max 5 MB</p>
             <input type="file" name="prescription_image" id="prescription-input"
+                   title="Upload prescription image"
                    accept="image/png,image/jpeg,image/jpg,image/gif"
                    class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
           </div>
           <!-- preview -->
           <div id="prescription-preview" class="hidden mt-3 relative inline-block">
-            <img id="prescription-preview-img" class="max-h-40 rounded-lg border border-emerald-500/30" />
+            <img id="prescription-preview-img" alt="Prescription preview" class="max-h-40 rounded-lg border border-emerald-500/30" />
             <button type="button" onclick="clearPrescription()"
                     class="absolute -top-2 -right-2 bg-red-600 hover:bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">&times;</button>
           </div>
@@ -241,6 +273,7 @@ content %}
             <input
               type="number"
               name="expiry_minutes"
+              title="Expiry in minutes"
               value="60"
               min="15"
               max="1440"
@@ -268,19 +301,27 @@ content %}
     (function() {
       const catSelect = document.querySelector('select[name="category"]');
       const section = document.getElementById('prescription-section');
+      const bloodSection = document.getElementById('blood-donor-section');
       const fileInput = document.getElementById('prescription-input');
       const preview = document.getElementById('prescription-preview');
       const previewImg = document.getElementById('prescription-preview-img');
+      const bloodGroupInput = document.querySelector('select[name="blood_group_needed"]');
 
       function toggle() {
         const isMedicine = catSelect.value === 'medicine';
+        const isBlood = catSelect.value === 'blood_donor';
         section.classList.toggle('hidden', !isMedicine);
+        bloodSection.classList.toggle('hidden', !isBlood);
         if (isMedicine) {
           fileInput.setAttribute('required', 'required');
         } else {
           fileInput.removeAttribute('required');
           fileInput.value = '';
           preview.classList.add('hidden');
+        }
+        if (bloodGroupInput) {
+          if (isBlood) bloodGroupInput.setAttribute('required', 'required');
+          else bloodGroupInput.removeAttribute('required');
         }
       }
       catSelect.addEventListener('change', toggle);
@@ -309,6 +350,10 @@ content %}
         if (catSelect.value === 'medicine' && (!fileInput.files || !fileInput.files[0])) {
           e.preventDefault();
           alert('Please attach a prescription photo for medicine requests.');
+        }
+        if (catSelect.value === 'blood_donor' && (!bloodGroupInput || !bloodGroupInput.value)) {
+          e.preventDefault();
+          alert('Please select the blood group needed for this donor request.');
         }
       });
     })();
@@ -481,6 +526,7 @@ content %}
                         >
                           <img
                             src="{{ (resp.helper.profile_photo if resp.helper and resp.helper.profile_photo else url_for('static', filename='images/lifeline_logo.png')) }}"
+                            alt="Responder avatar"
                             class="w-full h-full object-cover"
                           />
                         </div>
@@ -522,6 +568,7 @@ content %}
                         <input
                           type="number"
                           name="hours"
+                          title="Duration in hours"
                           step="0.5"
                           min="0.5"
                           value="1"

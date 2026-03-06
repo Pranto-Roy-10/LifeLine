@@ -257,6 +257,31 @@
                   >My Orders &amp; Receipts</a
                 >
 
+                <form
+                  method="POST"
+                  action="{{ url_for('update_profile_language') }}"
+                  class="px-4 py-3 border-t border-slate-800"
+                >
+                  <label class="block text-[11px] uppercase tracking-wider text-slate-500 mb-1">Language</label>
+                  <div class="flex items-center gap-2">
+                    <select
+                      name="preferred_language"
+                      title="Choose interface language"
+                      class="flex-1 rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-sm text-slate-200"
+                    >
+                      {% for code, label in supported_languages.items() %}
+                      <option value="{{ code }}" {% if preferred_language == code %}selected{% endif %}>{{ label }}</option>
+                      {% endfor %}
+                    </select>
+                    <button
+                      type="submit"
+                      class="px-3 py-2 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-semibold"
+                    >
+                      Apply
+                    </button>
+                  </div>
+                </form>
+
                 {% if current_user.is_admin %}
                 <a
                   href="{{ url_for('admin_dashboard') }}"

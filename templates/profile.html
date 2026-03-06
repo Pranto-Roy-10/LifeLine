@@ -42,11 +42,13 @@
             in photo %}
             <img
               src="{{ photo }}"
+              alt="Profile photo"
               class="w-24 h-24 rounded-full object-cover border-2 border-emerald-400/80 shadow-lg hover:shadow-emerald-500/40 transition duration-300"
             />
             {% else %}
             <img
               src="{{ url_for('static', filename='uploads/profile_photos/' ~ photo) }}"
+              alt="Profile photo"
               class="w-24 h-24 rounded-full object-cover border-2 border-emerald-400/80 shadow-lg hover:shadow-emerald-500/40 transition duration-300"
             />
             {% endif %}
@@ -71,6 +73,7 @@
               <input
                 type="file"
                 name="profile_photo"
+                title="Upload profile photo"
                 class="hidden"
                 onchange="document.getElementById('fileLabel').innerText = this.files[0]?.name || 'No file chosen'"
               />
@@ -89,6 +92,7 @@
             <input
               type="text"
               name="name"
+              title="Your name"
               value="{{ user.name }}"
               class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-slate-200 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-400 focus:border-emerald-400"
             />
@@ -105,6 +109,7 @@
           <div class="relative">
             <input
               type="text"
+              title="Your email address"
               value="{{ user.email }}"
               disabled
               class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2.5 text-slate-500 text-sm cursor-not-allowed"
@@ -147,9 +152,77 @@
           <input
             type="date"
             name="dob"
+            title="Date of birth"
             value="{{ user.dob or '' }}"
             class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-slate-200 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-400 focus:border-emerald-400"
           />
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-4">
+          <div class="space-y-1">
+            <label class="text-sm text-slate-400 block">Preferred Language</label>
+            <select
+              name="preferred_language"
+              title="Preferred language"
+              class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-slate-200 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-400 focus:border-emerald-400"
+            >
+              <option value="en" {% if (user.preferred_language or 'en') == 'en' %}selected{% endif %}>English</option>
+              <option value="bn" {% if user.preferred_language == 'bn' %}selected{% endif %}>Bangla</option>
+            </select>
+            <p class="text-[11px] text-slate-500">Used for auto-translating request cards and chat messages.</p>
+          </div>
+
+          <div class="space-y-1">
+            <label class="text-sm text-slate-400 block">Helper Expertise</label>
+            <input
+              type="text"
+              name="helper_categories"
+              value="{{ user.helper_categories or '' }}"
+              placeholder="medicine, repair, ride"
+              class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-slate-200 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-400 focus:border-emerald-400"
+            />
+            <p class="text-[11px] text-slate-500">Comma-separated categories help the smart matcher route requests to you.</p>
+          </div>
+        </div>
+
+        <div class="rounded-2xl border border-rose-500/20 bg-rose-500/5 p-4 space-y-4">
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <p class="text-sm font-semibold text-slate-100">Blood Donor Rapid Response</p>
+              <p class="text-[11px] text-slate-400 mt-1">Opt in to urgent donor matching with eligibility tracking.</p>
+            </div>
+            <label class="inline-flex items-center gap-2 text-sm text-slate-200">
+              <input type="checkbox" name="is_blood_donor" class="h-4 w-4 rounded border-slate-600 bg-slate-800" {% if user.is_blood_donor %}checked{% endif %}>
+              <span>Available donor</span>
+            </label>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-4">
+            <div class="space-y-1">
+              <label class="text-sm text-slate-400 block">Blood Group</label>
+              <select
+                name="blood_group"
+                title="Blood group"
+                class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-slate-200 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-400 focus:border-emerald-400"
+              >
+                <option value="">Select blood group</option>
+                {% for group in ['A+','A-','B+','B-','AB+','AB-','O+','O-'] %}
+                <option value="{{ group }}" {% if user.blood_group == group %}selected{% endif %}>{{ group }}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="space-y-1">
+              <label class="text-sm text-slate-400 block">Last Donation Date</label>
+              <input
+                type="date"
+                name="last_donation_date"
+                title="Last donation date"
+                value="{{ user.last_donation_date.isoformat() if user.last_donation_date else '' }}"
+                class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-slate-200 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-400 focus:border-emerald-400"
+              />
+            </div>
+          </div>
         </div>
 
         <button

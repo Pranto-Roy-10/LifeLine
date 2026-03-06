@@ -57,7 +57,7 @@
       {% if translation_enabled %}
       <div class="chat-header-actions">
         <div class="translation-controls">
-          <select id="translate_to" class="translate-select bg-slate-950 border border-emerald-500/20 text-white rounded px-3 py-2 focus:border-emerald-400/40 focus:outline-none">
+          <select id="translate_to" title="Translate messages to language" class="translate-select bg-slate-950 border border-emerald-500/20 text-white rounded px-3 py-2 focus:border-emerald-400/40 focus:outline-none">
             <option value="">No translation</option>
             <option value="en">English</option>
             <option value="es">Spanish</option>
@@ -114,7 +114,7 @@
           class="chat-input-modern bg-slate-950/80 border border-emerald-500/20 text-white placeholder-slate-500 focus:border-emerald-400/40 focus:outline-none rounded-lg"
           placeholder="Type a message..."
         />
-        <button id="send_btn" class="send-btn-modern bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-slate-950 font-semibold hover:scale-105 transition-transform">
+        <button id="send_btn" type="button" title="Send message" aria-label="Send message" class="send-btn-modern bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-slate-950 font-semibold hover:scale-105 transition-transform">
           <svg
             width="20"
             height="20"
@@ -138,6 +138,7 @@
   const OTHER_USER_ID = {{ other_user.id }};
   const PRELOAD_MESSAGES = {{ messages|length }};
   const MESSAGES = {{ messages|tojson }};
+  const PREFERRED_LANGUAGE = {{ (preferred_language or 'en')|tojson }};
 </script>
 <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 <script src="{{ url_for('static', filename='js/chat.js') }}"></script>

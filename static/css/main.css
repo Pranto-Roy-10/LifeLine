@@ -1511,10 +1511,16 @@ p[class*="text-[11px]"][class*="text-emerald-300"] {
 }
 
 .chat-message .text {
-  flex: 1;
   font-size: 15px;
   line-height: 1.5;
   word-break: break-word;
+}
+
+.message-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  width: 100%;
 }
 
 .chat-message .meta {
@@ -1931,13 +1937,15 @@ p[class*="text-[11px]"][class*="text-emerald-300"] {
 }
 
 .translation {
+  display: block;
+  width: 100%;
   font-size: 12px;
   color: #a7f3d0;
   margin-top: 8px;
   padding: 8px 12px;
   background: rgba(16, 185, 129, 0.1);
-  border-left: 3px solid rgba(16, 185, 129, 0.4);
-  border-radius: 6px;
+  border: 1px solid rgba(16, 185, 129, 0.28);
+  border-radius: 10px;
   animation: fadeIn 0.3s ease-out;
 }
 
@@ -2012,6 +2020,10 @@ p[class*="text-[11px]"][class*="text-emerald-300"] {
   backdrop-filter: blur(10px);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
   animation: slideDown 0.5s ease-out;
+}
+
+.receipt-card-shell {
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
 }
 
 .header-title {

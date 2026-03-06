@@ -699,6 +699,20 @@ html:not(.dark) .chat-message.sent {
 html:not(.dark) .chat-message .meta {
   color: #64748b !important;
 }
+html:not(.dark) .translation {
+  color: #14532d !important;
+  background: rgba(220, 252, 231, 0.92) !important;
+  border: 1px solid rgba(52, 211, 153, 0.45) !important;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.35);
+}
+html:not(.dark) .chat-message.sent .translation {
+  color: #065f46 !important;
+  background: rgba(236, 253, 245, 0.95) !important;
+}
+html:not(.dark) .chat-message.received .translation {
+  color: #166534 !important;
+  background: rgba(220, 252, 231, 0.96) !important;
+}
 
 /* Chat index (normal page flow — blobs show through) */
 html:not(.dark) .chat-index-fullpage {
