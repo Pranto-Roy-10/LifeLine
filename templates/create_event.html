@@ -179,10 +179,28 @@
         lat: pos.coords.latitude,
         lng: pos.coords.longitude,
       };
-      map.setCenter(loc);
-      placeMarker(loc);
+      if (map) {
+        map.setCenter(loc);
+        placeMarker(loc);
+      } else {
+        document.getElementById("lat").value = loc.lat;
+        document.getElementById("lng").value = loc.lng;
+      }
     });
   }
+
+  // Ensure lat/lng have defaults even if Google Maps never loads
+  (function setFallbackCoords() {
+    if (!document.getElementById("lat").value) document.getElementById("lat").value = "23.8103";
+    if (!document.getElementById("lng").value) document.getElementById("lng").value = "90.4125";
+    // Try auto-geolocation even without map
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition((pos) => {
+        document.getElementById("lat").value = pos.coords.latitude;
+        document.getElementById("lng").value = pos.coords.longitude;
+      }, () => {});
+    }
+  })();
 
   function initMap() {
     const defaultLoc = { lat: 23.8103, lng: 90.4125 };
@@ -210,6 +228,22 @@
     map.addListener("click", (e) => {
       placeMarker(e.latLng);
     });
+
+    // Auto-get user location on page load so lat/lng are pre-filled
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition((pos) => {
+        const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        map.setCenter(loc);
+        placeMarker(loc);
+      }, () => {
+        // Geolocation denied — use default and set hidden fields
+        document.getElementById("lat").value = defaultLoc.lat;
+        document.getElementById("lng").value = defaultLoc.lng;
+      });
+    } else {
+      document.getElementById("lat").value = defaultLoc.lat;
+      document.getElementById("lng").value = defaultLoc.lng;
+    }
   }
 
   function placeMarker(location) {
