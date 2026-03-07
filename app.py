@@ -4174,54 +4174,88 @@ def create_event():
     user = current_user()
 
     if request.method == "POST":
-        event = Event(
-            creator_id=user.id,
-            title=request.form["title"],
-            description=request.form["description"],
-            event_type=request.form["event_type"],
-            date=datetime.strptime(request.form["date"], "%Y-%m-%d"),
-            lat=float(request.form["lat"]),
-            lng=float(request.form["lng"]),
-            area=request.form["area"]
-        )
-        db.session.add(event)
-        db.session.commit()
-
-        # Auto-create fundraising goal if provided
-        fund_goal = request.form.get("fund_goal", "0")
-        fund_desc = request.form.get("fund_description", "").strip()
         try:
-            fund_goal_val = float(fund_goal)
-        except (ValueError, TypeError):
-            fund_goal_val = 0
-        if fund_goal_val > 0:
-            bkash_num = request.form.get("bkash_number", "").strip()
-            fund = EventFund(event_id=event.id, fund_goal=fund_goal_val,
-                             description=fund_desc or f"Help fund '{event.title}'!",
-                             bkash_number=bkash_num)
-            db.session.add(fund)
-
-        # Attach selected catering services
-        catering_ids = request.form.getlist("catering_ids")
-        guests_count = request.form.get("guests_count", "50")
-        try:
-            guests_count_val = int(guests_count)
-        except (ValueError, TypeError):
-            guests_count_val = 50
-        for cid in catering_ids:
+            # Parse lat/lng with fallback to user location or Dhaka default
+            raw_lat = request.form.get("lat", "").strip()
+            raw_lng = request.form.get("lng", "").strip()
             try:
-                cid_int = int(cid)
-                if CateringService.query.get(cid_int):
-                    ec = EventCatering(event_id=event.id, catering_id=cid_int, guests_count=guests_count_val)
-                    db.session.add(ec)
+                lat_val = float(raw_lat) if raw_lat else None
+                lng_val = float(raw_lng) if raw_lng else None
             except (ValueError, TypeError):
-                pass
+                lat_val, lng_val = None, None
 
-        db.session.commit()
-        notify_nearby_users(event)
+            # Fallback chain: form → user profile → env default → Dhaka
+            if lat_val is None or lng_val is None:
+                lat_val = lat_val or (user.lat if user.lat else None) or float(os.getenv("DEFAULT_LAT", "23.8103"))
+                lng_val = lng_val or (user.lng if user.lng else None) or float(os.getenv("DEFAULT_LNG", "90.4125"))
 
-        flash("Event created & nearby users notified!", "success")
-        return redirect(url_for("event_fund_page", event_id=event.id))
+            # Parse date
+            date_str = request.form.get("date", "").strip()
+            if not date_str:
+                flash("Please select an event date.", "danger")
+                caterers = CateringService.query.filter_by(is_active=True).order_by(CateringService.rating.desc()).all()
+                return render_template("create_event.html", google_maps_key=GOOGLE_MAPS_API_KEY, caterers=caterers)
+
+            event = Event(
+                creator_id=user.id,
+                title=request.form.get("title", "Untitled Event"),
+                description=request.form.get("description", ""),
+                event_type=request.form.get("event_type", "others"),
+                date=datetime.strptime(date_str, "%Y-%m-%d"),
+                lat=lat_val,
+                lng=lng_val,
+                area=request.form.get("area", "")
+            )
+            db.session.add(event)
+            db.session.commit()
+
+            # Auto-create fundraising goal if provided
+            fund_goal = request.form.get("fund_goal", "0")
+            fund_desc = request.form.get("fund_description", "").strip()
+            try:
+                fund_goal_val = float(fund_goal)
+            except (ValueError, TypeError):
+                fund_goal_val = 0
+            if fund_goal_val > 0:
+                bkash_num = request.form.get("bkash_number", "").strip()
+                fund = EventFund(event_id=event.id, fund_goal=fund_goal_val,
+                                 description=fund_desc or f"Help fund '{event.title}'!",
+                                 bkash_number=bkash_num)
+                db.session.add(fund)
+
+            # Attach selected catering services
+            catering_ids = request.form.getlist("catering_ids")
+            guests_count = request.form.get("guests_count", "50")
+            try:
+                guests_count_val = int(guests_count)
+            except (ValueError, TypeError):
+                guests_count_val = 50
+            for cid in catering_ids:
+                try:
+                    cid_int = int(cid)
+                    if CateringService.query.get(cid_int):
+                        ec = EventCatering(event_id=event.id, catering_id=cid_int, guests_count=guests_count_val)
+                        db.session.add(ec)
+                except (ValueError, TypeError):
+                    pass
+
+            db.session.commit()
+
+            try:
+                notify_nearby_users(event)
+            except Exception as e:
+                print(f"[EVENT] notify_nearby_users failed (non-fatal): {e}")
+
+            flash("Event created & nearby users notified!", "success")
+            return redirect(url_for("event_fund_page", event_id=event.id))
+
+        except Exception as e:
+            db.session.rollback()
+            print(f"[EVENT CREATE ERROR] {e}")
+            import traceback; traceback.print_exc()
+            flash(f"Error creating event: {e}", "danger")
+            caterers = CateringService.query.filter_by(is_active=True).order_by(CateringService.rating.desc()).all()
+            return render_template("create_event.html", google_maps_key=GOOGLE_MAPS_API_KEY, caterers=caterers)
 
     caterers = CateringService.query.filter_by(is_active=True).order_by(CateringService.rating.desc()).all()
     return render_template("create_event.html", google_maps_key=GOOGLE_MAPS_API_KEY, caterers=caterers)
